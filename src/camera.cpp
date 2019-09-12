@@ -18,6 +18,11 @@ cycles::Camera::Camera(Scene &scene,ccl::Camera &cam)
 	cam.matrix = ccl::transform_identity();
 }
 
+util::WeakHandle<cycles::Camera> cycles::Camera::GetHandle()
+{
+	return util::WeakHandle<cycles::Camera>{shared_from_this()};
+}
+
 void cycles::Camera::SetResolution(uint32_t width,uint32_t height)
 {
 	m_camera.width = width;

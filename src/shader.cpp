@@ -11,6 +11,8 @@ using namespace pragma::modules;
 #pragma optimize("",off)
 cycles::PShader cycles::Shader::Create(Scene &scene,ccl::Shader &shader)
 {
+	shader.volume_sampling_method = ccl::VOLUME_SAMPLING_MULTIPLE_IMPORTANCE;
+
 	ccl::ShaderGraph *graph = new ccl::ShaderGraph(); // TODO: Delete this if not added to shader
 	auto pShader = PShader{new Shader{scene,shader,*graph}};
 	scene.m_shaders.push_back(pShader);
@@ -33,6 +35,11 @@ cycles::PShader cycles::Shader::Create(Scene &scene,const std::string &name)
 cycles::Shader::Shader(Scene &scene,ccl::Shader &shader,ccl::ShaderGraph &shaderGraph)
 	: SceneObject{scene},m_shader{shader},m_graph{shaderGraph}
 {}
+
+util::WeakHandle<cycles::Shader> cycles::Shader::GetHandle()
+{
+	return util::WeakHandle<cycles::Shader>{shared_from_this()};
+}
 
 cycles::PShaderNode cycles::Shader::AddNode(const std::string &type,const std::string &name)
 {
@@ -100,6 +107,11 @@ cycles::PShaderNode cycles::ShaderNode::Create(Shader &shader,ccl::ShaderNode &s
 cycles::ShaderNode::ShaderNode(Shader &shader,ccl::ShaderNode &shaderNode)
 	: m_shader{shader},m_shaderNode{shaderNode}
 {}
+
+util::WeakHandle<cycles::ShaderNode> cycles::ShaderNode::GetHandle()
+{
+	return util::WeakHandle<cycles::ShaderNode>{shared_from_this()};
+}
 
 ccl::ShaderNode *cycles::ShaderNode::operator->() {return &m_shaderNode;}
 ccl::ShaderNode *cycles::ShaderNode::operator*() {return &m_shaderNode;}

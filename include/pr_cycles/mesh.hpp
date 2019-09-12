@@ -18,6 +18,14 @@ namespace pragma::modules::cycles
 	{
 	public:
 		static PMesh Create(Scene &scene,const std::string &name,uint64_t numVerts,uint64_t numTris);
+		util::WeakHandle<Mesh> GetHandle();
+
+		const ccl::float3 *GetNormals() const;
+		const ccl::float3 *GetTangents() const;
+		const float *GetTangentSigns() const;
+		const ccl::float2 *GetUVs() const;
+		uint64_t GetVertexCount() const;
+		uint64_t GetTriangleCount() const;
 
 		bool AddVertex(const Vector3 &pos,const Vector3 &n,const Vector3 &t,const Vector2 &uv);
 		bool AddTriangle(uint32_t idx0,uint32_t idx1,uint32_t idx2,uint32_t shaderIndex);

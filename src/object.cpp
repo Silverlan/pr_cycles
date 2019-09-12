@@ -22,11 +22,19 @@ cycles::Object::Object(Scene &scene,ccl::Object &object,Mesh &mesh)
 	: WorldObject{scene},m_object{object},m_mesh{mesh.shared_from_this()}
 {}
 
+util::WeakHandle<cycles::Object> cycles::Object::GetHandle()
+{
+	return util::WeakHandle<cycles::Object>{shared_from_this()};
+}
+
 void cycles::Object::DoFinalize()
 {
 	m_mesh->Finalize();
 	m_object.tfm = Scene::ToCyclesTransform(GetPose());
 }
+
+const cycles::Mesh &cycles::Object::GetMesh() const {return const_cast<Object*>(this)->GetMesh();}
+cycles::Mesh &cycles::Object::GetMesh() {return *m_mesh;}
 
 ccl::Object *cycles::Object::operator->() {return &m_object;}
 ccl::Object *cycles::Object::operator*() {return &m_object;}

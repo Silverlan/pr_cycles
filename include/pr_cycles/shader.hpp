@@ -15,11 +15,13 @@ namespace pragma::modules::cycles
 	using PShaderNode = std::shared_ptr<ShaderNode>;
 	using PShader = std::shared_ptr<Shader>;
 	class Shader
-		: public SceneObject
+		: public SceneObject,
+		public std::enable_shared_from_this<Shader>
 	{
 	public:
 		static PShader Create(Scene &scene,const std::string &name);
 		static PShader Create(Scene &scene,ccl::Shader &shader);
+		util::WeakHandle<Shader> GetHandle();
 
 		PShaderNode AddNode(const std::string &type,const std::string &name);
 		PShaderNode FindNode(const std::string &name) const;
@@ -39,9 +41,11 @@ namespace pragma::modules::cycles
 	};
 
 	class ShaderNode
+		: public std::enable_shared_from_this<ShaderNode>
 	{
 	public:
 		static PShaderNode Create(Shader &shader,ccl::ShaderNode &shaderNode);
+		util::WeakHandle<ShaderNode> GetHandle();
 		ccl::ShaderNode *operator->();
 		ccl::ShaderNode *operator*();
 

@@ -12,6 +12,7 @@
 #include <render/background.h>
 #include <render/svm.h>
 
+#include <pragma/lua/luaapi.h>
 #include <prosper_context.hpp>
 #include <pragma/c_engine.h>
 #include <pragma/game/c_game.h>
@@ -31,12 +32,16 @@
 #include <pragma/entities/environment/lights/c_env_light_directional.h>
 #include <pragma/entities/entity_component_system_t.hpp>
 #include <pragma/util/util_game.hpp>
+#include <pragma/lua/classes/ldef_entity.h>
 #include <luainterface.hpp>
+#include <pragma/lua/lua_entity_component.hpp>
 
 #include "pr_cycles/scene.hpp"
 #include "pr_cycles/shader.hpp"
 #include "pr_cycles/camera.hpp"
 #include "pr_cycles/light.hpp"
+#include "pr_cycles/mesh.hpp"
+#include "pr_cycles/object.hpp"
 
 #pragma optimize("",off)
 
@@ -55,21 +60,22 @@ static cycles::PShader create_skybox_shader(cycles::Scene &scene)
 	return shaderSkybox;
 }
 
-static void capture_raytraced_scene()
+static cycles::PScene capture_raytraced_scene(
+	uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,bool denoise,
+	const Vector3 &camPos,const Quat &camRot,float nearZ,float farZ,umath::Degree fov,
+	const std::function<bool(BaseEntity&)> &entFilter,
+	const std::function<void(const uint8_t*,int,int,int)> &outputHandler
+)
 {
-	auto scene = cycles::Scene::Create();
+	auto scene = cycles::Scene::Create(outputHandler,sampleCount,hdrOutput,denoise);
 	auto &cam = scene->GetCamera();
-	cam.SetResolution(1920,1280);
+	cam.SetResolution(width,height);
 
-	auto *camGame = c_game->GetRenderCamera();
-	auto &entCam = camGame->GetEntity();
-	auto pos = entCam.GetPosition();
-	auto rot = entCam.GetRotation();
-	cam.SetPos(pos);
-	cam.SetRotation(rot);
-	cam.SetNearZ(camGame->GetNearZ());
-	cam.SetFarZ(camGame->GetFarZ());
-	cam.SetFOV(camGame->GetFOVRad());
+	cam.SetPos(camPos);
+	cam.SetRotation(camRot);
+	cam.SetNearZ(nearZ);
+	cam.SetFarZ(farZ);
+	cam.SetFOV(umath::deg_to_rad(fov));
 
 	auto shaderSkybox = create_skybox_shader(*scene);
 
@@ -80,39 +86,11 @@ static void capture_raytraced_scene()
 	for(auto *ent : entIt)
 	{
 		auto renderC = ent->GetComponent<pragma::CRenderComponent>();
-		if(renderC->GetRenderMode() != RenderMode::World || renderC->ShouldDraw(pos) == false)
+		if(renderC->GetRenderMode() != RenderMode::World || renderC->ShouldDraw(camPos) == false || entFilter(*ent) == false)
 			continue;
 		scene->AddEntity(*ent);
 	}
 
-	{
-
-
-
-		/*EulerAngles ang {-90.f,0.f,0.f};
-		auto rotLight = uquat::create(ang);
-		auto dir = uquat::forward(rotLight);
-		auto light = cycles::Light::Create(*scene);
-		light->SetType(cycles::Light::Type::Spot);
-		light->SetPos(Vector3{0.f,0.f,0.f});
-		light->SetRotation(rotLight);
-		light->SetConeAngle(umath::deg_to_rad(25.f));
-		light->SetColor(Color{255,255,255,1'0000});*/
-
-		/*auto light = cycles::Light::Create(*scene);
-		light->SetType(cycles::Light::Type::Point);
-		light->SetPos(Vector3{0.f,0.f,0.f});
-		light->SetColor(Color{255,255,255,20'000});*/
-
-		/*EulerAngles ang {-90.f,0.f,0.f};
-		auto rotLight = uquat::create(ang);
-		auto dir = uquat::forward(rotLight);
-		auto light = cycles::Light::Create(*scene);
-		light->SetType(cycles::Light::Type::Directional);
-		light->SetPos(Vector3{0.f,0.f,0.f});
-		light->SetColor(Color{255,255,255,1'0000});
-		light->SetRotation(rot);*/
-	}
 	// Light sources
 	entIt = {*c_game};
 	entIt.AttachFilter<TEntityIteratorFilterComponent<pragma::CLightComponent>>();
@@ -158,44 +136,338 @@ static void capture_raytraced_scene()
 	}
 	
 	scene->Start();
+	return scene;
 }
 
-int module_run(int argc, const char **argv);
+static cycles::PScene create_cycles_scene_from_game_scene(
+	const std::function<bool(BaseEntity&)> &entFilter,
+	const std::function<void(const uint8_t*,int,int,int)> &outputHandler
+)
+{
+	/*uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,bool denoise,
+		const Vector3 &camPos,const Quat &camRot,float nearZ,float farZ,umath::Degree fov,
+		const std::function<bool(BaseEntity&)> &entFilter,
+		const std::function<void(const uint8_t*,int,int,int)> &outputHandler*/
+	return nullptr;
+}
+
 extern "C"
 {
-	PRAGMA_EXPORT bool pragma_attach(std::string &outErr)
+	PRAGMA_EXPORT void pr_cycles_calc_raytraced_scene(
+		uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,bool denoise,
+		const Vector3 &camPos,const Quat &camRot,float nearZ,float farZ,umath::Degree fov,
+		const std::function<bool(BaseEntity&)> &entFilter,
+		const std::function<void(const uint8_t*,int,int,int)> &outputHandler,std::shared_ptr<void> &outScene
+	)
 	{
-		std::cout<<"Running cycles..."<<std::endl;
-		std::vector<const char*> args = {
-			"E:/projects/pragma/build_winx64/output/modules/cycles/examples/",
-			"--output",
-			"E:/projects/pragma/build_winx64/output/modules/cycles/examples/monkey.jpg",
-			"E:/projects/pragma/build_winx64/output/modules/cycles/examples/scene_world_volume.xml"
-		};
-		//std::cout<<"Result: "<<module_run(args.size(),args.data())<<std::endl;
-		//init_scene();
-		return true;
+		outScene = capture_raytraced_scene(
+			width,height,sampleCount,hdrOutput,denoise,
+			camPos,camRot,nearZ,farZ,fov,entFilter,
+			outputHandler
+		);
 	}
-	//PRAGMA_EXPORT void pr_gpl_calc_geometry_data(const std::vector<Vector3> &verts,const std::vector<uint16_t> &indices,std::vector<float> *optOutAmbientOcclusion,std::vector<Vector3> *optOutNormals,uint32_t sampleCount)
-	//{
-	//	calc_geometry_data(verts,indices,optOutAmbientOcclusion,optOutNormals,sampleCount);
-	//}
-	PRAGMA_EXPORT void pragma_initialize_lua(Lua::Interface &l)
+	PRAGMA_EXPORT float pr_cycles_get_scene_process(const std::shared_ptr<void> &scene)
 	{
-		Lua::RegisterLibrary(l.GetState(),"cycles",{
-			{"capture_raytraced_scene",static_cast<int32_t(*)(lua_State*)>([](lua_State *l) -> int32_t {
-				/*std::cout<<"Running cycles..."<<std::endl;
-				std::vector<const char*> args = {
-					"E:/projects/pragma/build_winx64/output/modules/cycles/examples/",
-					"--output",
-					"E:/projects/pragma/build_winx64/output/modules/cycles/examples/monkey.jpg",
-					"E:/projects/pragma/build_winx64/output/modules/cycles/examples/scene_world_volume.xml"
-				};
-				std::cout<<"Result: "<<module_run(args.size(),args.data())<<std::endl;*/
-				capture_raytraced_scene();
-				return 0;
+		return static_cast<cycles::Scene*>(scene.get())->GetProgress();
+	}
+	PRAGMA_EXPORT bool pr_cycles_is_scene_complete(const std::shared_ptr<void> &scene)
+	{
+		return static_cast<cycles::Scene*>(scene.get())->IsComplete();
+	}
+	PRAGMA_EXPORT void pr_cycles_cancel_scene(const std::shared_ptr<void> &scene)
+	{
+		static_cast<cycles::Scene*>(scene.get())->Cancel();
+	}
+	PRAGMA_EXPORT void pr_cycles_set_scene_progress_callback(const std::shared_ptr<void> &scene,const std::function<void(float)> &progressCallback)
+	{
+		static_cast<cycles::Scene*>(scene.get())->SetProgressCallback(progressCallback);
+	}
+	PRAGMA_EXPORT bool pr_cycles_is_scene_cancelled(const std::shared_ptr<void> &scene)
+	{
+		return static_cast<cycles::Scene*>(scene.get())->IsCancelled();
+	}
+	PRAGMA_EXPORT void pr_cycles_wait_for_scene_completion(const std::shared_ptr<void> &scene)
+	{
+		static_cast<cycles::Scene*>(scene.get())->Wait();
+	}
+
+	void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
+	{
+		if(true)
+			return;
+		auto &modConvert = l.RegisterLibrary("cycles",std::unordered_map<std::string,int32_t(*)(lua_State*)>{
+			{"create_scene_from_game_scene",static_cast<int32_t(*)(lua_State*)>([](lua_State *l) -> int32_t {
+				auto scene = create_cycles_scene_from_game_scene([](BaseEntity &ent) -> bool {
+					return true;
+				},[](const uint8_t *data,int width,int height,int channels) {
+				
+				});
+				if(scene == nullptr)
+					return 0;
+				Lua::Push<cycles::PScene>(l,scene);
+				return 1;
+			})},
+			{"create_scene",static_cast<int32_t(*)(lua_State*)>([](lua_State *l) -> int32_t {
+				uint32_t sampleCount = 1'024;
+				auto hdrOutput = false;
+				auto denoise = true;
+				int32_t argIdx = 1;
+				if(Lua::IsSet(l,argIdx))
+					sampleCount = Lua::CheckInt(l,argIdx);
+				++argIdx;
+				if(Lua::IsSet(l,argIdx))
+					hdrOutput = Lua::CheckBool(l,argIdx);
+				++argIdx;
+				if(Lua::IsSet(l,argIdx))
+					denoise = Lua::CheckBool(l,argIdx);
+				auto scene = cycles::Scene::Create([](const uint8_t *data,int width,int height,int channels) {
+					
+				},sampleCount,hdrOutput,denoise);
+				if(scene == nullptr)
+					return 0;
+				Lua::Push<cycles::PScene>(l,scene);
+				return 1;
 			})}
 		});
+		//
+
+		auto defSceneObject = luabind::class_<cycles::SceneObject>("SceneObject");
+		defSceneObject.def("GetScene",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::SceneObject>&)>([](lua_State *l,util::WeakHandle<cycles::SceneObject> &sceneObject) {
+			pragma::Lua::check_component(l,sceneObject);
+			Lua::Push(l,sceneObject->GetScene().GetHandle());
+		}));
+		modConvert[defSceneObject];
+
+		auto defWorldObject = luabind::class_<cycles::WorldObject,cycles::SceneObject>("WorldObject");
+		defWorldObject.def("SetPos",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::WorldObject>&,const Vector3&)>([](lua_State *l,util::WeakHandle<cycles::WorldObject> &worldObject,const Vector3 &pos) {
+			pragma::Lua::check_component(l,worldObject);
+			worldObject->SetPos(pos);
+		}));
+		defWorldObject.def("GetPos",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::WorldObject>&)>([](lua_State *l,util::WeakHandle<cycles::WorldObject> &worldObject) {
+			pragma::Lua::check_component(l,worldObject);
+			Lua::Push<Vector3>(l,worldObject->GetPos());
+		}));
+		defWorldObject.def("SetRotation",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::WorldObject>&,const Quat&)>([](lua_State *l,util::WeakHandle<cycles::WorldObject> &worldObject,const Quat &rot) {
+			pragma::Lua::check_component(l,worldObject);
+			worldObject->SetRotation(rot);
+		}));
+		defWorldObject.def("GetRotation",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::WorldObject>&)>([](lua_State *l,util::WeakHandle<cycles::WorldObject> &worldObject) {
+			pragma::Lua::check_component(l,worldObject);
+			Lua::Push<Quat>(l,worldObject->GetRotation());
+		}));
+		defWorldObject.def("GetPose",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::WorldObject>&)>([](lua_State *l,util::WeakHandle<cycles::WorldObject> &worldObject) {
+			pragma::Lua::check_component(l,worldObject);
+			Lua::Push<pragma::physics::Transform>(l,worldObject->GetPose());
+		}));
+		modConvert[defWorldObject];
+
+		auto defCamera = luabind::class_<cycles::Camera,luabind::bases<cycles::WorldObject,cycles::SceneObject>>("Camera");
+		defCamera.def("SetResolution",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Camera>&,uint32_t,uint32_t)>([](lua_State *l,util::WeakHandle<cycles::Camera> &cam,uint32_t width,uint32_t height) {
+			pragma::Lua::check_component(l,cam);
+			cam->SetResolution(width,height);
+		}));
+		defCamera.def("SetFarZ",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Camera>&,float)>([](lua_State *l,util::WeakHandle<cycles::Camera> &cam,float farZ) {
+			pragma::Lua::check_component(l,cam);
+			cam->SetFarZ(farZ);
+		}));
+		defCamera.def("SetNearZ",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Camera>&,float)>([](lua_State *l,util::WeakHandle<cycles::Camera> &cam,float nearZ) {
+			pragma::Lua::check_component(l,cam);
+			cam->SetNearZ(nearZ);
+		}));
+		defCamera.def("SetFOV",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Camera>&,float)>([](lua_State *l,util::WeakHandle<cycles::Camera> &cam,float fov) {
+			pragma::Lua::check_component(l,cam);
+			cam->SetFOV(umath::deg_to_rad(fov));
+		}));
+		modConvert[defCamera];
+
+		auto defLight = luabind::class_<cycles::Light,luabind::bases<cycles::WorldObject,cycles::SceneObject>>("Light");
+		defLight.add_static_constant("TYPE_POINT",umath::to_integral(cycles::Light::Type::Point));
+		defLight.add_static_constant("TYPE_SPOT",umath::to_integral(cycles::Light::Type::Spot));
+		defLight.add_static_constant("TYPE_DIRECTIONAL",umath::to_integral(cycles::Light::Type::Directional));
+		defLight.add_static_constant("TYPE_AREA",umath::to_integral(cycles::Light::Type::Area));
+		defLight.add_static_constant("TYPE_BACKGROUND",umath::to_integral(cycles::Light::Type::Background));
+		defLight.add_static_constant("TYPE_TRIANGLE",umath::to_integral(cycles::Light::Type::Triangle));
+		defLight.def("SetType",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Light>&,uint32_t)>([](lua_State *l,util::WeakHandle<cycles::Light> &light,uint32_t type) {
+			pragma::Lua::check_component(l,light);
+			light->SetType(static_cast<cycles::Light::Type>(type));
+		}));
+		defLight.def("SetConeAngle",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Light>&,float)>([](lua_State *l,util::WeakHandle<cycles::Light> &light,float coneAngle) {
+			pragma::Lua::check_component(l,light);
+			light->SetConeAngle(umath::deg_to_rad(coneAngle));
+		}));
+		defLight.def("SetColor",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Light>&,const Color&)>([](lua_State *l,util::WeakHandle<cycles::Light> &light,const Color &color) {
+			pragma::Lua::check_component(l,light);
+			light->SetColor(color);
+		}));
+		defLight.def("SetIntensity",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Light>&,float)>([](lua_State *l,util::WeakHandle<cycles::Light> &light,float intensity) {
+			pragma::Lua::check_component(l,light);
+			light->SetIntensity(intensity);
+		}));
+		defLight.def("SetSize",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Light>&,float)>([](lua_State *l,util::WeakHandle<cycles::Light> &light,float size) {
+			pragma::Lua::check_component(l,light);
+			light->SetSize(size);
+		}));
+		defLight.def("SetAxisU",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Light>&,const Vector3&)>([](lua_State *l,util::WeakHandle<cycles::Light> &light,const Vector3 &axisU) {
+			pragma::Lua::check_component(l,light);
+			light->SetAxisU(axisU);
+		}));
+		defLight.def("SetAxisV",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Light>&,const Vector3&)>([](lua_State *l,util::WeakHandle<cycles::Light> &light,const Vector3 &axisV) {
+			pragma::Lua::check_component(l,light);
+			light->SetAxisV(axisV);
+		}));
+		defLight.def("SetSizeU",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Light>&,float)>([](lua_State *l,util::WeakHandle<cycles::Light> &light,float sizeU) {
+			pragma::Lua::check_component(l,light);
+			light->SetSizeU(sizeU);
+		}));
+		defLight.def("SetSizeV",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Light>&,float)>([](lua_State *l,util::WeakHandle<cycles::Light> &light,float sizeV) {
+			pragma::Lua::check_component(l,light);
+			light->SetSizeV(sizeV);
+		}));
+
+		modConvert[defLight];
+
+		auto defMesh = luabind::class_<cycles::Mesh,cycles::SceneObject>("Mesh");
+		defMesh.def("AddVertex",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Mesh>&,const Vector3&,const Vector3&,const Vector2&)>([](lua_State *l,util::WeakHandle<cycles::Mesh> &mesh,const Vector3 &pos,const Vector3 &n,const Vector2 &uv) {
+			pragma::Lua::check_component(l,mesh);
+			Lua::PushBool(l,mesh->AddVertex(pos,n,Vector3{},uv));
+		}));
+		defMesh.def("AddTriangle",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Mesh>&,uint32_t,uint32_t,uint32_t,uint32_t)>([](lua_State *l,util::WeakHandle<cycles::Mesh> &mesh,uint32_t idx0,uint32_t idx1,uint32_t idx2,uint32_t shaderIndex) {
+			pragma::Lua::check_component(l,mesh);
+			Lua::PushBool(l,mesh->AddTriangle(idx0,idx1,idx2,shaderIndex));
+		}));
+		defMesh.def("AddShader",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Mesh>&,util::WeakHandle<cycles::Shader>&)>([](lua_State *l,util::WeakHandle<cycles::Mesh> &mesh,util::WeakHandle<cycles::Shader> &shader) {
+			pragma::Lua::check_component(l,mesh);
+			pragma::Lua::check_component(l,shader);
+			Lua::PushInt(l,mesh->AddShader(*shader));
+		}));
+		modConvert[defMesh];
+
+		auto defObject = luabind::class_<cycles::Object,luabind::bases<cycles::WorldObject,cycles::SceneObject>>("Object");
+		modConvert[defObject];
+
+		auto defScene = luabind::class_<cycles::Scene>("Scene");
+		defMesh.def("AddEntity",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Scene>&,EntityHandle&)>([](lua_State *l,util::WeakHandle<cycles::Scene> &scene,EntityHandle &hEnt) {
+			LUA_CHECK_ENTITY(l,hEnt);
+			pragma::Lua::check_component(l,scene);
+			scene->AddEntity(*hEnt.get());
+		}));
+		defMesh.def("AddLight",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Scene>&)>([](lua_State *l,util::WeakHandle<cycles::Scene> &scene) {
+			pragma::Lua::check_component(l,scene);
+			auto light = cycles::Light::Create(*scene);
+			Lua::Push(l,light->GetHandle());
+		}));
+		defMesh.def("AddMesh",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Scene>&,const std::string&,uint32_t,uint32_t)>([](lua_State *l,util::WeakHandle<cycles::Scene> &scene,const std::string &name,uint32_t numVerts,uint32_t numTris) {
+			pragma::Lua::check_component(l,scene);
+			auto mesh = cycles::Mesh::Create(*scene,name,numVerts,numTris);
+			Lua::Push(l,mesh->GetHandle());
+		}));
+		defMesh.def("AddObject",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Scene>&,util::WeakHandle<cycles::Mesh>&)>([](lua_State *l,util::WeakHandle<cycles::Scene> &scene,util::WeakHandle<cycles::Mesh> &mesh) {
+			pragma::Lua::check_component(l,scene);
+			pragma::Lua::check_component(l,mesh);
+			auto object = cycles::Object::Create(*scene,*mesh);
+			Lua::Push(l,mesh->GetHandle());
+		}));
+		defMesh.def("AddShader",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Scene>&,const std::string&)>([](lua_State *l,util::WeakHandle<cycles::Scene> &scene,const std::string &name) {
+			pragma::Lua::check_component(l,scene);
+			auto shader = cycles::Shader::Create(*scene,name);
+			Lua::Push(l,shader->GetHandle());
+		}));
+		defMesh.def("GetShaders",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Scene>&)>([](lua_State *l,util::WeakHandle<cycles::Scene> &scene) {
+			pragma::Lua::check_component(l,scene);
+			auto &shaders = scene->GetShaders();
+			auto t = Lua::CreateTable(l);
+			for(auto i=decltype(shaders.size()){0u};i<shaders.size();++i)
+			{
+				auto &shader = shaders.at(i);
+				Lua::PushInt(l,i +1);
+				Lua::Push(l,shader->GetHandle());
+				Lua::SetTableValue(l,t);
+			}
+		}));
+		defMesh.def("GetObjects",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Scene>&)>([](lua_State *l,util::WeakHandle<cycles::Scene> &scene) {
+			pragma::Lua::check_component(l,scene);
+			auto &objects = scene->GetObjects();
+			auto t = Lua::CreateTable(l);
+			for(auto i=decltype(objects.size()){0u};i<objects.size();++i)
+			{
+				auto &o = objects.at(i);
+				Lua::PushInt(l,i +1);
+				Lua::Push(l,o->GetHandle());
+				Lua::SetTableValue(l,t);
+			}
+		}));
+		defMesh.def("GetLights",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Scene>&)>([](lua_State *l,util::WeakHandle<cycles::Scene> &scene) {
+			pragma::Lua::check_component(l,scene);
+			auto &lights = scene->GetLights();
+			auto t = Lua::CreateTable(l);
+			for(auto i=decltype(lights.size()){0u};i<lights.size();++i)
+			{
+				auto &light = lights.at(i);
+				Lua::PushInt(l,i +1);
+				Lua::Push(l,light->GetHandle());
+				Lua::SetTableValue(l,t);
+			}
+		}));
+		defMesh.def("GetProgress",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Scene>&)>([](lua_State *l,util::WeakHandle<cycles::Scene> &scene) {
+			pragma::Lua::check_component(l,scene);
+			Lua::PushNumber(l,scene->GetProgress());
+		}));
+		defMesh.def("IsComplete",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Scene>&)>([](lua_State *l,util::WeakHandle<cycles::Scene> &scene) {
+			pragma::Lua::check_component(l,scene);
+			Lua::PushBool(l,scene->IsComplete());
+		}));
+		defMesh.def("IsCancelled",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Scene>&)>([](lua_State *l,util::WeakHandle<cycles::Scene> &scene) {
+			pragma::Lua::check_component(l,scene);
+			Lua::PushBool(l,scene->IsCancelled());
+		}));
+		defMesh.def("Start",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Scene>&)>([](lua_State *l,util::WeakHandle<cycles::Scene> &scene) {
+			pragma::Lua::check_component(l,scene);
+			scene->Start();
+		}));
+		defMesh.def("Cancel",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Scene>&)>([](lua_State *l,util::WeakHandle<cycles::Scene> &scene) {
+			pragma::Lua::check_component(l,scene);
+			scene->Cancel();
+		}));
+		defMesh.def("Wait",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Scene>&)>([](lua_State *l,util::WeakHandle<cycles::Scene> &scene) {
+			pragma::Lua::check_component(l,scene);
+			scene->Wait();
+		}));
+		defMesh.def("GetCamera",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Scene>&)>([](lua_State *l,util::WeakHandle<cycles::Scene> &scene) {
+			pragma::Lua::check_component(l,scene);
+			Lua::Push(l,scene->GetCamera().GetHandle());
+		}));
+		//defMesh.def("SetProgressCallback",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Scene&)>([](lua_State *l,util::WeakHandle<cycles::Scene> &scene) {
+			// pragma::Lua::check_component(l,scene);
+			//	scene.SetProgressCallback(); // TODO
+		//}));
+		modConvert[defScene];
+
+		auto defDenoiseInfo = luabind::class_<cycles::Scene::DenoiseInfo>("DenoiseInfo");
+		defDenoiseInfo.def_readwrite("numThreads",&cycles::Scene::DenoiseInfo::numThreads);
+		defDenoiseInfo.def_readwrite("width",&cycles::Scene::DenoiseInfo::width);
+		defDenoiseInfo.def_readwrite("height",&cycles::Scene::DenoiseInfo::height);
+		defDenoiseInfo.def_readwrite("hdr",&cycles::Scene::DenoiseInfo::hdr);
+		defScene.scope[defDenoiseInfo];
+
+		auto defShaderNode = luabind::class_<cycles::ShaderNode>("ShaderNode");
+		modConvert[defShaderNode];
+
+		auto defShader = luabind::class_<cycles::Shader,cycles::SceneObject>("Shader");
+		defShader.def("AddNode",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Shader>&,const std::string&,const std::string&)>([](lua_State *l,util::WeakHandle<cycles::Shader> &shader,const std::string &type,const std::string &name) {
+			pragma::Lua::check_component(l,shader);
+			auto node = shader->AddNode(type,name);
+			Lua::Push(l,node->GetHandle());
+		}));
+		defShader.def("FindNode",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Shader>&,const std::string&)>([](lua_State *l,util::WeakHandle<cycles::Shader> &shader,const std::string &name) {
+			pragma::Lua::check_component(l,shader);
+			auto node = shader->FindNode(name);
+			Lua::Push(l,node->GetHandle());
+		}));
+		defShader.def("Link",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Shader>&,const std::string&,const std::string&,const std::string&,const std::string&)>([](lua_State *l,util::WeakHandle<cycles::Shader> &shader,const std::string &fromNodeName,const std::string &fromSocketName,const std::string &toNodeName,const std::string &toSocketName) {
+			pragma::Lua::check_component(l,shader);
+			Lua::PushBool(l,shader->Link(fromNodeName,fromSocketName,toNodeName,toSocketName));
+		}));
+		modConvert[defShader];
 	}
 };
 #pragma optimize("",on)

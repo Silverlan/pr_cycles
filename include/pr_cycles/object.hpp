@@ -13,11 +13,16 @@ namespace pragma::modules::cycles
 	class Object;
 	using PObject = std::shared_ptr<Object>;
 	class Object
-		: public WorldObject
+		: public WorldObject,
+		public std::enable_shared_from_this<Object>
 	{
 	public:
 		static PObject Create(Scene &scene,Mesh &mesh);
+		util::WeakHandle<Object> GetHandle();
 		virtual void DoFinalize() override;
+
+		const Mesh &GetMesh() const;
+		Mesh &GetMesh();
 
 		ccl::Object *operator->();
 		ccl::Object *operator*();

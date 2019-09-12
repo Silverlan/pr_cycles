@@ -10,10 +10,12 @@ namespace pragma::modules::cycles
 	class Camera;
 	using PCamera = std::shared_ptr<Camera>;
 	class Camera
-		: public WorldObject
+		: public WorldObject,
+		public std::enable_shared_from_this<Camera>
 	{
 	public:
 		static PCamera Create(Scene &scene);
+		util::WeakHandle<Camera> GetHandle();
 
 		void SetResolution(uint32_t width,uint32_t height);
 		void SetFarZ(float farZ);

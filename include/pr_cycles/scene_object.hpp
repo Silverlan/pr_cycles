@@ -1,6 +1,7 @@
 #ifndef __PR_CYCLES_SCENE_OBJECT_HPP__
 #define __PR_CYCLES_SCENE_OBJECT_HPP__
 
+#include <sharedutils/util_weak_handle.hpp>
 #include <memory>
 
 namespace pragma::modules::cycles

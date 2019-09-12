@@ -23,6 +23,11 @@ cycles::Light::Light(Scene &scene,ccl::Light &light)
 	: WorldObject{scene},m_light{light}
 {}
 
+util::WeakHandle<cycles::Light> cycles::Light::GetHandle()
+{
+	return util::WeakHandle<cycles::Light>{shared_from_this()};
+}
+
 void cycles::Light::SetType(Type type)
 {
 	m_type = type;
@@ -33,6 +38,15 @@ void cycles::Light::SetType(Type type)
 		break;
 	case Type::Directional:
 		m_light.type = ccl::LightType::LIGHT_DISTANT;
+		break;
+	case Type::Area:
+		m_light.type = ccl::LightType::LIGHT_AREA;
+		break;
+	case Type::Background:
+		m_light.type = ccl::LightType::LIGHT_BACKGROUND;
+		break;
+	case Type::Triangle:
+		m_light.type = ccl::LightType::LIGHT_TRIANGLE;
 		break;
 	case Type::Point:
 	default:
@@ -52,6 +66,13 @@ void cycles::Light::SetColor(const Color &color)
 	m_intensity = color.a;
 }
 void cycles::Light::SetIntensity(Lumen intensity) {m_intensity = intensity;}
+
+void cycles::Light::SetSize(float size) {m_size = size;}
+
+void cycles::Light::SetAxisU(const Vector3 &axisU) {m_axisU = axisU;}
+void cycles::Light::SetAxisV(const Vector3 &axisV) {m_axisV = axisV;}
+void cycles::Light::SetSizeU(float sizeU) {m_sizeU = sizeU;}
+void cycles::Light::SetSizeV(float sizeV) {m_sizeV = sizeV;}
 
 void cycles::Light::DoFinalize()
 {
@@ -90,6 +111,30 @@ void cycles::Light::DoFinalize()
 		m_light.dir = cycles::Scene::ToCyclesNormal(forward);
 		break;
 	}
+	case Type::Area:
+	{
+		shader = cycles::Shader::Create(GetScene(),"area_shader");
+		m_light.axisu = cycles::Scene::ToCyclesNormal(m_axisU);
+		m_light.axisv = cycles::Scene::ToCyclesNormal(m_axisV);
+		m_light.sizeu = cycles::Scene::ToCyclesLength(m_sizeU);
+		m_light.sizev = cycles::Scene::ToCyclesLength(m_sizeV);
+		m_light.round = m_bRound;
+
+		auto &rot = GetRotation();
+		auto forward = -uquat::forward(rot);
+		m_light.dir = cycles::Scene::ToCyclesNormal(forward);
+		break;
+	}
+	case Type::Background:
+	{
+		shader = cycles::Shader::Create(GetScene(),"background_shader");
+		break;
+	}
+	case Type::Triangle:
+	{
+		shader = cycles::Shader::Create(GetScene(),"triangle_shader");
+		break;
+	}
 	}
 
 	if(shader)
@@ -105,7 +150,7 @@ void cycles::Light::DoFinalize()
 	}
 
 	m_light.strength = ccl::float3{m_color.r,m_color.g,m_color.b};
-	m_light.size = 0.f;
+	m_light.size = m_size;
 	m_light.co = cycles::Scene::ToCyclesPosition(GetPos());
 }
 

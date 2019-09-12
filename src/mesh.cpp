@@ -61,6 +61,18 @@ cycles::Mesh::Mesh(Scene &scene,ccl::Mesh &mesh,uint64_t numVerts,uint64_t numTr
 	m_tangentSigns = tangentSigns ? tangentSigns->data_float() : nullptr;
 }
 
+util::WeakHandle<cycles::Mesh> cycles::Mesh::GetHandle()
+{
+	return util::WeakHandle<cycles::Mesh>{shared_from_this()};
+}
+
+const ccl::float3 *cycles::Mesh::GetNormals() const {return m_normals;}
+const ccl::float3 *cycles::Mesh::GetTangents() const {return m_tangents;}
+const float *cycles::Mesh::GetTangentSigns() const {return m_tangentSigns;}
+const ccl::float2 *cycles::Mesh::GetUVs() const {return m_uvs;}
+uint64_t cycles::Mesh::GetVertexCount() const {return m_numVerts;}
+uint64_t cycles::Mesh::GetTriangleCount() const {return m_numTris;}
+
 bool cycles::Mesh::AddVertex(const Vector3 &pos,const Vector3 &n,const Vector3 &t,const Vector2 &uv)
 {
 	auto idx = m_mesh.verts.size();
