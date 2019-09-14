@@ -5,7 +5,7 @@
 #include <memory>
 #include <mathutil/uvec.h>
 
-namespace ccl {class Mesh; class Attribute; struct float3; struct float2;};
+namespace ccl {class Mesh; class Attribute; struct float4; struct float3; struct float2;};
 namespace pragma::modules::cycles
 {
 	class Shader;
@@ -20,8 +20,8 @@ namespace pragma::modules::cycles
 		static PMesh Create(Scene &scene,const std::string &name,uint64_t numVerts,uint64_t numTris);
 		util::WeakHandle<Mesh> GetHandle();
 
-		const ccl::float3 *GetNormals() const;
-		const ccl::float3 *GetTangents() const;
+		const ccl::float4 *GetNormals() const;
+		const ccl::float4 *GetTangents() const;
 		const float *GetTangentSigns() const;
 		const ccl::float2 *GetUVs() const;
 		uint64_t GetVertexCount() const;
@@ -38,8 +38,8 @@ namespace pragma::modules::cycles
 		std::vector<Vector3> m_perVertexTangents = {};
 		std::vector<float> m_perVertexTangentSigns = {};
 		ccl::Mesh &m_mesh;
-		ccl::float3 *m_normals = nullptr;
-		ccl::float3 *m_tangents = nullptr;
+		ccl::float4 *m_normals = nullptr;
+		ccl::float4 *m_tangents = nullptr;
 		float *m_tangentSigns = nullptr;
 		ccl::float2 *m_uvs = nullptr;
 		uint64_t m_numVerts = 0ull;

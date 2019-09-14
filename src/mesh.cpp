@@ -49,13 +49,13 @@ cycles::Mesh::Mesh(Scene &scene,ccl::Mesh &mesh,uint64_t numVerts,uint64_t numTr
 	m_numTris{numTris}
 {
 	auto *normals = m_mesh.attributes.find(ccl::ATTR_STD_VERTEX_NORMAL);
-	m_normals = normals ? normals->data_float3() : nullptr;
+	m_normals = normals ? normals->data_float4() : nullptr;
 
 	auto *uvs = m_mesh.attributes.find(ccl::ATTR_STD_UV);
 	m_uvs = uvs ? uvs->data_float2() : nullptr;
 
 	auto *tangents = m_mesh.attributes.find(ccl::ATTR_STD_UV_TANGENT);
-	m_tangents = tangents ? tangents->data_float3() : nullptr;
+	m_tangents = tangents ? tangents->data_float4() : nullptr;
 
 	auto *tangentSigns = m_mesh.attributes.find(ccl::ATTR_STD_UV_TANGENT_SIGN);
 	m_tangentSigns = tangentSigns ? tangentSigns->data_float() : nullptr;
@@ -66,12 +66,17 @@ util::WeakHandle<cycles::Mesh> cycles::Mesh::GetHandle()
 	return util::WeakHandle<cycles::Mesh>{shared_from_this()};
 }
 
-const ccl::float3 *cycles::Mesh::GetNormals() const {return m_normals;}
-const ccl::float3 *cycles::Mesh::GetTangents() const {return m_tangents;}
+const ccl::float4 *cycles::Mesh::GetNormals() const {return m_normals;}
+const ccl::float4 *cycles::Mesh::GetTangents() const {return m_tangents;}
 const float *cycles::Mesh::GetTangentSigns() const {return m_tangentSigns;}
 const ccl::float2 *cycles::Mesh::GetUVs() const {return m_uvs;}
 uint64_t cycles::Mesh::GetVertexCount() const {return m_numVerts;}
 uint64_t cycles::Mesh::GetTriangleCount() const {return m_numTris;}
+
+static ccl::float4 to_float4(const ccl::float3 &v)
+{
+	return ccl::float4{v.x,v.y,v.z,0.f};
+}
 
 bool cycles::Mesh::AddVertex(const Vector3 &pos,const Vector3 &n,const Vector3 &t,const Vector2 &uv)
 {
@@ -79,7 +84,7 @@ bool cycles::Mesh::AddVertex(const Vector3 &pos,const Vector3 &n,const Vector3 &
 	if(idx >= m_numVerts)
 		return false;
 	if(m_normals)
-		m_normals[idx] = Scene::ToCyclesNormal(n);
+		m_normals[idx] = to_float4(Scene::ToCyclesNormal(n));
 	m_mesh.add_vertex(Scene::ToCyclesPosition(pos));
 	m_perVertexUvs.push_back(uv);
 	m_perVertexTangents.push_back(t);
@@ -110,9 +115,9 @@ bool cycles::Mesh::AddTriangle(uint32_t idx0,uint32_t idx1,uint32_t idx2,uint32_
 	auto &t0 = m_perVertexTangents.at(idx0);
 	auto &t1 = m_perVertexTangents.at(idx1);
 	auto &t2 = m_perVertexTangents.at(idx2);
-	m_tangents[offset] = Scene::ToCyclesNormal(t0);
-	m_tangents[offset +1] = Scene::ToCyclesNormal(t1);
-	m_tangents[offset +2] = Scene::ToCyclesNormal(t2);
+	m_tangents[offset] = to_float4(Scene::ToCyclesNormal(t0));
+	m_tangents[offset +1] = to_float4(Scene::ToCyclesNormal(t1));
+	m_tangents[offset +2] = to_float4(Scene::ToCyclesNormal(t2));
 
 	m_tangentSigns[offset] = m_tangentSigns[offset +1] = m_tangentSigns[offset +2] = 1.f;
 	return true;
