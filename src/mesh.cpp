@@ -93,6 +93,11 @@ bool cycles::Mesh::AddVertex(const Vector3 &pos,const Vector3 &n,const Vector3 &
 
 bool cycles::Mesh::AddTriangle(uint32_t idx0,uint32_t idx1,uint32_t idx2,uint32_t shaderIndex)
 {
+	// Winding order has to be inverted for cycles
+#ifndef ENABLE_TEST_AMBIENT_OCCLUSION
+	umath::swap(idx1,idx2);
+#endif
+
 	auto numCurMeshTriIndices = m_mesh.triangles.size();
 	auto idx = numCurMeshTriIndices /3;
 	if(idx >= m_numTris)

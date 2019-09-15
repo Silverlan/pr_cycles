@@ -41,15 +41,13 @@
 
 using namespace pragma::modules;
 
-#define ENABLE_TEST_AMBIENT_OCCLUSION
-
 #pragma optimize("",off)
 
 extern DLLCENGINE CEngine *c_engine;
 extern DLLCLIENT ClientState *client;
 extern DLLCLIENT CGame *c_game;
 
-cycles::PScene cycles::Scene::Create(const std::function<void(const uint8_t*,int,int,int)> &outputHandler,uint32_t sampleCount,bool hdrOutput,bool denoise)
+cycles::PScene cycles::Scene::Create(RenderMode renderMode,const std::function<void(const uint8_t*,int,int,int)> &outputHandler,std::optional<uint32_t> sampleCount,bool hdrOutput,bool denoise)
 {
 	std::optional<ccl::DeviceInfo> device = {};
 	for(auto &devInfo : ccl::Device::available_devices(ccl::DeviceTypeMask::DEVICE_MASK_CUDA | ccl::DeviceTypeMask::DEVICE_MASK_OPENCL | ccl::DeviceTypeMask::DEVICE_MASK_CPU))
@@ -84,11 +82,21 @@ endLoop:
 		sessionParams.run_denoising = true;
 	}
 	sessionParams.start_resolution = 64;
-#ifndef ENABLE_TEST_AMBIENT_OCCLUSION
-	sessionParams.samples = sampleCount;
-#else
-	sessionParams.samples = 1225;
-#endif
+	if(sampleCount.has_value())
+		sessionParams.samples = *sampleCount;
+	else
+	{
+		switch(renderMode)
+		{
+		case RenderMode::BakeAmbientOcclusion:
+		case RenderMode::BakeNormals:
+			sessionParams.samples = 1'225u;
+			break;
+		default:
+			sessionParams.samples = 1'024u;
+			break;
+		}
+	}
 	// We need the scene-pointer in the callback-function, however the function has to be
 	// defined before the scene is created, so we create a shared pointer that will be initialized after
 	// the scene.
@@ -232,19 +240,19 @@ endLoop:
 	cclScene->params.bvh_type = ccl::SceneParams::BVH_STATIC;
 
 	auto *pSession = session.get();
-	auto scene = PScene{new Scene{std::move(session),*cclScene}};
+	auto scene = PScene{new Scene{std::move(session),*cclScene,renderMode}};
 	auto *pScene = scene.get();
 	pSession->progress.set_update_callback([pScene]() {
 		if(pScene->m_progressCallback)
 			pScene->m_progressCallback(pScene->m_session->progress.get_progress());
-	});
+		});
 	scene->m_camera = Camera::Create(*scene);
 	*ptrScene = pScene;
 	return scene;
 }
 
-cycles::Scene::Scene(std::unique_ptr<ccl::Session> session,ccl::Scene &scene)
-	: m_session{std::move(session)},m_scene{scene}
+cycles::Scene::Scene(std::unique_ptr<ccl::Session> session,ccl::Scene &scene,RenderMode renderMode)
+	: m_session{std::move(session)},m_scene{scene},m_renderMode{renderMode}
 {}
 
 cycles::Scene::~Scene()
@@ -285,11 +293,11 @@ static std::optional<std::string> prepare_texture(TextureInfo *texInfo,bool &out
 		return get_abs_error_texture_path();
 	/*if(tex->IsLoaded() == false)
 	{
-		TextureManager::LoadInfo loadInfo {};
-		loadInfo.flags = TextureLoadFlags::LoadInstantly;
-		static_cast<CMaterialManager&>(client->GetMaterialManager()).GetTextureManager().Load(*c_engine,texInfo->name,loadInfo);
-		if(tex->IsLoaded() == false)
-			return get_abs_error_texture_path();
+	TextureManager::LoadInfo loadInfo {};
+	loadInfo.flags = TextureLoadFlags::LoadInstantly;
+	static_cast<CMaterialManager&>(client->GetMaterialManager()).GetTextureManager().Load(*c_engine,texInfo->name,loadInfo);
+	if(tex->IsLoaded() == false)
+	return get_abs_error_texture_path();
 	}
 	*/
 	auto texPath = "materials\\" +texInfo->name;
@@ -482,10 +490,10 @@ void cycles::Scene::LinkNormalMap(Shader &shader,Material &mat,const std::string
 
 #ifdef ENABLE_TEST_AMBIENT_OCCLUSION
 template<typename T>
-	T read_value(std::ifstream &s)
+T read_value(std::ifstream &s)
 {
 	T r;
-		s.read(reinterpret_cast<char*>(&r),sizeof(T));
+	s.read(reinterpret_cast<char*>(&r),sizeof(T));
 	return r;
 }
 #endif
@@ -497,6 +505,9 @@ cycles::PShader cycles::Scene::CreateShader(const std::string &meshName,Model &m
 
 	auto texIdx = subMesh.GetTexture();
 	auto *mat = mdl.GetMaterial(texIdx);
+#ifdef ENABLE_TEST_AMBIENT_OCCLUSION
+	mat = client->LoadMaterial("models/player/soldier/soldier_d.wmi");
+#endif
 	auto *diffuseMap = mat ? mat->GetDiffuseMap() : nullptr;
 	auto diffuseTexPath = prepare_texture(m_scene,diffuseMap);
 	if(diffuseTexPath.has_value() == false)
@@ -531,8 +542,9 @@ cycles::PShader cycles::Scene::CreateShader(const std::string &meshName,Model &m
 		auto *nodeAlbedo = AssignTexture(*shader,"albedo",*diffuseTexPath);
 		if(nodeAlbedo)
 			shader->Link("albedo","color",bsdfName,"base_color");
-
+#ifndef ENABLE_TEST_AMBIENT_OCCLUSION
 		LinkNormalMap(*shader,*mat,meshName,bsdfName,"normal");
+#endif
 
 		// Metalness map
 		auto metalnessTexPath = prepare_texture(m_scene,mat->GetTextureInfo("metalness_map"));
@@ -578,16 +590,16 @@ cycles::PShader cycles::Scene::CreateShader(const std::string &meshName,Model &m
 	shader->Link(bsdfName,"bsdf","output","surface");
 
 	/*{
-		auto nodeAo = shader->AddNode("ambient_occlusion","ao");
-		auto *pNodeAo = static_cast<ccl::AmbientOcclusionNode*>(**nodeAo);
-		shader->Link("albedo","color","ao","color");
-		shader->Link("nmap","normal","ao","normal");
+	auto nodeAo = shader->AddNode("ambient_occlusion","ao");
+	auto *pNodeAo = static_cast<ccl::AmbientOcclusionNode*>(**nodeAo);
+	shader->Link("albedo","color","ao","color");
+	shader->Link("nmap","normal","ao","normal");
 
-		auto nodeEmission = shader->AddNode("emission","ao_emission");
-		auto *pNodeEmission = static_cast<ccl::EmissionNode*>(**nodeEmission);
-		shader->Link("ao","ao","ao_emission","color");
+	auto nodeEmission = shader->AddNode("emission","ao_emission");
+	auto *pNodeEmission = static_cast<ccl::EmissionNode*>(**nodeEmission);
+	shader->Link("ao","ao","ao_emission","color");
 
-		shader->Link("ao_emission","emission","output","surface");
+	shader->Link("ao_emission","emission","output","surface");
 	}
 	*/
 
@@ -601,6 +613,9 @@ void cycles::Scene::AddEntity(BaseEntity &ent)
 		return;
 #endif
 	auto mdl = ent.GetModel();
+#ifdef ENABLE_TEST_AMBIENT_OCCLUSION
+	//mdl = c_game->LoadModel("cube.wmd");
+#endif
 	if(mdl == nullptr)
 		return;
 	std::vector<std::shared_ptr<ModelMesh>> lodMeshes {};
@@ -621,11 +636,11 @@ void cycles::Scene::AddEntity(BaseEntity &ent)
 	}
 
 	auto animC = ent.GetComponent<CAnimatedComponent>();
-	
+
 	// Create the mesh
 	// TODO: If multiple entities are using same model, CACHE the mesh(es)! (Unless they're animated)
 	std::string name = "ent_" +std::to_string(ent.GetLocalIndex());
-#ifndef ENABLE_TEST_AMBIENT_OCCLUSION
+#ifdef ENABLE_TEST_AMBIENT_OCCLUSION
 	auto mesh = Mesh::Create(*this,name,numVerts,numTris);
 	uint32_t meshTriIndexStartOffset = 0;
 	for(auto &lodMesh : lodMeshes)
@@ -640,11 +655,23 @@ void cycles::Scene::AddEntity(BaseEntity &ent)
 			for(auto vertIdx=decltype(verts.size()){0u};vertIdx<verts.size();++vertIdx)
 			{
 				auto &v = verts.at(vertIdx);
-				Vector3 pos;
-				if(animC.valid() && animC->GetLocalVertexPosition(*subMesh,vertIdx,pos))
-					mesh->AddVertex(pos,v.normal,v.tangent,v.uv); // TODO: Apply animation matrices to normal!
-				else
+				switch(m_renderMode)
+				{
+				case RenderMode::RenderImage:
+				{
+					Vector3 pos;
+					// TODO: Do we really need the tangent?
+					if(animC.valid() && animC->GetLocalVertexPosition(*subMesh,vertIdx,pos))
+						mesh->AddVertex(pos,v.normal,v.tangent,v.uv); // TODO: Apply animation matrices to normal and tangent!
+					else
+						mesh->AddVertex(v.position,v.normal,v.tangent,v.uv);
+					break;
+				}
+				default:
+					// We're probably baking something (e.g. ao map), so we don't want to include the entity's animated pose.
 					mesh->AddVertex(v.position,v.normal,v.tangent,v.uv);
+					break;
+				}
 			}
 
 			auto &tris = subMesh->GetTriangles();
@@ -654,91 +681,102 @@ void cycles::Scene::AddEntity(BaseEntity &ent)
 		}
 	}
 #endif
-#ifdef ENABLE_TEST_AMBIENT_OCCLUSION
-	cycles::PMesh mesh;
+#ifndef ENABLE_TEST_AMBIENT_OCCLUSION
+	//cycles::PMesh mesh;
 	{
-	std::ifstream f("E:/projects/pragma/build_winx64/output/ccl_mesh.bin", std::ios::binary);
-	auto numVerts = read_value<uint32_t>(f);
+		std::ifstream f("E:/projects/pragma/build_winx64/output/ccl_mesh.bin", std::ios::binary);
+		auto numVerts = read_value<uint32_t>(f);
 
-	auto &subMesh = *lodMeshes.front()->GetSubMeshes().front();
+		auto &subMesh = *lodMeshes.front()->GetSubMeshes().front();
 
-	std::vector<ccl::float3> verts {};
-	verts.resize(numVerts);
-	f.read(reinterpret_cast<char*>(verts.data()),verts.size() *sizeof(verts.front()));
+		std::vector<ccl::float3> verts {};
+		verts.resize(numVerts);
+		f.read(reinterpret_cast<char*>(verts.data()),verts.size() *sizeof(verts.front()));
 
-	auto numTris = read_value<uint32_t>(f);
-	std::vector<int> tris {};
-	tris.resize(numTris *3);
-	f.read(reinterpret_cast<char*>(tris.data()),tris.size() *sizeof(tris.front()));
+		auto numTris = read_value<uint32_t>(f);
+		std::vector<int> tris {};
+		tris.resize(numTris *3);
+		f.read(reinterpret_cast<char*>(tris.data()),tris.size() *sizeof(tris.front()));
 
-	std::vector<ccl::float4> normals {};
-	normals.resize(numVerts);
-	f.read(reinterpret_cast<char*>(normals.data()),normals.size() *sizeof(normals.front()));
+		std::vector<ccl::float4> normals {};
+		normals.resize(numVerts);
+		f.read(reinterpret_cast<char*>(normals.data()),normals.size() *sizeof(normals.front()));
 
-	std::vector<ccl::float4> generated {};
-	generated.resize(numVerts);
-	f.read(reinterpret_cast<char*>(generated.data()),generated.size() *sizeof(generated.front()));
+		{
+			for(auto &v : subMesh.GetVertices())
+			{
+				auto cclPos = Scene::ToCyclesPosition(v.position);
+				auto matchFound = false;
+				for(auto &vOther : verts)
+				{
+					auto f0 = umath::abs(vOther.x /cclPos.x);
+					auto f1 = umath::abs(vOther.y /cclPos.y);
+					auto f2 = umath::abs(vOther.z /cclPos.z);
+					if(umath::abs(f1 -f0) < 0.001f && umath::abs(f2 -f0) < 0.001f)
+					{
+						matchFound = true;
+						std::cout<<"FOUND MATHC!"<<std::endl;
+					}
+				}
+				if(matchFound == false)
+					std::cout<<"NO MATCH FOUND!"<<std::endl;
 
-	std::vector<ccl::float2> uvs {};
-	uvs.resize(numTris *3);
-	f.read(reinterpret_cast<char*>(uvs.data()),uvs.size() *sizeof(uvs.front()));
+			}
+		}
 
-	std::vector<ccl::float4> uvTangents {};
-	uvTangents.resize(numTris *3);
-	f.read(reinterpret_cast<char*>(uvTangents.data()),uvTangents.size() *sizeof(uvTangents.front()));
+		std::vector<ccl::float4> generated {};
+		generated.resize(numVerts);
+		f.read(reinterpret_cast<char*>(generated.data()),generated.size() *sizeof(generated.front()));
 
-	std::vector<float> uvTangentSigns {};
-	uvTangentSigns.resize(numTris *3);
-	f.read(reinterpret_cast<char*>(uvTangentSigns.data()),uvTangentSigns.size() *sizeof(uvTangentSigns.front()));
-	f.close();
+		std::vector<ccl::float2> uvs {};
+		uvs.resize(numTris *3);
+		f.read(reinterpret_cast<char*>(uvs.data()),uvs.size() *sizeof(uvs.front()));
 
+		std::vector<ccl::float4> uvTangents {};
+		uvTangents.resize(numTris *3);
+		f.read(reinterpret_cast<char*>(uvTangents.data()),uvTangents.size() *sizeof(uvTangents.front()));
 
-	auto &meshVerts = subMesh.GetVertices();
-	auto &trisOther = subMesh.GetTriangles();
-	numVerts = meshVerts.size();
-	numTris = trisOther.size() /3;
-	mesh = Mesh::Create(*this,name,numVerts,numTris);
-	auto shader = CreateShader(name,*mdl,*lodMeshes.front()->GetSubMeshes().front());
-	auto shaderIdx = mesh->AddShader(*shader);
-	for(auto &v : meshVerts)
-		(*mesh)->add_vertex(cycles::Scene::ToCyclesPosition(v.position));
-	for(auto &v : verts)
-	;//	(*mesh)->add_vertex(v);
-	for(auto i=0;i<tris.size();i+=3)
-		;//(*mesh)->add_triangle(tris[i],tris[i +1],tris[i +2],shaderIdx,true);
-	for(auto i=0;i<trisOther.size();i+=3)
-	{
-		(*mesh)->add_triangle(trisOther.at(i),trisOther.at(i +2),trisOther.at(i +1),shaderIdx,true);
-	}
+		std::vector<float> uvTangentSigns {};
+		uvTangentSigns.resize(numTris *3);
+		f.read(reinterpret_cast<char*>(uvTangentSigns.data()),uvTangentSigns.size() *sizeof(uvTangentSigns.front()));
+		f.close();
+		/*
+		mesh = Mesh::Create(*this,name,numVerts,numTris);
+		auto shader = CreateShader(name,*mdl,*lodMeshes.front()->GetSubMeshes().front());
+		auto shaderIdx = mesh->AddShader(*shader);
+		for(auto &v : verts)
+		(*mesh)->add_vertex(v);
+		for(auto i=0;i<tris.size();i+=3)
+		(*mesh)->add_triangle(tris[i],tris[i +1],tris[i +2],shaderIdx,true);
 
 
-	auto *attrNormals = (*mesh)->attributes.find(ccl::ATTR_STD_VERTEX_NORMAL);
-	auto *pnormals = attrNormals ? attrNormals->data_float4() : nullptr;
+		auto *attrNormals = (*mesh)->attributes.find(ccl::ATTR_STD_VERTEX_NORMAL);
+		auto *pnormals = attrNormals ? attrNormals->data_float4() : nullptr;
 
-	auto *attrGenerated = (*mesh)->attributes.find(ccl::ATTR_STD_GENERATED);
-	auto *pgenerated = attrGenerated ? attrGenerated->data_float4() : nullptr;
+		auto *attrGenerated = (*mesh)->attributes.find(ccl::ATTR_STD_GENERATED);
+		auto *pgenerated = attrGenerated ? attrGenerated->data_float4() : nullptr;
 
-	auto *attrUv = (*mesh)->attributes.find(ccl::ATTR_STD_UV);
-	auto *puvs = attrUv ? attrUv->data_float2() : nullptr;
+		auto *attrUv = (*mesh)->attributes.find(ccl::ATTR_STD_UV);
+		auto *puvs = attrUv ? attrUv->data_float2() : nullptr;
 
-	auto *attrUvTangent = (*mesh)->attributes.find(ccl::ATTR_STD_UV_TANGENT);
-	auto *puvTangents = attrUvTangent ? attrUvTangent->data_float4() : nullptr;
+		auto *attrUvTangent = (*mesh)->attributes.find(ccl::ATTR_STD_UV_TANGENT);
+		auto *puvTangents = attrUvTangent ? attrUvTangent->data_float4() : nullptr;
 
-	auto *attrUvTangentSign = (*mesh)->attributes.find(ccl::ATTR_STD_UV_TANGENT_SIGN);
-	auto *puvTangentSign = attrUvTangentSign ? attrUvTangentSign->data_float() : nullptr;
+		auto *attrUvTangentSign = (*mesh)->attributes.find(ccl::ATTR_STD_UV_TANGENT_SIGN);
+		auto *puvTangentSign = attrUvTangentSign ? attrUvTangentSign->data_float() : nullptr;
 
-	std::cout<<"Size of normals: "<<attrNormals->data_sizeof()<<std::endl;
-	//std::cout<<"Size of generated: "<<attrGenerated->data_sizeof()<<std::endl;
-	std::cout<<"Size of uvs: "<<attrUv->data_sizeof()<<std::endl;
-	std::cout<<"Size of tangents: "<<attrUvTangent->data_sizeof()<<std::endl;
-	std::cout<<"Size of tangent signs: "<<attrUvTangentSign->data_sizeof()<<std::endl;
+		std::cout<<"Size of normals: "<<attrNormals->data_sizeof()<<std::endl;
+		//std::cout<<"Size of generated: "<<attrGenerated->data_sizeof()<<std::endl;
+		std::cout<<"Size of uvs: "<<attrUv->data_sizeof()<<std::endl;
+		std::cout<<"Size of tangents: "<<attrUvTangent->data_sizeof()<<std::endl;
+		std::cout<<"Size of tangent signs: "<<attrUvTangentSign->data_sizeof()<<std::endl;
 
-	//memcpy(pnormals,normals.data(),normals.size() *sizeof(normals.front()));
-	//memcpy(pgenerated,generated.data(),generated.size() *sizeof(generated.front()));
-	memcpy(puvs,uvs.data(),uvs.size() *sizeof(uvs.front()));
-	//memcpy(puvTangents,uvTangents.data(),uvTangents.size() *sizeof(uvTangents.front()));
-	//memcpy(puvTangentSign,uvTangentSigns.data(),uvTangentSigns.size() *sizeof(uvTangentSigns.front()));
-
+		memcpy(pnormals,normals.data(),normals.size() *sizeof(normals.front()));
+		//memcpy(pgenerated,generated.data(),generated.size() *sizeof(generated.front()));
+		memcpy(puvs,uvs.data(),uvs.size() *sizeof(uvs.front()));
+		//memcpy(puvTangents,uvTangents.data(),uvTangents.size() *sizeof(uvTangents.front()));
+		//memcpy(puvTangentSign,uvTangentSigns.data(),uvTangentSigns.size() *sizeof(uvTangentSigns.front()));
+		*/
 	}
 #endif
 
@@ -1063,8 +1101,8 @@ static void store_bake_pixel(void *handle, int x, int y, float u, float v)
 	pixel->object_id = 0; // TODO
 }
 
-constexpr uint32_t OUTPUT_IMAGE_WIDTH = 512;
-constexpr uint32_t OUTPUT_IMAGE_HEIGHT = 512;
+constexpr uint32_t OUTPUT_IMAGE_WIDTH = 1'024;
+constexpr uint32_t OUTPUT_IMAGE_HEIGHT = 1'024;
 static void prepare_bake_data(cycles::Mesh &mesh,BakePixel *pixelArray,uint32_t numPixels)
 {
 	/* initialize all pixel arrays so we know which ones are 'blank' */
@@ -1124,6 +1162,205 @@ unsigned char unit_float_to_uchar_clamp(float val)
 		(val <= 0.0f) ? 0 : ((val > (1.0f - 0.5f / 255.0f)) ? 255 : ((255.0f * val) + 0.5f))));
 }
 
+typedef struct ImBuf {
+	int x, y;
+	std::vector<uint8_t> rect; // rgba
+	std::vector<float> rect_float;
+} ImBuf;
+
+static int filter_make_index(const int x, const int y, const int w, const int h)
+{
+	if (x < 0 || x >= w || y < 0 || y >= h) {
+		return -1; /* return bad index */
+	}
+	else {
+		return y * w + x;
+	}
+}
+
+static int check_pixel_assigned(
+	const void *buffer, const char *mask, const int index, const int depth, const bool is_float)
+{
+	int res = 0;
+
+	if (index >= 0) {
+		const int alpha_index = depth * index + (depth - 1);
+
+		if (mask != NULL) {
+			res = mask[index] != 0 ? 1 : 0;
+		}
+		else if ((is_float && ((const float *)buffer)[alpha_index] != 0.0f) ||
+			(!is_float && ((const unsigned char *)buffer)[alpha_index] != 0)) {
+			res = 1;
+		}
+	}
+
+	return res;
+}
+
+#define FILTER_MASK_MARGIN 1
+#define FILTER_MASK_USED 2
+static void IMB_filter_extend(struct ImBuf *ibuf, std::vector<uint8_t> &vmask, int filter)
+{
+	auto *mask = reinterpret_cast<char*>(vmask.data());
+
+	const int width = ibuf->x;
+	const int height = ibuf->y;
+	const int depth = 4; /* always 4 channels */
+	const int chsize = ibuf->rect_float.data() ? sizeof(float) : sizeof(unsigned char);
+	const size_t bsize = ((size_t)width) * height * depth * chsize;
+	const bool is_float = (ibuf->rect_float.data() != NULL);
+
+	std::vector<uint8_t> vdstbuf;
+	if(ibuf->rect_float.data())
+	{
+		vdstbuf.resize(ibuf->rect_float.size() *sizeof(ibuf->rect_float.front()));
+		memcpy(vdstbuf.data(),ibuf->rect_float.data(),vdstbuf.size() *sizeof(vdstbuf.front()));
+	}
+	else
+	{
+		vdstbuf.resize(ibuf->rect.size() *sizeof(ibuf->rect.front()));
+		memcpy(vdstbuf.data(),ibuf->rect.data(),vdstbuf.size() *sizeof(vdstbuf.front()));
+	}
+
+	void *dstbuf = vdstbuf.data();
+	auto vdstmask = vmask;
+	char *dstmask = reinterpret_cast<char*>(vdstmask.data());
+	void *srcbuf = ibuf->rect_float.data() ? (void *)ibuf->rect_float.data() : (void *)ibuf->rect.data();
+	char *srcmask = mask;
+	int cannot_early_out = 1, r, n, k, i, j, c;
+	float weight[25];
+
+	/* build a weights buffer */
+	n = 1;
+
+#if 0
+	k = 0;
+	for (i = -n; i <= n; i++) {
+		for (j = -n; j <= n; j++) {
+			weight[k++] = sqrt((float)i * i + j * j);
+		}
+	}
+#endif
+
+	weight[0] = 1;
+	weight[1] = 2;
+	weight[2] = 1;
+	weight[3] = 2;
+	weight[4] = 0;
+	weight[5] = 2;
+	weight[6] = 1;
+	weight[7] = 2;
+	weight[8] = 1;
+
+	/* run passes */
+	for (r = 0; cannot_early_out == 1 && r < filter; r++) {
+		int x, y;
+		cannot_early_out = 0;
+
+		for (y = 0; y < height; y++) {
+			for (x = 0; x < width; x++) {
+				const int index = filter_make_index(x, y, width, height);
+
+				/* only update unassigned pixels */
+				if (!check_pixel_assigned(srcbuf, srcmask, index, depth, is_float)) {
+					float tmp[4];
+					float wsum = 0;
+					float acc[4] = {0, 0, 0, 0};
+					k = 0;
+
+					if (check_pixel_assigned(
+						srcbuf, srcmask, filter_make_index(x - 1, y, width, height), depth, is_float) ||
+						check_pixel_assigned(
+							srcbuf, srcmask, filter_make_index(x + 1, y, width, height), depth, is_float) ||
+						check_pixel_assigned(
+							srcbuf, srcmask, filter_make_index(x, y - 1, width, height), depth, is_float) ||
+						check_pixel_assigned(
+							srcbuf, srcmask, filter_make_index(x, y + 1, width, height), depth, is_float)) {
+						for (i = -n; i <= n; i++) {
+							for (j = -n; j <= n; j++) {
+								if (i != 0 || j != 0) {
+									const int tmpindex = filter_make_index(x + i, y + j, width, height);
+
+									if (check_pixel_assigned(srcbuf, srcmask, tmpindex, depth, is_float)) {
+										if (is_float) {
+											for (c = 0; c < depth; c++) {
+												tmp[c] = ((const float *)srcbuf)[depth * tmpindex + c];
+											}
+										}
+										else {
+											for (c = 0; c < depth; c++) {
+												tmp[c] = (float)((const unsigned char *)srcbuf)[depth * tmpindex + c];
+											}
+										}
+
+										wsum += weight[k];
+
+										for (c = 0; c < depth; c++) {
+											acc[c] += weight[k] * tmp[c];
+										}
+									}
+								}
+								k++;
+							}
+						}
+
+						if (wsum != 0) {
+							for (c = 0; c < depth; c++) {
+								acc[c] /= wsum;
+							}
+
+							if (is_float) {
+								for (c = 0; c < depth; c++) {
+									((float *)dstbuf)[depth * index + c] = acc[c];
+								}
+							}
+							else {
+								for (c = 0; c < depth; c++) {
+									((unsigned char *)dstbuf)[depth * index + c] =
+										acc[c] > 255 ? 255 : (acc[c] < 0 ? 0 : ((unsigned char)(acc[c] + 0.5f)));
+								}
+							}
+
+							if (dstmask != NULL) {
+								dstmask[index] = FILTER_MASK_MARGIN; /* assigned */
+							}
+							cannot_early_out = 1;
+						}
+					}
+				}
+			}
+		}
+
+		/* keep the original buffer up to date. */
+		memcpy(srcbuf, dstbuf, bsize);
+		if (dstmask != NULL) {
+			memcpy(srcmask, dstmask, ((size_t)width) * height);
+		}
+	}
+}
+
+static void RE_bake_margin(ImBuf *ibuf, std::vector<uint8_t> &mask, const int margin)
+{
+	/* margin */
+	IMB_filter_extend(ibuf, mask, margin);
+}
+
+static void RE_bake_mask_fill(const std::vector<BakePixel> pixel_array, const size_t num_pixels, char *mask)
+{
+	size_t i;
+	if (!mask) {
+		return;
+	}
+
+	/* only extend to pixels outside the mask area */
+	for (i = 0; i < num_pixels; i++) {
+		if (pixel_array[i].primitive_id != -1) {
+			mask[i] = FILTER_MASK_USED;
+		}
+	}
+}
+
 #ifdef ENABLE_TEST_AMBIENT_OCCLUSION
 #include <pragma/util/util_tga.hpp>
 #endif
@@ -1138,7 +1375,7 @@ void cycles::Scene::Start()
 	m_session->scene = &m_scene;
 #ifndef ENABLE_TEST_AMBIENT_OCCLUSION
 	m_session->reset(bufferParams,m_session->params.samples);
-	
+
 	m_camera->Finalize();
 #endif
 	// Note: Lights and objects have to be initialized before shaders, because they may
@@ -1156,7 +1393,15 @@ void cycles::Scene::Start()
 		m_scene.bake_manager->set_baking(true);
 		m_session->load_kernels();
 
-		ccl::Pass::add(ccl::PASS_LIGHT,m_scene.film->passes);
+		switch(m_renderMode)
+		{
+		case RenderMode::BakeAmbientOcclusion:
+			ccl::Pass::add(ccl::PASS_LIGHT,m_scene.film->passes);
+			break;
+		case RenderMode::BakeNormals:
+			break;
+		}
+
 		// ccl::Pass::add(ccl::PASS_UV,m_scene.film->passes);
 		//ccl::Pass::add(ccl::PASS_NORMAL,m_scene.film->passes);
 
@@ -1232,7 +1477,7 @@ void cycles::Scene::Start()
 
 		{
 			auto *graph = new ccl::ShaderGraph{};
-			
+
 			ccl::EmissionNode *emission = new ccl::EmissionNode();
 			emission->color = ccl::make_float3(1.0f, 1.0f, 1.0f);
 			emission->strength = 1.0f;
@@ -1247,7 +1492,7 @@ void cycles::Scene::Start()
 		}
 		m_scene.bake_manager->set_shader_limit(256,256);
 		m_session->tile_manager.set_samples(m_session->params.samples);
-		
+
 		bufferParams.width = OUTPUT_IMAGE_WIDTH;
 		bufferParams.height = OUTPUT_IMAGE_HEIGHT;
 		bufferParams.full_width = OUTPUT_IMAGE_WIDTH;
@@ -1264,10 +1509,21 @@ void cycles::Scene::Start()
 		m_session->reset(bufferParams, m_session->params.samples);
 
 		//auto shaderType = ccl::ShaderEvalType::SHADER_EVAL_DIFFUSE;
-		auto shaderType = ccl::ShaderEvalType::SHADER_EVAL_AO;
+		ccl::ShaderEvalType shaderType;
+		int bake_pass_filter;
+		switch(m_renderMode)
+		{
+		case RenderMode::BakeAmbientOcclusion:
+			shaderType = ccl::ShaderEvalType::SHADER_EVAL_AO;
+			bake_pass_filter = ccl::BAKE_FILTER_AO;
+			break;
+		case RenderMode::BakeNormals:
+			shaderType = ccl::ShaderEvalType::SHADER_EVAL_NORMAL;
+			bake_pass_filter = 0;
+			break;
+		}
 
 		//int bake_pass_filter =  ccl::BAKE_FILTER_DIFFUSE | ccl::BAKE_FILTER_DIRECT | ccl::BAKE_FILTER_INDIRECT | ccl::BAKE_FILTER_COLOR;
-		int bake_pass_filter =  ccl::BAKE_FILTER_AO;
 		bake_pass_filter = ccl::BakeManager::shader_type_to_pass_filter(shaderType, bake_pass_filter);
 
 		auto numPixels = OUTPUT_IMAGE_WIDTH *OUTPUT_IMAGE_HEIGHT;
@@ -1286,37 +1542,72 @@ void cycles::Scene::Start()
 		auto *pSession = m_session.get();
 		m_session->progress.set_update_callback([pSession]() {
 			std::cout<<"Progress: "<<pSession->progress.get_progress()<<std::endl;
-		});
+			});
 
+		//numPixels = 1024 *1024;
 		std::vector<float> result;
 		result.resize(numPixels *4,0.f);
 		auto r = m_scene.bake_manager->bake(m_scene.device,&m_scene.dscene,&m_scene,m_session->progress,shaderType,bake_pass_filter,bake_data,result.data());
 
+		/*{
+		std::ifstream f("E:/projects/pragma/build_winx64/output/ccl_float_data.bin", std::ios::binary);
+
+		f.seekg( 0, std::ios::end );
+		auto size = f.tellg();
+		f.seekg( 0 );
+
+		f.read(reinterpret_cast<char*>(result.data()),size);
+		f.close();
+		}*/
 
 		std::vector<uint8_t> pixels {};
-		pixels.resize(numPixels *3);
+		pixels.resize(numPixels *4);
 		for(auto i=decltype(numPixels){0u};i<numPixels;++i)
 		{
 			auto *inData = result.data() +i *4;
-			auto *outData = pixels.data() +i *3;
-			for(uint8_t j=0;j<3;++j)
+			auto *outData = pixels.data() +i *4;
+			for(uint8_t j=0;j<4;++j)
 				outData[j] = unit_float_to_uchar_clamp(inData[j]);//static_cast<uint8_t>(umath::clamp(inData[j] *255.f,0.f,255.f));
 		}
-		util::tga::write_tga("test_ao.tga",OUTPUT_IMAGE_WIDTH,OUTPUT_IMAGE_HEIGHT,pixels);
+
+		std::vector<uint8_t> mask_buffer {};
+		mask_buffer.resize(numPixels);
+		constexpr auto margin = 16u;
+
+		ImBuf ibuf {};
+		ibuf.x = OUTPUT_IMAGE_WIDTH;
+		ibuf.y = OUTPUT_IMAGE_HEIGHT;
+		ibuf.rect = pixels;
+
+
+		RE_bake_mask_fill(pixelArray, numPixels, reinterpret_cast<char*>(mask_buffer.data()));
+		RE_bake_margin(&ibuf, mask_buffer, margin);
+
+		std::vector<uint8_t> rgbPixels;
+		rgbPixels.resize(numPixels *3);
+		for(auto i=decltype(numPixels){0u};i<numPixels;++i)
+		{
+			auto srcOffset = i *4;
+			auto dstOffset = i *3;
+			rgbPixels.at(dstOffset) = ibuf.rect.at(srcOffset);
+			rgbPixels.at(dstOffset +1) = ibuf.rect.at(srcOffset +1);
+			rgbPixels.at(dstOffset +2) = ibuf.rect.at(srcOffset +2);
+		}
+		util::tga::write_tga("test_ao.tga",OUTPUT_IMAGE_WIDTH,OUTPUT_IMAGE_HEIGHT,rgbPixels);
 
 		std::cout<<"Bake result: "<<r<<std::endl;
 
 
 
-	/*	if (!session->progress.get_cancel() && bake_data) {
-			scene->bake_manager->bake(scene->device,
-				&scene->dscene,
-				scene,
-				session->progress,
-				shader_type,
-				bake_pass_filter,
-				bake_data,
-				result);
+		/*	if (!session->progress.get_cancel() && bake_data) {
+		scene->bake_manager->bake(scene->device,
+		&scene->dscene,
+		scene,
+		session->progress,
+		shader_type,
+		bake_pass_filter,
+		bake_data,
+		result);
 		}
 		*/
 	}
@@ -1362,7 +1653,7 @@ ccl::ShaderOutput *cycles::Scene::FindShaderNodeOutput(ccl::ShaderNode &node,con
 {
 	auto it = std::find_if(node.outputs.begin(),node.outputs.end(),[&output](const ccl::ShaderOutput *shOutput) {
 		return ccl::string_iequals(shOutput->socket_type.name.string(),output);
-	});
+		});
 	return (it != node.outputs.end()) ? *it : nullptr;
 }
 
@@ -1370,21 +1661,29 @@ ccl::ShaderNode *cycles::Scene::FindShaderNode(ccl::ShaderGraph &graph,const std
 {
 	auto it = std::find_if(graph.nodes.begin(),graph.nodes.end(),[&nodeName](const ccl::ShaderNode *node) {
 		return node->name == nodeName;
-	});
+		});
 	return (it != graph.nodes.end()) ? *it : nullptr;
 }
 
 ccl::float3 cycles::Scene::ToCyclesPosition(const Vector3 &pos)
 {
 	auto scale = util::units_to_metres(1.f);
+#ifdef ENABLE_TEST_AMBIENT_OCCLUSION
+	ccl::float3 cpos {pos.x,pos.y,pos.z};
+#else
 	ccl::float3 cpos {-pos.x,pos.y,pos.z};
+#endif
 	cpos *= scale;
 	return cpos;
 }
 
 ccl::float3 cycles::Scene::ToCyclesNormal(const Vector3 &n)
 {
-	return ccl::float3{n.x,-n.y,-n.z};
+#ifdef ENABLE_TEST_AMBIENT_OCCLUSION
+	return ccl::float3{n.x,n.y,n.z};
+#else
+	return ccl::float3{-n.x,n.y,n.z};
+#endif
 }
 
 ccl::float2 cycles::Scene::ToCyclesUV(const Vector2 &uv)

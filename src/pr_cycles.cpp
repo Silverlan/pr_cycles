@@ -67,7 +67,8 @@ static cycles::PScene capture_raytraced_scene(
 	const std::function<void(const uint8_t*,int,int,int)> &outputHandler
 )
 {
-	auto scene = cycles::Scene::Create(outputHandler,sampleCount,hdrOutput,denoise);
+	// TODO
+	auto scene = cycles::Scene::Create(pragma::modules::cycles::Scene::RenderMode::BakeAmbientOcclusion,outputHandler,sampleCount,hdrOutput,denoise);
 	auto &cam = scene->GetCamera();
 	cam.SetResolution(width,height);
 
@@ -220,7 +221,8 @@ extern "C"
 				++argIdx;
 				if(Lua::IsSet(l,argIdx))
 					denoise = Lua::CheckBool(l,argIdx);
-				auto scene = cycles::Scene::Create([](const uint8_t *data,int width,int height,int channels) {
+				// TODO
+				auto scene = cycles::Scene::Create(pragma::modules::cycles::Scene::RenderMode::BakeAmbientOcclusion,[](const uint8_t *data,int width,int height,int channels) {
 					
 				},sampleCount,hdrOutput,denoise);
 				if(scene == nullptr)

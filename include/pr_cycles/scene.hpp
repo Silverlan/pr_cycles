@@ -5,6 +5,9 @@
 #include <memory>
 #include <mathutil/uvec.h>
 #include <functional>
+#include <optional>
+
+#define ENABLE_TEST_AMBIENT_OCCLUSION
 
 class BaseEntity;
 
@@ -53,7 +56,13 @@ namespace pragma::modules::cycles
 			uint32_t height = 0;
 			bool hdr = false;
 		};
-		static PScene Create(const std::function<void(const uint8_t*,int,int,int)> &outputHandler,uint32_t sampleCount=1'024,bool hdrOutput=false,bool denoise=false);
+		enum class RenderMode : uint8_t
+		{
+			RenderImage = 0u,
+			BakeAmbientOcclusion,
+			BakeNormals
+		};
+		static PScene Create(RenderMode renderMode,const std::function<void(const uint8_t*,int,int,int)> &outputHandler,std::optional<uint32_t> sampleCount={},bool hdrOutput=false,bool denoise=false);
 		util::WeakHandle<Scene> GetHandle();
 		//
 		static ccl::float3 ToCyclesPosition(const Vector3 &pos);
@@ -90,7 +99,7 @@ namespace pragma::modules::cycles
 		friend Shader;
 		friend Object;
 		friend Light;
-		Scene(std::unique_ptr<ccl::Session> session,ccl::Scene &scene);
+		Scene(std::unique_ptr<ccl::Session> session,ccl::Scene &scene,RenderMode renderMode);
 		static ccl::ShaderOutput *FindShaderNodeOutput(ccl::ShaderNode &node,const std::string &output);
 		static ccl::ShaderNode *FindShaderNode(ccl::ShaderGraph &graph,const std::string &nodeName);
 		static ccl::ShaderNode *FindShaderNode(ccl::ShaderGraph &graph,const OpenImageIO_v2_1::ustring &name);
@@ -107,6 +116,7 @@ namespace pragma::modules::cycles
 		ccl::Scene &m_scene;
 		PCamera m_camera = nullptr;
 		bool m_bCancelled = false;
+		RenderMode m_renderMode = RenderMode::RenderImage;
 	};
 };
 
