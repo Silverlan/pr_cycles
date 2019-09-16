@@ -56,11 +56,17 @@ namespace pragma::modules::cycles
 			uint32_t height = 0;
 			bool hdr = false;
 		};
+		enum class ColorSpace : uint8_t
+		{
+			SRGB = 0,
+			Raw
+		};
 		enum class RenderMode : uint8_t
 		{
 			RenderImage = 0u,
 			BakeAmbientOcclusion,
-			BakeNormals
+			BakeNormals,
+			BakeDiffuseLighting
 		};
 		static PScene Create(RenderMode renderMode,const std::function<void(const uint8_t*,int,int,int)> &outputHandler,std::optional<uint32_t> sampleCount={},bool hdrOutput=false,bool denoise=false);
 		util::WeakHandle<Scene> GetHandle();
@@ -80,6 +86,7 @@ namespace pragma::modules::cycles
 		float GetProgress() const;
 		bool IsComplete() const;
 		bool IsCancelled() const;
+		RenderMode GetRenderMode() const;
 		void Start();
 		void Cancel();
 		void Wait();
@@ -107,7 +114,7 @@ namespace pragma::modules::cycles
 		PShader CreateShader(const std::string &meshName,Model &mdl,ModelSubMesh &subMesh);
 		bool Denoise(const DenoiseInfo &denoise,const void *imgData,std::vector<uint8_t> &outData);
 		bool IsValidTexture(const std::string &filePath) const;
-		ccl::ImageTextureNode *AssignTexture(Shader &shader,const std::string &texIdentifier,const std::string &texFilePath) const;
+		ccl::ImageTextureNode *AssignTexture(Shader &shader,const std::string &texIdentifier,const std::string &texFilePath,ColorSpace colorSpace=ColorSpace::SRGB) const;
 		std::vector<PShader> m_shaders = {};
 		std::vector<PObject> m_objects = {};
 		std::vector<PLight> m_lights = {};

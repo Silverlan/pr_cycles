@@ -70,6 +70,8 @@ const ccl::float4 *cycles::Mesh::GetNormals() const {return m_normals;}
 const ccl::float4 *cycles::Mesh::GetTangents() const {return m_tangents;}
 const float *cycles::Mesh::GetTangentSigns() const {return m_tangentSigns;}
 const ccl::float2 *cycles::Mesh::GetUVs() const {return m_uvs;}
+const ccl::float2 *cycles::Mesh::GetLightmapUVs() const {return m_lightmapUvs.data();}
+void cycles::Mesh::SetLightmapUVs(std::vector<ccl::float2> &&lightmapUvs) {m_lightmapUvs = std::move(lightmapUvs);}
 uint64_t cycles::Mesh::GetVertexCount() const {return m_numVerts;}
 uint64_t cycles::Mesh::GetTriangleCount() const {return m_numTris;}
 

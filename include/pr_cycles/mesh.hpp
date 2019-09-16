@@ -24,6 +24,8 @@ namespace pragma::modules::cycles
 		const ccl::float4 *GetTangents() const;
 		const float *GetTangentSigns() const;
 		const ccl::float2 *GetUVs() const;
+		const ccl::float2 *GetLightmapUVs() const;
+		void SetLightmapUVs(std::vector<ccl::float2> &&lightmapUvs);
 		uint64_t GetVertexCount() const;
 		uint64_t GetTriangleCount() const;
 
@@ -42,6 +44,7 @@ namespace pragma::modules::cycles
 		ccl::float4 *m_tangents = nullptr;
 		float *m_tangentSigns = nullptr;
 		ccl::float2 *m_uvs = nullptr;
+		std::vector<ccl::float2> m_lightmapUvs = {};
 		uint64_t m_numVerts = 0ull;
 		uint64_t m_numTris = 0ull;
 	};

@@ -61,14 +61,14 @@ static cycles::PShader create_skybox_shader(cycles::Scene &scene)
 }
 
 static cycles::PScene capture_raytraced_scene(
-	uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,bool denoise,
+	cycles::Scene::RenderMode renderMode,uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,bool denoise,
 	const Vector3 &camPos,const Quat &camRot,float nearZ,float farZ,umath::Degree fov,
 	const std::function<bool(BaseEntity&)> &entFilter,
 	const std::function<void(const uint8_t*,int,int,int)> &outputHandler
 )
 {
 	// TODO
-	auto scene = cycles::Scene::Create(pragma::modules::cycles::Scene::RenderMode::BakeAmbientOcclusion,outputHandler,sampleCount,hdrOutput,denoise);
+	auto scene = cycles::Scene::Create(renderMode,outputHandler,sampleCount,hdrOutput,denoise);
 	auto &cam = scene->GetCamera();
 	cam.SetResolution(width,height);
 
@@ -78,7 +78,8 @@ static cycles::PScene capture_raytraced_scene(
 	cam.SetFarZ(farZ);
 	cam.SetFOV(umath::deg_to_rad(fov));
 
-	auto shaderSkybox = create_skybox_shader(*scene);
+	if(renderMode == cycles::Scene::RenderMode::RenderImage)
+		create_skybox_shader(*scene);
 
 	// All entities
 	EntityIterator entIt {*c_game};
@@ -108,31 +109,40 @@ static cycles::PScene capture_raytraced_scene(
 		if(hLightSpot.valid())
 		{
 			auto light = cycles::Light::Create(*scene);
-			light->SetType(cycles::Light::Type::Spot);
-			light->SetPos(ent->GetPosition());
-			light->SetRotation(ent->GetRotation());
-			light->SetConeAngle(umath::deg_to_rad(hLightSpot->GetOuterCutoffAngle()) *2.f);
-			light->SetColor(color);
+			if(light)
+			{
+				light->SetType(cycles::Light::Type::Spot);
+				light->SetPos(ent->GetPosition());
+				light->SetRotation(ent->GetRotation());
+				light->SetConeAngle(umath::deg_to_rad(hLightSpot->GetOuterCutoffAngle()) *2.f);
+				light->SetColor(color);
+			}
 			continue;
 		}
 		auto hLightPoint = ent->GetComponent<pragma::CLightPointComponent>();
 		if(hLightPoint.valid())
 		{
 			auto light = cycles::Light::Create(*scene);
-			light->SetType(cycles::Light::Type::Point);
-			light->SetPos(ent->GetPosition());
-			light->SetRotation(ent->GetRotation());
-			light->SetColor(color);
+			if(light)
+			{
+				light->SetType(cycles::Light::Type::Point);
+				light->SetPos(ent->GetPosition());
+				light->SetRotation(ent->GetRotation());
+				light->SetColor(color);
+			}
 			continue;
 		}
 		auto hLightDirectional = ent->GetComponent<pragma::CLightDirectionalComponent>();
 		if(hLightDirectional.valid())
 		{
 			auto light = cycles::Light::Create(*scene);
-			light->SetType(cycles::Light::Type::Directional);
-			light->SetPos(ent->GetPosition());
-			light->SetRotation(ent->GetRotation());
-			light->SetColor(color);
+			if(light)
+			{
+				light->SetType(cycles::Light::Type::Directional);
+				light->SetPos(ent->GetPosition());
+				light->SetRotation(ent->GetRotation());
+				light->SetColor(color);
+			}
 		}
 	}
 	
@@ -162,9 +172,22 @@ extern "C"
 	)
 	{
 		outScene = capture_raytraced_scene(
-			width,height,sampleCount,hdrOutput,denoise,
+			cycles::Scene::RenderMode::RenderImage,width,height,sampleCount,hdrOutput,denoise,
 			camPos,camRot,nearZ,farZ,fov,entFilter,
 			outputHandler
+		);
+	}
+	PRAGMA_EXPORT void pr_cycles_bake_lighting(
+		uint32_t width,uint32_t height,uint32_t sampleCount,bool denoise,
+		float nearZ,float farZ,umath::Degree fov,
+		const std::function<void(const uint8_t*,int,int,int)> &outputHandler,std::shared_ptr<void> &outScene
+	)
+	{
+		outScene = capture_raytraced_scene(
+			cycles::Scene::RenderMode::BakeDiffuseLighting,width,height,sampleCount,false,denoise,
+			Vector3{},uquat::identity(),nearZ,farZ,fov,[](BaseEntity &ent) -> bool {
+				return ent.IsWorld();
+			},outputHandler
 		);
 	}
 	PRAGMA_EXPORT float pr_cycles_get_scene_process(const std::shared_ptr<void> &scene)
@@ -222,7 +245,7 @@ extern "C"
 				if(Lua::IsSet(l,argIdx))
 					denoise = Lua::CheckBool(l,argIdx);
 				// TODO
-				auto scene = cycles::Scene::Create(pragma::modules::cycles::Scene::RenderMode::BakeAmbientOcclusion,[](const uint8_t *data,int width,int height,int channels) {
+				auto scene = cycles::Scene::Create(pragma::modules::cycles::Scene::RenderMode::BakeDiffuseLighting,[](const uint8_t *data,int width,int height,int channels) {
 					
 				},sampleCount,hdrOutput,denoise);
 				if(scene == nullptr)

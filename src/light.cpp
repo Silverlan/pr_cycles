@@ -10,6 +10,8 @@ using namespace pragma::modules;
 #pragma optimize("",off)
 cycles::PLight cycles::Light::Create(Scene &scene)
 {
+	if(scene.GetRenderMode() == Scene::RenderMode::BakeAmbientOcclusion)
+		return nullptr;
 	auto *light = new ccl::Light{}; // Object will be removed automatically by cycles
 	light->tfm = ccl::transform_identity();
 
@@ -97,7 +99,7 @@ void cycles::Light::DoFinalize()
 		shader = cycles::Shader::Create(GetScene(),"spot_shader");
 
 		auto &rot = GetRotation();
-		auto forward = -uquat::forward(rot);
+		auto forward = uquat::forward(rot);
 		m_light.spot_smooth = 1.f;
 		m_light.dir = cycles::Scene::ToCyclesNormal(forward);
 		break;
@@ -107,7 +109,7 @@ void cycles::Light::DoFinalize()
 		shader = cycles::Shader::Create(GetScene(),"distance_shader");
 
 		auto &rot = GetRotation();
-		auto forward = -uquat::forward(rot);
+		auto forward = uquat::forward(rot);
 		m_light.dir = cycles::Scene::ToCyclesNormal(forward);
 		break;
 	}
@@ -121,7 +123,7 @@ void cycles::Light::DoFinalize()
 		m_light.round = m_bRound;
 
 		auto &rot = GetRotation();
-		auto forward = -uquat::forward(rot);
+		auto forward = uquat::forward(rot);
 		m_light.dir = cycles::Scene::ToCyclesNormal(forward);
 		break;
 	}
@@ -137,6 +139,14 @@ void cycles::Light::DoFinalize()
 	}
 	}
 
+#if 0
+#else
+	watt = 8000;
+	m_size = 6.32;
+	m_color = {0.f,0.f,1.f};
+	m_light.max_bounces = 1'024;
+#endif
+
 	if(shader)
 	{
 		auto emissionStrength = watt;
@@ -151,7 +161,7 @@ void cycles::Light::DoFinalize()
 
 	m_light.strength = ccl::float3{m_color.r,m_color.g,m_color.b};
 	m_light.size = m_size;
-	m_light.co = cycles::Scene::ToCyclesPosition(GetPos());
+	m_light.co = ccl::float3{0.f,0.f,0.f};//cycles::Scene::ToCyclesPosition(GetPos());
 }
 
 ccl::Light *cycles::Light::operator->() {return &m_light;}
