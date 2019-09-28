@@ -16,6 +16,7 @@
 
 #include "pr_cycles/util_baking.hpp"
 #include "pr_cycles/mesh.hpp"
+#include "pr_cycles/object.hpp"
 #include <render/mesh.h>
 
 using namespace pragma::modules;
@@ -23,6 +24,7 @@ using namespace pragma::modules;
 #define FILTER_MASK_MARGIN 1
 #define FILTER_MASK_USED 2
 
+#pragma optimize("",off)
 typedef struct ZSpan {
 	int rectx, recty; /* range for clipping */
 
@@ -34,6 +36,7 @@ typedef struct ZSpan {
 typedef struct BakeDataZSpan {
 	cycles::baking::BakePixel *pixel_array;
 	int primitive_id;
+	int object_id;
 	//BakeImage *bk_image;
 	uint32_t bakeImageWidth;
 	uint32_t bakeImageHeight;
@@ -322,10 +325,10 @@ static void store_bake_pixel(void *handle, int x, int y, float u, float v)
 	pixel->du_dy = bd->du_dy;
 	pixel->dv_dx = bd->dv_dx;
 	pixel->dv_dy = bd->dv_dy;
-	pixel->object_id = 0; // TODO
+	pixel->object_id = bd->object_id;
 }
 
-void cycles::baking::prepare_bake_data(cycles::Mesh &mesh,BakePixel *pixelArray,uint32_t numPixels,uint32_t imgWidth,uint32_t imgHeight,bool useLightmapUvs)
+void cycles::baking::prepare_bake_data(cycles::Object &o,BakePixel *pixelArray,uint32_t numPixels,uint32_t imgWidth,uint32_t imgHeight,bool useLightmapUvs)
 {
 	/* initialize all pixel arrays so we know which ones are 'blank' */
 	for(auto i=decltype(numPixels){0u};i<numPixels;++i)
@@ -349,9 +352,11 @@ void cycles::baking::prepare_bake_data(cycles::Mesh &mesh,BakePixel *pixelArray,
 		zspan.span2.resize(zspan.recty);
 	}
 
+	auto &mesh = o.GetMesh();
 	auto *uvs = useLightmapUvs ? mesh.GetLightmapUVs() : mesh.GetUVs();
 	if(uvs == nullptr)
 		return;
+	bd.object_id = o.GetId();
 	auto *cclMesh = *mesh;
 	auto numTris = cclMesh->triangles.size() /3;
 	for(auto i=decltype(numTris){0u};i<numTris;++i)
@@ -423,26 +428,19 @@ static void IMB_filter_extend(struct cycles::baking::ImBuf *ibuf, std::vector<ui
 	const int width = ibuf->x;
 	const int height = ibuf->y;
 	const int depth = 4; /* always 4 channels */
-	const int chsize = ibuf->rect_float.data() ? sizeof(float) : sizeof(unsigned char);
+	const bool is_float = ibuf->rect->IsFloatFormat();
+	const int chsize = is_float ? sizeof(float) : sizeof(unsigned char);
 	const size_t bsize = ((size_t)width) * height * depth * chsize;
-	const bool is_float = (ibuf->rect_float.data() != NULL);
 
 	std::vector<uint8_t> vdstbuf;
-	if(ibuf->rect_float.data())
-	{
-		vdstbuf.resize(ibuf->rect_float.size() *sizeof(ibuf->rect_float.front()));
-		memcpy(vdstbuf.data(),ibuf->rect_float.data(),vdstbuf.size() *sizeof(vdstbuf.front()));
-	}
-	else
-	{
-		vdstbuf.resize(ibuf->rect.size() *sizeof(ibuf->rect.front()));
-		memcpy(vdstbuf.data(),ibuf->rect.data(),vdstbuf.size() *sizeof(vdstbuf.front()));
-	}
+	auto *data = ibuf->rect->GetData();
+	vdstbuf.resize(ibuf->rect->GetSize());
+	memcpy(vdstbuf.data(),data,vdstbuf.size() *sizeof(vdstbuf.front()));
 
 	void *dstbuf = vdstbuf.data();
 	auto vdstmask = vmask;
 	char *dstmask = reinterpret_cast<char*>(vdstmask.data());
-	void *srcbuf = ibuf->rect_float.data() ? (void *)ibuf->rect_float.data() : (void *)ibuf->rect.data();
+	void *srcbuf = data;
 	char *srcmask = mask;
 	int cannot_early_out = 1, r, n, k, i, j, c;
 	float weight[25];
@@ -576,3 +574,4 @@ void cycles::baking::RE_bake_mask_fill(const std::vector<BakePixel> pixel_array,
 		}
 	}
 }
+#pragma optimize("",on)

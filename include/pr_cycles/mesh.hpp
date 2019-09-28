@@ -28,6 +28,8 @@ namespace pragma::modules::cycles
 		void SetLightmapUVs(std::vector<ccl::float2> &&lightmapUvs);
 		uint64_t GetVertexCount() const;
 		uint64_t GetTriangleCount() const;
+		uint32_t GetVertexOffset() const;
+		std::string GetName() const;
 
 		bool AddVertex(const Vector3 &pos,const Vector3 &n,const Vector3 &t,const Vector2 &uv);
 		bool AddTriangle(uint32_t idx0,uint32_t idx1,uint32_t idx2,uint32_t shaderIndex);

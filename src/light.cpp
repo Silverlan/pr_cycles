@@ -138,15 +138,17 @@ void cycles::Light::DoFinalize()
 		break;
 	}
 	}
-
+	/*
 #if 0
 #else
-	watt = 8000;
-	m_size = 6.32;
-	m_color = {0.f,0.f,1.f};
+	static auto testWatt = 40;
+	static auto testSize = 0.0;//6.32;
+	watt = testWatt;
+	m_size = testSize;
+	//m_color = {0.f,0.f,1.f};
 	m_light.max_bounces = 1'024;
 #endif
-
+*/
 	if(shader)
 	{
 		auto emissionStrength = watt;
@@ -161,7 +163,7 @@ void cycles::Light::DoFinalize()
 
 	m_light.strength = ccl::float3{m_color.r,m_color.g,m_color.b};
 	m_light.size = m_size;
-	m_light.co = ccl::float3{0.f,0.f,0.f};//cycles::Scene::ToCyclesPosition(GetPos());
+	m_light.co = cycles::Scene::ToCyclesPosition(GetPos());
 }
 
 ccl::Light *cycles::Light::operator->() {return &m_light;}

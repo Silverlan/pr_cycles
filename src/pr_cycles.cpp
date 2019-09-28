@@ -49,7 +49,7 @@ extern DLLCLIENT CGame *c_game;
 
 using namespace pragma::modules;
 
-static cycles::PShader create_skybox_shader(cycles::Scene &scene)
+static cycles::PShader setup_skybox(cycles::Scene &scene)
 {
 	auto shaderSkybox = cycles::Shader::Create(scene,*scene->default_background);
 	shaderSkybox->AddNode("sky_texture","tex");
@@ -60,41 +60,9 @@ static cycles::PShader create_skybox_shader(cycles::Scene &scene)
 	return shaderSkybox;
 }
 
-static cycles::PScene capture_raytraced_scene(
-	cycles::Scene::RenderMode renderMode,uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,bool denoise,
-	const Vector3 &camPos,const Quat &camRot,float nearZ,float farZ,umath::Degree fov,
-	const std::function<bool(BaseEntity&)> &entFilter,
-	const std::function<void(const uint8_t*,int,int,int)> &outputHandler
-)
+static void setup_light_sources(cycles::Scene &scene)
 {
-	// TODO
-	auto scene = cycles::Scene::Create(renderMode,outputHandler,sampleCount,hdrOutput,denoise);
-	auto &cam = scene->GetCamera();
-	cam.SetResolution(width,height);
-
-	cam.SetPos(camPos);
-	cam.SetRotation(camRot);
-	cam.SetNearZ(nearZ);
-	cam.SetFarZ(farZ);
-	cam.SetFOV(umath::deg_to_rad(fov));
-
-	if(renderMode == cycles::Scene::RenderMode::RenderImage)
-		create_skybox_shader(*scene);
-
-	// All entities
 	EntityIterator entIt {*c_game};
-	entIt.AttachFilter<TEntityIteratorFilterComponent<pragma::CRenderComponent>>();
-	entIt.AttachFilter<TEntityIteratorFilterComponent<pragma::CModelComponent>>();
-	for(auto *ent : entIt)
-	{
-		auto renderC = ent->GetComponent<pragma::CRenderComponent>();
-		if(renderC->GetRenderMode() != RenderMode::World || renderC->ShouldDraw(camPos) == false || entFilter(*ent) == false)
-			continue;
-		scene->AddEntity(*ent);
-	}
-
-	// Light sources
-	entIt = {*c_game};
 	entIt.AttachFilter<TEntityIteratorFilterComponent<pragma::CLightComponent>>();
 	for(auto *ent : entIt)
 	{
@@ -108,7 +76,7 @@ static cycles::PScene capture_raytraced_scene(
 		auto hLightSpot = ent->GetComponent<pragma::CLightSpotComponent>();
 		if(hLightSpot.valid())
 		{
-			auto light = cycles::Light::Create(*scene);
+			auto light = cycles::Light::Create(scene);
 			if(light)
 			{
 				light->SetType(cycles::Light::Type::Spot);
@@ -122,7 +90,7 @@ static cycles::PScene capture_raytraced_scene(
 		auto hLightPoint = ent->GetComponent<pragma::CLightPointComponent>();
 		if(hLightPoint.valid())
 		{
-			auto light = cycles::Light::Create(*scene);
+			auto light = cycles::Light::Create(scene);
 			if(light)
 			{
 				light->SetType(cycles::Light::Type::Point);
@@ -135,7 +103,7 @@ static cycles::PScene capture_raytraced_scene(
 		auto hLightDirectional = ent->GetComponent<pragma::CLightDirectionalComponent>();
 		if(hLightDirectional.valid())
 		{
-			auto light = cycles::Light::Create(*scene);
+			auto light = cycles::Light::Create(scene);
 			if(light)
 			{
 				light->SetType(cycles::Light::Type::Directional);
@@ -145,82 +113,88 @@ static cycles::PScene capture_raytraced_scene(
 			}
 		}
 	}
-	
-	scene->Start();
-	return scene;
 }
 
-static cycles::PScene create_cycles_scene_from_game_scene(
-	const std::function<bool(BaseEntity&)> &entFilter,
-	const std::function<void(const uint8_t*,int,int,int)> &outputHandler
-)
+static util::ParallelJob<std::shared_ptr<util::ImageBuffer>> setup_scene(cycles::Scene::RenderMode renderMode,uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,bool denoise)
 {
-	/*uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,bool denoise,
-		const Vector3 &camPos,const Quat &camRot,float nearZ,float farZ,umath::Degree fov,
-		const std::function<bool(BaseEntity&)> &entFilter,
-		const std::function<void(const uint8_t*,int,int,int)> &outputHandler*/
-	return nullptr;
+	auto job = cycles::Scene::Create(renderMode,sampleCount,hdrOutput,denoise);
+	if(job.IsValid() == false)
+		return {};
+	auto &scene = static_cast<cycles::Scene&>(job.GetWorker());
+	auto &cam = scene.GetCamera();
+	cam.SetResolution(width,height);
+	return job;
 }
 
 extern "C"
 {
-	PRAGMA_EXPORT void pr_cycles_calc_raytraced_scene(
+	PRAGMA_EXPORT void pr_cycles_render_image(
 		uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,bool denoise,
 		const Vector3 &camPos,const Quat &camRot,float nearZ,float farZ,umath::Degree fov,
-		const std::function<bool(BaseEntity&)> &entFilter,
-		const std::function<void(const uint8_t*,int,int,int)> &outputHandler,std::shared_ptr<void> &outScene
+		const std::function<bool(BaseEntity&)> &entFilter,util::ParallelJob<std::shared_ptr<util::ImageBuffer>> &outJob
 	)
 	{
-		outScene = capture_raytraced_scene(
-			cycles::Scene::RenderMode::RenderImage,width,height,sampleCount,hdrOutput,denoise,
-			camPos,camRot,nearZ,farZ,fov,entFilter,
-			outputHandler
-		);
+		outJob = {};
+		auto job = setup_scene(cycles::Scene::RenderMode::RenderImage,width,height,sampleCount,hdrOutput,denoise);
+		if(job.IsValid() == false)
+			return;
+		auto &scene = static_cast<cycles::Scene&>(job.GetWorker());
+		setup_skybox(scene);
+		setup_light_sources(scene);
+		auto &cam = scene.GetCamera();
+		cam.SetPos(camPos);
+		cam.SetRotation(camRot);
+		cam.SetNearZ(nearZ);
+		cam.SetFarZ(farZ);
+		cam.SetFOV(umath::deg_to_rad(fov));
+
+		// All entities
+		EntityIterator entIt {*c_game};
+		entIt.AttachFilter<TEntityIteratorFilterComponent<pragma::CRenderComponent>>();
+		entIt.AttachFilter<TEntityIteratorFilterComponent<pragma::CModelComponent>>();
+		for(auto *ent : entIt)
+		{
+			auto renderC = ent->GetComponent<pragma::CRenderComponent>();
+			if(renderC->GetRenderMode() != RenderMode::World || renderC->ShouldDraw(camPos) == false || entFilter(*ent) == false)
+				continue;
+			scene.AddEntity(*ent);
+		}
+		outJob = job;
 	}
-	PRAGMA_EXPORT void pr_cycles_bake_lighting(
-		uint32_t width,uint32_t height,uint32_t sampleCount,bool denoise,
-		float nearZ,float farZ,umath::Degree fov,
-		const std::function<void(const uint8_t*,int,int,int)> &outputHandler,std::shared_ptr<void> &outScene
+	PRAGMA_EXPORT void pr_cycles_bake_ao(
+		Model &mdl,uint32_t materialIndex,uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,bool denoise,util::ParallelJob<std::shared_ptr<util::ImageBuffer>> &outJob
 	)
 	{
-		outScene = capture_raytraced_scene(
-			cycles::Scene::RenderMode::BakeDiffuseLighting,width,height,sampleCount,false,denoise,
-			Vector3{},uquat::identity(),nearZ,farZ,fov,[](BaseEntity &ent) -> bool {
-				return ent.IsWorld();
-			},outputHandler
-		);
+		outJob = {};
+		auto job = setup_scene(cycles::Scene::RenderMode::BakeAmbientOcclusion,width,height,sampleCount,hdrOutput,denoise);
+		if(job.IsValid() == false)
+			return;
+		static_cast<cycles::Scene&>(job.GetWorker()).SetAOBakeTarget(mdl,materialIndex);
+		outJob = job;
 	}
-	PRAGMA_EXPORT float pr_cycles_get_scene_process(const std::shared_ptr<void> &scene)
+	PRAGMA_EXPORT void pr_cycles_bake_lightmaps(
+		BaseEntity &entTarget,uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,bool denoise,util::ParallelJob<std::shared_ptr<util::ImageBuffer>> &outJob
+	)
 	{
-		return static_cast<cycles::Scene*>(scene.get())->GetProgress();
-	}
-	PRAGMA_EXPORT bool pr_cycles_is_scene_complete(const std::shared_ptr<void> &scene)
-	{
-		return static_cast<cycles::Scene*>(scene.get())->IsComplete();
-	}
-	PRAGMA_EXPORT void pr_cycles_cancel_scene(const std::shared_ptr<void> &scene)
-	{
-		static_cast<cycles::Scene*>(scene.get())->Cancel();
-	}
-	PRAGMA_EXPORT void pr_cycles_set_scene_progress_callback(const std::shared_ptr<void> &scene,const std::function<void(float)> &progressCallback)
-	{
-		static_cast<cycles::Scene*>(scene.get())->SetProgressCallback(progressCallback);
-	}
-	PRAGMA_EXPORT bool pr_cycles_is_scene_cancelled(const std::shared_ptr<void> &scene)
-	{
-		return static_cast<cycles::Scene*>(scene.get())->IsCancelled();
-	}
-	PRAGMA_EXPORT void pr_cycles_wait_for_scene_completion(const std::shared_ptr<void> &scene)
-	{
-		static_cast<cycles::Scene*>(scene.get())->Wait();
+		outJob = {};
+		auto job = setup_scene(cycles::Scene::RenderMode::BakeDiffuseLighting,width,height,sampleCount,hdrOutput,denoise);
+		if(job.IsValid() == false)
+			return;
+		auto &scene = static_cast<cycles::Scene&>(job.GetWorker());
+		setup_skybox(scene);
+		setup_light_sources(scene);
+		scene.SetLightmapBakeTarget(entTarget);
+		outJob = job;
 	}
 
 	void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 	{
-		if(true)
-			return;
+#if 0
 		auto &modConvert = l.RegisterLibrary("cycles",std::unordered_map<std::string,int32_t(*)(lua_State*)>{
-			{"create_scene_from_game_scene",static_cast<int32_t(*)(lua_State*)>([](lua_State *l) -> int32_t {
+			{"render_image",static_cast<int32_t(*)(lua_State*)>([](lua_State *l) -> int32_t {
+
+				pr_cycles_render_image(width,height,sampleCount,hdrOutput,denoise,camPos,camRot,nearZ,farZ,fov,entFilter,outputHandler,outScene);
+
 				auto scene = create_cycles_scene_from_game_scene([](BaseEntity &ent) -> bool {
 					return true;
 				},[](const uint8_t *data,int width,int height,int channels) {
@@ -230,6 +204,12 @@ extern "C"
 					return 0;
 				Lua::Push<cycles::PScene>(l,scene);
 				return 1;
+			})},
+			{"bake_ambient_occlusion",static_cast<int32_t(*)(lua_State*)>([](lua_State *l) -> int32_t {
+
+			})},
+			{"bake_lightmaps",static_cast<int32_t(*)(lua_State*)>([](lua_State *l) -> int32_t {
+
 			})},
 			{"create_scene",static_cast<int32_t(*)(lua_State*)>([](lua_State *l) -> int32_t {
 				uint32_t sampleCount = 1'024;
@@ -493,6 +473,7 @@ extern "C"
 			Lua::PushBool(l,shader->Link(fromNodeName,fromSocketName,toNodeName,toSocketName));
 		}));
 		modConvert[defShader];
+#endif
 	}
 };
 #pragma optimize("",on)

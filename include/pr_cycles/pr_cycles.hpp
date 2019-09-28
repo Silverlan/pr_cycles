@@ -12,7 +12,4 @@
 #include <render/session.h>
 #include <render/scene.h>
 
-void get_yy(void *yy);
-void get_xx(void *xx);
-
 #endif

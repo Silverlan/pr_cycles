@@ -21,14 +21,16 @@ namespace pragma::modules::cycles
 		util::WeakHandle<Object> GetHandle();
 		virtual void DoFinalize() override;
 
+		uint32_t GetId() const;
 		const Mesh &GetMesh() const;
 		Mesh &GetMesh();
 
 		ccl::Object *operator->();
 		ccl::Object *operator*();
 	private:
-		Object(Scene &scene,ccl::Object &object,Mesh &mesh);
+		Object(Scene &scene,ccl::Object &object,uint32_t objectId,Mesh &mesh);
 		ccl::Object &m_object;
+		uint32_t m_id = 0;
 		PMesh m_mesh = nullptr;
 	};
 };

@@ -13,14 +13,17 @@ cycles::PObject cycles::Object::Create(Scene &scene,Mesh &mesh)
 	object->mesh = *mesh;
 	object->tfm = ccl::transform_identity();
 	scene->objects.push_back(object);
-	auto pObject = PObject{new Object{scene,*object,mesh}};
+	auto pObject = PObject{new Object{scene,*object,static_cast<uint32_t>(scene->objects.size() -1),mesh}};
 	scene.m_objects.push_back(pObject);
 	return pObject;
 }
 
-cycles::Object::Object(Scene &scene,ccl::Object &object,Mesh &mesh)
-	: WorldObject{scene},m_object{object},m_mesh{mesh.shared_from_this()}
+cycles::Object::Object(Scene &scene,ccl::Object &object,uint32_t objectId,Mesh &mesh)
+	: WorldObject{scene},m_object{object},m_mesh{mesh.shared_from_this()},
+	m_id{objectId}
 {}
+
+uint32_t cycles::Object::GetId() const {return m_id;}
 
 util::WeakHandle<cycles::Object> cycles::Object::GetHandle()
 {

@@ -74,6 +74,8 @@ const ccl::float2 *cycles::Mesh::GetLightmapUVs() const {return m_lightmapUvs.da
 void cycles::Mesh::SetLightmapUVs(std::vector<ccl::float2> &&lightmapUvs) {m_lightmapUvs = std::move(lightmapUvs);}
 uint64_t cycles::Mesh::GetVertexCount() const {return m_numVerts;}
 uint64_t cycles::Mesh::GetTriangleCount() const {return m_numTris;}
+uint32_t cycles::Mesh::GetVertexOffset() const {return m_mesh.verts.size();}
+std::string cycles::Mesh::GetName() const {return m_mesh.name.string();}
 
 static ccl::float4 to_float4(const ccl::float3 &v)
 {

@@ -18,12 +18,13 @@
 #define __PR_CYCLES_UTIL_BAKING_HPP__
 
 #include "render/bake.h"
+#include <sharedutils/util_image_buffer.hpp>
 #include <cinttypes>
 #include <vector>
 
 namespace pragma::modules::cycles
 {
-	class Mesh;
+	class Object;
 	namespace baking
 	{
 		// Note: These are various utility functions from the blender repository, which are required
@@ -37,11 +38,10 @@ namespace pragma::modules::cycles
 
 		typedef struct ImBuf {
 			int x, y;
-			std::vector<uint8_t> rect; // rgba
-			std::vector<float> rect_float;
+			std::shared_ptr<util::ImageBuffer> rect;
 		} ImBuf;
 
-		void prepare_bake_data(cycles::Mesh &mesh,BakePixel *pixelArray,uint32_t numPixels,uint32_t imgWidth,uint32_t imgHeight,bool useLightmapUvs=false);
+		void prepare_bake_data(cycles::Object &o,BakePixel *pixelArray,uint32_t numPixels,uint32_t imgWidth,uint32_t imgHeight,bool useLightmapUvs=false);
 		void populate_bake_data(ccl::BakeData *data,
 			const int object_id,
 			BakePixel *pixel_array,

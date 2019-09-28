@@ -25,6 +25,7 @@
 #include <prosper_context.hpp>
 #include <buffers/prosper_uniform_resizable_buffer.hpp>
 #include <pragma/clientstate/clientstate.h>
+#include <pragma/game/game_resources.hpp>
 #include <pragma/model/model.h>
 #include <pragma/model/modelmesh.h>
 #include <pragma/entities/baseentity.h>
@@ -33,6 +34,8 @@
 #include <pragma/entities/components/c_vertex_animated_component.hpp>
 #include <pragma/entities/components/c_light_map_component.hpp>
 #include <sharedutils/util_file.h>
+#include <sharedutils/util.h>
+#include <sharedutils/util_image_buffer.hpp>
 #include <texturemanager/texture.h>
 #include <cmaterialmanager.h>
 #include <pr_dds.hpp>
@@ -50,10 +53,30 @@ extern DLLCENGINE CEngine *c_engine;
 extern DLLCLIENT ClientState *client;
 extern DLLCLIENT CGame *c_game;
 
-cycles::PScene cycles::Scene::Create(RenderMode renderMode,const std::function<void(const uint8_t*,int,int,int)> &outputHandler,std::optional<uint32_t> sampleCount,bool hdrOutput,bool denoise)
+void cycles::Scene::ApplyPostProcessing(util::ImageBuffer &imgBuffer,cycles::Scene::RenderMode renderMode,bool denoise)
 {
-	if(hdrOutput && renderMode != RenderMode::RenderImage)
-		hdrOutput = false; // TODO
+	// For some reason the image is flipped horizontally when rendering an image,
+	// so we'll just flip it the right way here
+	if(renderMode == cycles::Scene::RenderMode::RenderImage)
+		imgBuffer.FlipHorizontally();
+
+	// We will also always have to flip the image vertically, since the data seems to be bottom->top and we need it top->bottom
+	imgBuffer.FlipVertically();
+
+	if(denoise && renderMode == cycles::Scene::RenderMode::RenderImage)
+	{
+		cycles::Scene::DenoiseInfo denoiseInfo {};
+		denoiseInfo.hdr = imgBuffer.IsHDRFormat();
+		denoiseInfo.width = imgBuffer.GetWidth();
+		denoiseInfo.height = imgBuffer.GetHeight();
+		Denoise(denoiseInfo,imgBuffer,[this](float progress) -> bool {
+			return !IsCancelled();
+		});
+	}
+}
+
+util::ParallelJob<std::shared_ptr<util::ImageBuffer>> cycles::Scene::Create(RenderMode renderMode,std::optional<uint32_t> sampleCount,bool hdrOutput,bool denoise)
+{
 	std::optional<ccl::DeviceInfo> device = {};
 	for(auto &devInfo : ccl::Device::available_devices(ccl::DeviceTypeMask::DEVICE_MASK_CUDA | ccl::DeviceTypeMask::DEVICE_MASK_OPENCL | ccl::DeviceTypeMask::DEVICE_MASK_CPU))
 	{
@@ -72,7 +95,7 @@ cycles::PScene cycles::Scene::Create(RenderMode renderMode,const std::function<v
 endLoop:
 
 	if(device.has_value() == false)
-		return nullptr; // No device available
+		return {}; // No device available
 
 	ccl::SessionParams sessionParams {};
 	sessionParams.shadingsystem = ccl::SHADINGSYSTEM_SVM;
@@ -81,7 +104,7 @@ endLoop:
 	sessionParams.background = true; // true; // TODO: Has to be set to false for GPU rendering
 	if(hdrOutput)
 		sessionParams.display_buffer_linear = true;
-	if(denoise)
+	if(denoise && renderMode == RenderMode::RenderImage)
 	{
 		sessionParams.full_denoising = true;
 		sessionParams.run_denoising = true;
@@ -108,57 +131,23 @@ endLoop:
 	// the scene.
 	auto ptrScene = std::make_shared<Scene*>(nullptr);
 	auto ptrCclSession = std::make_shared<ccl::Session*>(nullptr);
-	if(hdrOutput == false)
+	if(hdrOutput == false || renderMode != RenderMode::RenderImage)
 	{
-		sessionParams.write_render_cb = [ptrScene,ptrCclSession,renderMode,outputHandler,denoise](const ccl::uchar *pixels,int w,int h,int channels) -> bool {
+		sessionParams.write_render_cb = [ptrScene,ptrCclSession,renderMode,denoise,hdrOutput](const ccl::uchar *pixels,int w,int h,int channels) -> bool {
 			if(channels != INPUT_CHANNEL_COUNT)
 				return false;
-			std::vector<std::array<uint8_t,OUTPUT_CHANNEL_COUNT>> flippedData {};
-			flippedData.resize(w *h);
-
-			for(auto x=decltype(h){0};x<h;++x)
-			{
-				for(auto y=decltype(w){0};y<w;++y)
-				{
-					auto offset = x *w +y;
-					auto *pxData = pixels +offset *INPUT_CHANNEL_COUNT;
-
-					// For some reason the image is flipped horizontally when rendering an image,
-					// so we'll just flip it the right way here
-					auto yCorrected = (renderMode == RenderMode::RenderImage) ? (w -y -1) : y;
-					// We will also always have to flip the image vertically, since the data seems to be bottom->top and we need it top->bottom
-					auto outOffset = (h -x -1) *w +yCorrected;
-					auto *outPixelData = reinterpret_cast<uint8_t*>(flippedData.data()) +outOffset *OUTPUT_CHANNEL_COUNT;
-					for(uint8_t i=0;i<OUTPUT_CHANNEL_COUNT;++i)
-					{
-						if(i < (OUTPUT_CHANNEL_COUNT -1))
-							outPixelData[i] = (i < INPUT_CHANNEL_COUNT) ? pxData[i] : 0;
-						else
-							outPixelData[i] = std::numeric_limits<uint8_t>::max();
-					}
-				}
-			}
-
-			auto *data = reinterpret_cast<uint8_t*>(flippedData.data());
-			std::vector<uint8_t> denoisedData;
-			if(denoise)
-			{
-				DenoiseInfo denoiseInfo {};
-				denoiseInfo.hdr = false;
-				denoiseInfo.width = w;
-				denoiseInfo.height = h;
-				(*ptrScene)->Denoise(denoiseInfo,flippedData.data(),denoisedData);
-				data = denoisedData.data();
-			}
-
-			outputHandler(data,w,h,channels);
+			auto imgBuffer = util::ImageBuffer::Create(pixels,w,h,hdrOutput ? util::ImageBuffer::Format::RGBA_FLOAT : util::ImageBuffer::Format::RGBA_LDR);
+			if(hdrOutput)
+				imgBuffer->Convert(util::ImageBuffer::Format::RGBA_HDR);
+			(*ptrScene)->ApplyPostProcessing(*imgBuffer,renderMode,denoise);
+			(*ptrScene)->m_resultImageBuffer = imgBuffer;
 			return true;
 		};
 	}
 	else
 	{
 		// We need to define a write callback, otherwise the session's display object will not be initialized.
-		sessionParams.write_render_cb = [ptrScene,ptrCclSession,outputHandler,denoise](const ccl::uchar *pixels,int w,int h,int channels) -> bool {
+		sessionParams.write_render_cb = [ptrScene,ptrCclSession,denoise,renderMode,hdrOutput](const ccl::uchar *pixels,int w,int h,int channels) -> bool {
 			// We need to access the 'tonemap' method of ccl::Session, but since it's a protected method, we have to use a wrapper to
 			// gain access to it
 			class SessionWrapper
@@ -179,42 +168,9 @@ endLoop:
 			h = (*ptrCclSession)->display->draw_height;
 			auto *hdrPixels = (*ptrCclSession)->display->rgba_half.copy_from_device(0,w,h);
 
-			std::vector<std::array<uint16_t,OUTPUT_CHANNEL_COUNT>> hdrData {};
-			hdrData.resize(w *h);
-
-			for(auto x=decltype(h){0};x<h;++x)
-			{
-				for(auto y=decltype(w){0};y<w;++y)
-				{
-					auto offset = x *w +y;
-					auto *pxData = reinterpret_cast<ccl::half*>(hdrPixels +offset);
-
-					// Out-offset flips the image on the y-axis
-					auto outOffset = (h -x -1) *w +y;
-					auto *outPixelData = reinterpret_cast<uint16_t*>(hdrData.data()) +outOffset *OUTPUT_CHANNEL_COUNT;
-					for(uint8_t i=0;i<OUTPUT_CHANNEL_COUNT;++i)
-					{
-						if(i < (OUTPUT_CHANNEL_COUNT -1))
-							outPixelData[i] = (i < INPUT_CHANNEL_COUNT) ? pxData[i] : 0;
-						else
-							outPixelData[i] = ccl::float_to_half(std::numeric_limits<float>::max());
-					}
-				}
-			}
-
-			auto *data = reinterpret_cast<uint8_t*>(hdrData.data());
-			std::vector<uint8_t> denoisedData;
-			if(denoise)
-			{
-				DenoiseInfo denoiseInfo {};
-				denoiseInfo.hdr = true;
-				denoiseInfo.width = w;
-				denoiseInfo.height = h;
-				(*ptrScene)->Denoise(denoiseInfo,hdrData.data(),denoisedData);
-				data = denoisedData.data();
-			}
-
-			outputHandler(data,w,h,OUTPUT_CHANNEL_COUNT);
+			auto imgBuffer = util::ImageBuffer::Create(hdrPixels,w,h,util::ImageBuffer::Format::RGBA_HDR,false);
+			(*ptrScene)->ApplyPostProcessing(*imgBuffer,renderMode,denoise);
+			(*ptrScene)->m_resultImageBuffer = imgBuffer;
 			return true;
 		};
 	}
@@ -251,15 +207,13 @@ endLoop:
 	cclScene->params.bvh_type = ccl::SceneParams::BVH_STATIC;
 
 	auto *pSession = session.get();
-	auto scene = PScene{new Scene{std::move(session),*cclScene,renderMode}};
-	auto *pScene = scene.get();
-	pSession->progress.set_update_callback([pScene]() {
-		if(pScene->m_progressCallback)
-			pScene->m_progressCallback(pScene->m_session->progress.get_progress());
-		});
-	scene->m_camera = Camera::Create(*scene);
-	*ptrScene = pScene;
-	return scene;
+	auto job = util::create_parallel_job<Scene>(std::move(session),*cclScene,renderMode);
+	auto &scene = static_cast<Scene&>(job.GetWorker());
+	scene.m_camera = Camera::Create(scene);
+	scene.m_bHDROutput = hdrOutput;
+	scene.m_bDenoise = denoise;
+	*ptrScene = &scene;
+	return job;
 }
 
 cycles::Scene::Scene(std::unique_ptr<ccl::Session> session,ccl::Scene &scene,RenderMode renderMode)
@@ -268,16 +222,16 @@ cycles::Scene::Scene(std::unique_ptr<ccl::Session> session,ccl::Scene &scene,Ren
 
 cycles::Scene::~Scene()
 {
-	m_session->wait();
+	Wait();
+	ClearCyclesScene();
+}
+
+void cycles::Scene::ClearCyclesScene()
+{
 	m_objects.clear();
 	m_shaders.clear();
 	m_camera = nullptr;
 	m_session = nullptr;
-}
-
-util::WeakHandle<cycles::Scene> cycles::Scene::GetHandle()
-{
-	return util::WeakHandle<cycles::Scene>{shared_from_this()};
 }
 
 cycles::Camera &cycles::Scene::GetCamera() {return *m_camera;}
@@ -512,18 +466,18 @@ void cycles::Scene::LinkNormalMap(Shader &shader,Material &mat,const std::string
 	shader.Link("nmap","normal",toNodeName,toSocketName);
 }
 
-cycles::PShader cycles::Scene::CreateShader(const std::string &meshName,Model &mdl,ModelSubMesh &subMesh)
+cycles::PShader cycles::Scene::CreateShader(const std::string &meshName,Model &mdl,ModelSubMesh &subMesh,uint32_t skinId)
 {
 	// Make sure all textures have finished loading
 	static_cast<CMaterialManager&>(client->GetMaterialManager()).GetTextureManager().WaitForTextures();
 
-	auto texIdx = subMesh.GetTexture();
-	auto *mat = mdl.GetMaterial(texIdx);
+	auto texIdx = mdl.GetMaterialIndex(subMesh,skinId);
+	auto *mat = texIdx.has_value() ? mdl.GetMaterial(*texIdx) : nullptr;
 	auto *diffuseMap = mat ? mat->GetDiffuseMap() : nullptr;
 	auto diffuseTexPath = prepare_texture(m_scene,diffuseMap);
 	if(diffuseTexPath.has_value() == false)
 		return nullptr;
-	auto shader = cycles::Shader::Create(*this,"object_shader");
+	auto shader = cycles::Shader::Create(*this,meshName +"_shader");
 
 	enum class ShaderType : uint8_t
 	{
@@ -532,6 +486,7 @@ cycles::PShader cycles::Scene::CreateShader(const std::string &meshName,Model &m
 	};
 	constexpr auto shaderType = ShaderType::Disney;
 
+	// TODO: Only allow toon shader when baking diffuse lighting
 	const std::string bsdfName = "bsdf_scene";
 	if(shaderType == ShaderType::Toon)
 	{
@@ -549,66 +504,221 @@ cycles::PShader cycles::Scene::CreateShader(const std::string &meshName,Model &m
 		auto nodeBsdf = shader->AddNode("principled_bsdf",bsdfName);
 		auto *pNodeBsdf = static_cast<ccl::PrincipledBsdfNode*>(**nodeBsdf);
 
-#if 0
-		// Albedo map
-		auto *nodeAlbedo = AssignTexture(*shader,"albedo",*diffuseTexPath);
-		if(nodeAlbedo)
-			shader->Link("albedo","color",bsdfName,"base_color");
-		LinkNormalMap(*shader,*mat,meshName,bsdfName,"normal");
-
-		// Metalness map
-		auto metalnessTexPath = prepare_texture(m_scene,mat->GetTextureInfo("metalness_map"));
-		if(metalnessTexPath)
+		if(m_renderMode == RenderMode::RenderImage)// || m_renderMode == RenderMode::BakeDiffuseLighting)
 		{
-			auto *nodeMetalness = AssignTexture(*shader,"img_metalness_map",*metalnessTexPath,ColorSpace::Raw);
-			if(nodeMetalness)
-			{
-				// We only need one channel value, so we'll just grab the red channel
-				auto *nodeSeparate = static_cast<ccl::SeparateRGBNode*>(**shader->AddNode("separate_rgb","separate_metalness"));
-				shader->Link("img_metalness_map","color","separate_metalness","color");
+			// Albedo map
+			auto *nodeAlbedo = AssignTexture(*shader,"albedo",*diffuseTexPath);
+			if(nodeAlbedo)
+				shader->Link("albedo","color",bsdfName,"base_color");
+			LinkNormalMap(*shader,*mat,meshName,bsdfName,"normal");
 
-				// Use float as metallic value
-				shader->Link("separate_metalness","r",bsdfName,"metallic");
+			// Metalness map
+			auto metalnessTexPath = prepare_texture(m_scene,mat->GetTextureInfo("metalness_map"));
+			if(metalnessTexPath)
+			{
+				auto *nodeMetalness = AssignTexture(*shader,"img_metalness_map",*metalnessTexPath,ColorSpace::Raw);
+				if(nodeMetalness)
+				{
+					// We only need one channel value, so we'll just grab the red channel
+					auto *nodeSeparate = static_cast<ccl::SeparateRGBNode*>(**shader->AddNode("separate_rgb","separate_metalness"));
+					shader->Link("img_metalness_map","color","separate_metalness","color");
+
+					// Use float as metallic value
+					shader->Link("separate_metalness","r",bsdfName,"metallic");
+				}
+			}
+
+			// Roughness map
+			auto roughnessTexPath = prepare_texture(m_scene,mat->GetTextureInfo("roughness_map"));
+			if(roughnessTexPath)
+			{
+				auto *nodeRoughness = AssignTexture(*shader,"img_roughness_map",*roughnessTexPath,ColorSpace::Raw);
+				if(nodeRoughness)
+				{
+					// We only need one channel value, so we'll just grab the red channel
+					auto *nodeSeparate = static_cast<ccl::SeparateRGBNode*>(**shader->AddNode("separate_rgb","separate_roughness"));
+					shader->Link("img_roughness_map","color","separate_roughness","color");
+
+					// Use float as roughness value
+					shader->Link("separate_roughness","r",bsdfName,"roughness");
+				}
+			}
+
+			// Emission map
+			auto emissionTexPath = prepare_texture(m_scene,mat->GetGlowMap());
+			if(emissionTexPath)
+			{
+				auto *nodeEmission = AssignTexture(*shader,"emission",*emissionTexPath);
+				if(nodeEmission)
+					shader->Link("emission","color",bsdfName,"emission");
 			}
 		}
-
-		// Roughness map
-		auto roughnessTexPath = prepare_texture(m_scene,mat->GetTextureInfo("roughness_map"));
-		if(roughnessTexPath)
-		{
-			auto *nodeRoughness = AssignTexture(*shader,"img_roughness_map",*roughnessTexPath,ColorSpace::Raw);
-			if(nodeRoughness)
-			{
-				// We only need one channel value, so we'll just grab the red channel
-				auto *nodeSeparate = static_cast<ccl::SeparateRGBNode*>(**shader->AddNode("separate_rgb","separate_roughness"));
-				shader->Link("img_roughness_map","color","separate_roughness","color");
-
-				// Use float as roughness value
-				shader->Link("separate_roughness","r",bsdfName,"roughness");
-			}
-		}
-
-		// Emission map
-		auto emissionTexPath = prepare_texture(m_scene,mat->GetGlowMap());
-		if(emissionTexPath)
-		{
-			auto *nodeEmission = AssignTexture(*shader,"emission",*emissionTexPath);
-			if(nodeEmission)
-				shader->Link("emission","color",bsdfName,"emission");
-		}
-#endif
 	}
 	shader->Link(bsdfName,"bsdf","output","surface");
 	return shader;
 }
 
-void cycles::Scene::AddEntity(BaseEntity &ent)
+void cycles::Scene::SetAOBakeTarget(Model &mdl,uint32_t matIndex)
 {
-	if(m_renderMode != RenderMode::RenderImage && m_objects.empty() == false)
+	std::vector<ModelSubMesh*> materialMeshes;
+	std::vector<ModelSubMesh*> envMeshes;
+	uint32_t numVerts = 0;
+	uint32_t numTris = 0;
+	uint32_t numVertsEnv = 0;
+	uint32_t numTrisEnv = 0;
+	AddModel(mdl,"ao_mesh",0 /* skin */,nullptr,[matIndex,&materialMeshes,&envMeshes,&numVerts,&numTris,&numVertsEnv,&numTrisEnv,&mdl](ModelSubMesh &mesh) -> bool {
+		auto texIdx = mdl.GetMaterialIndex(mesh);
+		if(texIdx.has_value() && *texIdx == matIndex)
+		{
+			materialMeshes.push_back(&mesh);
+			numVerts += mesh.GetVertexCount();
+			numTris += mesh.GetTriangleCount();
+			return false;
+		}
+		numVertsEnv += mesh.GetVertexCount();
+		numTrisEnv += mesh.GetTriangleCount();
+		envMeshes.push_back(&mesh);
+		return false;
+	});
+
+	// We'll create a separate mesh from all model meshes which use the specified material.
+	// This way we can map the uv coordinates to the ao output texture more easily.
+	auto mesh = Mesh::Create(*this,"ao_target",numVerts,numTris);
+	for(auto &matMesh : materialMeshes)
+		AddMesh(mdl,*mesh,*matMesh);
+	auto o = Object::Create(*this,*mesh);
+	m_bakeTarget = o;
+
+	if(envMeshes.empty())
+		return;
+
+	// Note: Ambient occlusion is baked for a specific material (matIndex). The model may contain meshes that use a different material,
+	// in which case those meshes are still needed to render accurate ambient occlusion values near edge cases.
+	// To distinguish them from the actual ao-meshes, they're stored in a separate mesh/object here.
+	// The actual ao bake target (see code above) has to be the first mesh added to the scene, otherwise the ao result may be incorrect.
+	// The reason for this is currently unknown.
+	auto meshEnv = Mesh::Create(*this,"ao_mesh",numVertsEnv,numTrisEnv);
+	for(auto *subMesh : envMeshes)
+		AddMesh(mdl,*meshEnv,*subMesh);
+	Object::Create(*this,*meshEnv);
+}
+
+void cycles::Scene::SetLightmapBakeTarget(BaseEntity &ent)
+{
+	auto lightmapC = ent.GetComponent<pragma::CLightMapComponent>();
+	m_lightmapTargetComponent = lightmapC;
+	if(lightmapC.expired())
 	{
-		Con::cwar<<"WARNING: Baking only supported for single objects, but attempted to add another one! Additional object(s) will be ignored!"<<Con::endl;
+		Con::cwar<<"WARNING: Invalid target for lightmap baking: Entity has no lightmap component!"<<Con::endl;
 		return;
 	}
+	std::vector<ModelSubMesh*> targetMeshes {};
+	auto o = AddEntity(ent,&targetMeshes);
+	if(o == nullptr)
+		return;
+	auto &mesh = o->GetMesh();
+
+	// Lightmap uvs per mesh
+	auto &lightmapUvs = lightmapC->GetLightmapUvs();
+
+	auto numTris = mesh.GetTriangleCount();
+	std::vector<ccl::float2> cclLightmapUvs {};
+	cclLightmapUvs.resize(numTris *3);
+	size_t uvOffset = 0;
+	for(auto *subMesh : targetMeshes)
+	{
+		auto &tris = subMesh->GetTriangles();
+		auto refId = subMesh->GetReferenceId();
+		if(refId < lightmapUvs.size())
+		{
+			auto &meshUvs = lightmapUvs.at(refId);
+			for(auto i=decltype(tris.size()){0u};i<tris.size();i+=3)
+			{
+				auto idx0 = tris.at(i);
+				auto idx1 = tris.at(i +1);
+				auto idx2 = tris.at(i +2);
+				cclLightmapUvs.at(uvOffset +i) = Scene::ToCyclesUV(meshUvs.at(idx0));
+				cclLightmapUvs.at(uvOffset +i +1) = Scene::ToCyclesUV(meshUvs.at(idx1));
+				cclLightmapUvs.at(uvOffset +i +2) = Scene::ToCyclesUV(meshUvs.at(idx2));
+			}
+		}
+		uvOffset += tris.size();
+	}
+	mesh.SetLightmapUVs(std::move(cclLightmapUvs));
+	m_bakeTarget = o;
+}
+
+void cycles::Scene::AddMesh(Model &mdl,Mesh &mesh,ModelSubMesh &mdlMesh,pragma::CAnimatedComponent *optAnimC,uint32_t skinId)
+{
+	auto shader = CreateShader(mesh.GetName(),mdl,mdlMesh,skinId);
+	if(shader == nullptr)
+		return;
+	auto shaderIdx = mesh.AddShader(*shader);
+	auto triIndexVertexOffset = mesh.GetVertexOffset();
+	auto &verts = mdlMesh.GetVertices();
+	for(auto vertIdx=decltype(verts.size()){0u};vertIdx<verts.size();++vertIdx)
+	{
+		auto &v = verts.at(vertIdx);
+		switch(m_renderMode)
+		{
+		case RenderMode::RenderImage:
+		{
+			Vector3 pos;
+			// TODO: Do we really need the tangent?
+			if(optAnimC && optAnimC->GetLocalVertexPosition(mdlMesh,vertIdx,pos))
+				mesh.AddVertex(pos,v.normal,v.tangent,v.uv); // TODO: Apply animation matrices to normal and tangent!
+			else
+				mesh.AddVertex(v.position,v.normal,v.tangent,v.uv);
+			break;
+		}
+		default:
+			// We're probably baking something (e.g. ao map), so we don't want to include the entity's animated pose.
+			mesh.AddVertex(v.position,v.normal,v.tangent,v.uv);
+			break;
+		}
+	}
+
+	auto &tris = mdlMesh.GetTriangles();
+	for(auto i=decltype(tris.size()){0u};i<tris.size();i+=3)
+		mesh.AddTriangle(triIndexVertexOffset +tris.at(i),triIndexVertexOffset +tris.at(i +1),triIndexVertexOffset +tris.at(i +2),shaderIdx);
+}
+
+cycles::PMesh cycles::Scene::AddModel(Model &mdl,const std::string &meshName,uint32_t skinId,pragma::CAnimatedComponent *optAnimC,const std::function<bool(ModelSubMesh&)> &optMeshFilter)
+{
+	std::vector<std::shared_ptr<ModelMesh>> lodMeshes {};
+	std::vector<uint32_t> bodyGroups {};
+	bodyGroups.resize(mdl.GetBodyGroupCount());
+	mdl.GetBodyGroupMeshes(bodyGroups,0,lodMeshes);
+
+	std::vector<ModelSubMesh*> targetMeshes {};
+	targetMeshes.reserve(mdl.GetSubMeshCount());
+	uint64_t numVerts = 0ull;
+	uint64_t numTris = 0ull;
+	for(auto &lodMesh : lodMeshes)
+	{
+		for(auto &subMesh : lodMesh->GetSubMeshes())
+		{
+			if(optMeshFilter != nullptr && optMeshFilter(*subMesh) == false)
+				continue;
+			targetMeshes.push_back(subMesh.get());
+			numVerts += subMesh->GetVertexCount();
+			numTris += subMesh->GetTriangleCount();
+		}
+	}
+
+	if(numTris == 0)
+		return nullptr;
+
+	// Create the mesh
+	// TODO: If multiple entities are using same model, CACHE the mesh(es)! (Unless they're animated)
+	auto mesh = Mesh::Create(*this,meshName,numVerts,numTris);
+	for(auto *subMesh : targetMeshes)
+		AddMesh(mdl,*mesh,*subMesh,optAnimC,skinId);
+	return mesh;
+}
+
+cycles::PObject cycles::Scene::AddEntity(BaseEntity &ent,std::vector<ModelSubMesh*> *optOutTargetMeshes)
+{
 #if 0
 	if(m_renderMode == RenderMode::BakeDiffuseLighting && ent.IsWorld() == false)
 	{
@@ -618,116 +728,180 @@ void cycles::Scene::AddEntity(BaseEntity &ent)
 #endif
 	auto mdl = ent.GetModel();
 	if(mdl == nullptr)
-		return;
-	std::vector<std::shared_ptr<ModelMesh>> lodMeshes {};
-	std::vector<uint32_t> bodyGroups {};
-	bodyGroups.resize(mdl->GetBodyGroupCount());
-	mdl->GetBodyGroupMeshes(bodyGroups,0,lodMeshes);
-
-	// Pre-calculate number of vertices and triangles
-	uint64_t numVerts = 0ull;
-	uint64_t numTris = 0ull;
-	for(auto &lodMesh : lodMeshes)
-	{
-		for(auto &subMesh : lodMesh->GetSubMeshes())
-		{
-			numVerts += subMesh->GetVertexCount();
-			numTris += subMesh->GetTriangleCount();
-		}
-	}
+		return nullptr;
 
 	auto animC = ent.GetComponent<CAnimatedComponent>();
-
-	// Create the mesh
-	// TODO: If multiple entities are using same model, CACHE the mesh(es)! (Unless they're animated)
 	std::string name = "ent_" +std::to_string(ent.GetLocalIndex());
-	auto mesh = Mesh::Create(*this,name,numVerts,numTris);
-	uint32_t meshTriIndexStartOffset = 0;
-	for(auto &lodMesh : lodMeshes)
-	{
-		for(auto &subMesh : lodMesh->GetSubMeshes())
-		{
-			auto shader = CreateShader(name,*mdl,*subMesh);
-			if(shader == nullptr)
-				continue;
-			auto shaderIdx = mesh->AddShader(*shader);
-			auto &verts = subMesh->GetVertices();
-			for(auto vertIdx=decltype(verts.size()){0u};vertIdx<verts.size();++vertIdx)
-			{
-				auto &v = verts.at(vertIdx);
-				switch(m_renderMode)
-				{
-				case RenderMode::RenderImage:
-				{
-					Vector3 pos;
-					// TODO: Do we really need the tangent?
-					if(animC.valid() && animC->GetLocalVertexPosition(*subMesh,vertIdx,pos))
-						mesh->AddVertex(pos,v.normal,v.tangent,v.uv); // TODO: Apply animation matrices to normal and tangent!
-					else
-						mesh->AddVertex(v.position,v.normal,v.tangent,v.uv);
-					break;
-				}
-				default:
-					// We're probably baking something (e.g. ao map), so we don't want to include the entity's animated pose.
-					mesh->AddVertex(v.position,v.normal,v.tangent,v.uv);
-					break;
-				}
-			}
-
-			auto &tris = subMesh->GetTriangles();
-			for(auto i=decltype(tris.size()){0u};i<tris.size();i+=3)
-				mesh->AddTriangle(meshTriIndexStartOffset +tris.at(i),meshTriIndexStartOffset +tris.at(i +1),meshTriIndexStartOffset +tris.at(i +2),shaderIdx);
-			meshTriIndexStartOffset += verts.size();
-		}
-	}
+	std::vector<ModelSubMesh*> tmpTargetMeshes {};
+	auto *targetMeshes = (optOutTargetMeshes != nullptr) ? optOutTargetMeshes : &tmpTargetMeshes;
+	targetMeshes->reserve(mdl->GetSubMeshCount());
+	auto mesh = AddModel(*mdl,name,ent.GetSkin(),animC.get(),[&targetMeshes](ModelSubMesh &mesh) -> bool {
+		targetMeshes->push_back(&mesh);
+		return true;
+	});
+	if(mesh == nullptr)
+		return nullptr;
 
 	// Create the object using the mesh
 	physics::Transform t;
 	ent.GetPose(t);
 	auto o = Object::Create(*this,*mesh);
-	if(m_renderMode == RenderMode::RenderImage) // We don't need the entity pose if we're baking
+	if(m_renderMode == RenderMode::RenderImage || m_renderMode == RenderMode::BakeDiffuseLighting)
 	{
 		o->SetPos(t.GetOrigin());
 		o->SetRotation(t.GetRotation());
 	}
-	else if(m_renderMode == RenderMode::BakeDiffuseLighting)
+	return o;
+}
+
+static uint32_t calc_pixel_offset(uint32_t imgWidth,uint32_t xOffset,uint32_t yOffset)
+{
+	return yOffset *imgWidth +xOffset;
+}
+
+static bool row_contains_visible_pixels(const float *inOutImgData,uint32_t pxStartOffset,uint32_t w)
+{
+	for(auto x=decltype(w){0u};x<w;++x)
 	{
-		auto lightmapC = ent.GetComponent<pragma::CLightMapComponent>();
-		if(lightmapC.valid())
+		if(inOutImgData[(pxStartOffset +x) *4 +3] > 0.f)
+			return true;
+	}
+	return false;
+}
+
+static bool col_contains_visible_pixels(const float *inOutImgData,uint32_t pxStartOffset,uint32_t h,uint32_t imgWidth)
+{
+	for(auto y=decltype(h){0u};y<h;++y)
+	{
+		if(inOutImgData[(pxStartOffset +(y *imgWidth)) *4 +3] > 0.f)
+			return true;
+	}
+	return false;
+}
+
+static void shrink_area_to_fit(const float *inOutImgData,uint32_t imgWidth,uint32_t &xOffset,uint32_t &yOffset,uint32_t &w,uint32_t &h)
+{
+	while(h > 0 && row_contains_visible_pixels(inOutImgData,calc_pixel_offset(imgWidth,xOffset,yOffset),w) == false)
+	{
+		++yOffset;
+		--h;
+	}
+	while(h > 0 && row_contains_visible_pixels(inOutImgData,calc_pixel_offset(imgWidth,xOffset,yOffset +h -1),w) == false)
+		--h;
+
+	while(w > 0 && col_contains_visible_pixels(inOutImgData,calc_pixel_offset(imgWidth,xOffset,yOffset),h,imgWidth) == false)
+	{
+		++xOffset;
+		--w;
+	}
+	while(w > 0 && col_contains_visible_pixels(inOutImgData,calc_pixel_offset(imgWidth,xOffset +w -1,yOffset),h,imgWidth) == false)
+		--w;
+}
+
+void cycles::Scene::DenoiseHDRImageArea(util::ImageBuffer &imgBuffer,uint32_t imgWidth,uint32_t imgHeight,uint32_t xOffset,uint32_t yOffset,uint32_t w,uint32_t h) const
+{
+	// In some cases the borders may not contain any image data (i.e. fully transparent) if the pixels are not actually
+	// being used by any geometry. Since the denoiser does not know transparency, we have to shrink the image area to exclude the
+	// transparent borders to avoid artifacts.
+	auto *imgData = static_cast<float*>(imgBuffer.GetData());
+	shrink_area_to_fit(imgData,imgWidth,xOffset,yOffset,w,h);
+
+	if(w == 0 || h == 0)
+		return; // Nothing for us to do
+
+	// Sanity check
+	auto pxStartOffset = calc_pixel_offset(imgWidth,xOffset,yOffset);
+	for(auto y=decltype(h){0u};y<h;++y)
+	{
+		for(auto x=decltype(w){0u};x<w;++x)
 		{
-			// Lightmap uvs per mesh
-			std::vector<std::vector<Vector2>> lightmapUvs {};
-			lightmapC->ReadLightmapUvCoordinates(lightmapUvs);
-
-			std::vector<ccl::float2> cclLightmapUvs {};
-			cclLightmapUvs.resize(numTris *3);
-			size_t uvOffset = 0;
-			for(auto &lodMesh : lodMeshes)
+			auto srcPxIdx = pxStartOffset +y *imgWidth +x;
+			auto a = imgData[srcPxIdx *4 +3];
+			if(a < 1.f)
 			{
-				for(auto &subMesh : lodMesh->GetSubMeshes())
-				{
-					auto refId = subMesh->GetReferenceId();
-					if(refId >= lightmapUvs.size())
-						continue;
-					auto &meshUvs = lightmapUvs.at(refId);
-
-					auto &tris = subMesh->GetTriangles();
-					for(auto i=decltype(tris.size()){0u};i<tris.size();i+=3)
-					{
-						auto idx0 = tris.at(i);
-						auto idx1 = tris.at(i +1);
-						auto idx2 = tris.at(i +2);
-						cclLightmapUvs.at(uvOffset +i) = Scene::ToCyclesUV(meshUvs.at(idx0));
-						cclLightmapUvs.at(uvOffset +i +1) = Scene::ToCyclesUV(meshUvs.at(idx1));
-						cclLightmapUvs.at(uvOffset +i +2) = Scene::ToCyclesUV(meshUvs.at(idx2));
-					}
-					uvOffset += tris.size();
-				}
+				// This should be unreachable, but just in case...
+				// If this case does occur, that means there are transparent pixels WITHIN the image area, which are not
+				// part of a transparent border!
+				Con::cerr<<"ERROR: Image area for denoising contains transparent pixel at ("<<x<<","<<y<<") with alpha of "<<a<<"! This is not allowed!"<<Con::endl;
 			}
-			mesh->SetLightmapUVs(std::move(cclLightmapUvs));
+		}
+	}
+
+	// White areas
+	/*for(auto y=decltype(h){0u};y<h;++y)
+	{
+		for(auto x=decltype(w){0u};x<w;++x)
+		{
+			auto srcPxIdx = pxStartOffset +y *imgWidth +x;
+			auto dstPxIdx = y *w +x;
+			if(inOutImgData[srcPxIdx *4 +3] == 0.f)
+			{
+				inOutImgData[srcPxIdx *4 +0] = 0.f;
+				inOutImgData[srcPxIdx *4 +1] = 0.f;
+				inOutImgData[srcPxIdx *4 +2] = 0.f;
+				inOutImgData[srcPxIdx *4 +3] = 1.f;
+			}
+			else
+			{
+				inOutImgData[srcPxIdx *4 +0] = 1.f;
+				inOutImgData[srcPxIdx *4 +1] = 1.f;
+				inOutImgData[srcPxIdx *4 +2] = 1.f;
+				inOutImgData[srcPxIdx *4 +3] = 1.f;
+			}
+		}
+	}*/
+
+	std::vector<float> imgAreaData {};
+	imgAreaData.resize(w *h *3);
+	// Extract the area from the image data
+	for(auto y=decltype(h){0u};y<h;++y)
+	{
+		for(auto x=decltype(w){0u};x<w;++x)
+		{
+			auto srcPxIdx = pxStartOffset +y *imgWidth +x;
+			auto dstPxIdx = y *w +x;
+			for(uint8_t i=0;i<3;++i)
+				imgAreaData.at(dstPxIdx *3 +i) = imgData[srcPxIdx *4 +i];
+		}
+	}
+
+	// Denoise the extracted area
+	DenoiseInfo denoiseInfo {};
+	denoiseInfo.hdr = true;
+	denoiseInfo.width = w;
+	denoiseInfo.height = h;
+	Denoise(denoiseInfo,imgAreaData.data());
+	
+	// Copy the denoised area back into the original image
+	for(auto y=decltype(h){0u};y<h;++y)
+	{
+		for(auto x=decltype(w){0u};x<w;++x)
+		{
+			auto srcPxIdx = pxStartOffset +y *imgWidth +x;
+			//if(inOutImgData[srcPxIdx *4 +3] == 0.f)
+			//	continue; // Alpha is zero; Skip this one
+			auto dstPxIdx = y *w +x;
+			//for(uint8_t i=0;i<3;++i)
+			//	inOutImgData[srcPxIdx *4 +i] = imgAreaData.at(dstPxIdx *3 +i);
+			/*if(inOutImgData[srcPxIdx *4 +3] == 0.f)
+			{
+				inOutImgData[srcPxIdx *4 +0] = 0.f;
+				inOutImgData[srcPxIdx *4 +1] = 0.f;
+				inOutImgData[srcPxIdx *4 +2] = 0.f;
+				inOutImgData[srcPxIdx *4 +3] = 1.f;
+			}
+			else
+			{
+				inOutImgData[srcPxIdx *4 +0] = 1.f;
+				inOutImgData[srcPxIdx *4 +1] = 1.f;
+				inOutImgData[srcPxIdx *4 +2] = 1.f;
+				inOutImgData[srcPxIdx *4 +3] = 1.f;
+			}*/
 		}
 	}
 }
+
+std::shared_ptr<util::ImageBuffer> cycles::Scene::GetResult() {return m_resultImageBuffer;}
 
 void cycles::Scene::Start()
 {
@@ -737,79 +911,7 @@ void cycles::Scene::Start()
 	bufferParams.full_width = m_scene.camera->width;
 	bufferParams.full_height = m_scene.camera->height;
 
-	auto imgWidth = bufferParams.width;
-	auto imgHeight = bufferParams.height;
-
 	m_session->scene = &m_scene;
-
-	/*if(m_renderMode != RenderMode::RenderImage)
-	{
-		// TDOO: Remove this?
-		// Update camera
-		m_scene.camera->viewplane.left = -1.77777779;
-		m_scene.camera->viewplane.right = 1.77777779;
-		m_scene.camera->viewplane.bottom = -1.00000000;
-		m_scene.camera->viewplane.top = 1.00000000;
-
-		m_scene.camera->full_width = 1920;
-		m_scene.camera->full_height = 1080;
-		m_scene.camera->width = 1920;
-		m_scene.camera->height = 1080;
-		m_scene.camera->nearclip = 0.100000001;
-		m_scene.camera->farclip = 100.000000;
-		m_scene.camera->panorama_type = ccl::PANORAMA_FISHEYE_EQUISOLID;
-		m_scene.camera->fisheye_fov = 3.14159274;
-		m_scene.camera->fisheye_lens = 10.5000000;
-		m_scene.camera->latitude_min = -1.57079637;
-		m_scene.camera->latitude_max = 1.57079637;
-		m_scene.camera->longitude_min = -3.14159274;
-		m_scene.camera->longitude_max = 3.14159274;
-		m_scene.camera->interocular_distance = 0.0649999976;
-		m_scene.camera->convergence_distance = 1.94999993;
-		m_scene.camera->use_spherical_stereo = false;
-		m_scene.camera->use_pole_merge = false;
-		m_scene.camera->pole_merge_angle_from = 1.04719758;
-		m_scene.camera->pole_merge_angle_to = 1.30899692;
-		m_scene.camera->aperture_ratio = 1.00000000;
-		m_scene.camera->fov = 0.399596483;
-		m_scene.camera->focaldistance = 0.000000000;
-		m_scene.camera->aperturesize = 0.000000000;
-		m_scene.camera->blades = 0;
-		m_scene.camera->bladesrotation = 0.000000000;
-		m_scene.camera->matrix.x.x = 0.685920656;
-		m_scene.camera->matrix.x.y = -0.324013472;
-		m_scene.camera->matrix.x.z = -0.651558220;
-		m_scene.camera->matrix.x.w = 7.35889149;
-		m_scene.camera->matrix.y.x = 0.727676332;
-		m_scene.camera->matrix.y.y = 0.305420846;
-		m_scene.camera->matrix.y.z = 0.614170372;
-		m_scene.camera->matrix.y.w = -6.92579079;
-		m_scene.camera->matrix.z.x = 0.000000000;
-		m_scene.camera->matrix.z.y = 0.895395637;
-		m_scene.camera->matrix.z.z = -0.445271403;
-		m_scene.camera->matrix.z.w = 4.95830917;
-
-		m_scene.camera->motion.clear();
-		m_scene.camera->motion.resize(3,m_scene.camera->matrix);
-
-		m_scene.camera->use_perspective_motion = false;
-		m_scene.camera->shuttertime = 0.500000000;
-		m_scene.camera->fov_pre = 0.399596483;
-		m_scene.camera->fov_post = 0.399596483;
-		m_scene.camera->motion_position = ccl::Camera::MOTION_POSITION_CENTER;
-		m_scene.camera->rolling_shutter_type = ccl::Camera::ROLLING_SHUTTER_NONE;
-		m_scene.camera->rolling_shutter_duration = 0.100000001;
-		m_scene.camera->border.left = 0.000000000;
-		m_scene.camera->border.right = 1.00000000;
-		m_scene.camera->border.bottom = 0.000000000;
-		m_scene.camera->border.top = 1.00000000;
-		m_scene.camera->viewport_camera_border.left = 0.000000000;
-		m_scene.camera->viewport_camera_border.right = 1.00000000;
-		m_scene.camera->viewport_camera_border.bottom = 0.000000000;
-		m_scene.camera->viewport_camera_border.top = 1.00000000;
-		m_scene.camera->offscreen_dicing_scale = 4.00000000;
-		*m_scene.dicing_camera = *m_scene.camera;
-	}*/
 
 	m_session->reset(bufferParams,m_session->params.samples);
 	m_camera->Finalize();
@@ -826,135 +928,227 @@ void cycles::Scene::Start()
 	if(m_renderMode == RenderMode::RenderImage)
 	{
 		m_session->start();
+
+		AddThread([this]() {
+			for(;;)
+			{
+				UpdateProgress(m_session->progress.get_progress());
+				if(m_session->progress.get_cancel())
+				{
+					Cancel(m_session->progress.get_cancel_message());
+					break;
+				}
+				if(m_session->progress.get_error())
+				{
+					SetStatus(util::JobStatus::Failed,m_session->progress.get_error_message());
+					break;
+				}
+				if(m_session->progress.get_progress() == 1.f)
+					break;
+				std::this_thread::sleep_for(std::chrono::seconds{1});
+			}
+			if(GetStatus() == util::JobStatus::Pending)
+				SetStatus(util::JobStatus::Successful);
+			ClearCyclesScene();
+		});
+		util::ParallelWorker<std::shared_ptr<util::ImageBuffer>>::Start();
 		return;
 	}
 	
 	// Baking cannot be done with cycles directly, we will have to
 	// do some additional steps first.
 
-	m_scene.bake_manager->set_baking(true);
-	m_session->load_kernels();
+	AddThread([this,bufferParams]() {
+		auto imgWidth = bufferParams.width;
+		auto imgHeight = bufferParams.height;
+		m_scene.bake_manager->set_baking(true);
+		m_session->load_kernels();
 
-	switch(m_renderMode)
-	{
-	case RenderMode::BakeAmbientOcclusion:
-	case RenderMode::BakeDiffuseLighting:
-		ccl::Pass::add(ccl::PASS_LIGHT,m_scene.film->passes);
-		break;
-	case RenderMode::BakeNormals:
-		break;
-	}
+		switch(m_renderMode)
+		{
+		case RenderMode::BakeAmbientOcclusion:
+		case RenderMode::BakeDiffuseLighting:
+			ccl::Pass::add(ccl::PASS_LIGHT,m_scene.film->passes);
+			break;
+		case RenderMode::BakeNormals:
+			break;
+		}
 
-	m_scene.film->tag_update(&m_scene);
-	m_scene.integrator->tag_update(&m_scene);
+		m_scene.film->tag_update(&m_scene);
+		m_scene.integrator->tag_update(&m_scene);
 
-	
-	/*{
-		// TODO: Remove this?
-		auto *graph = new ccl::ShaderGraph{};
+		// TODO: Shader limits are arbitrarily chosen, check how Blender does it?
+		m_scene.bake_manager->set_shader_limit(256,256);
+		m_session->tile_manager.set_samples(m_session->params.samples);
 
-		ccl::EmissionNode *emission = new ccl::EmissionNode();
-		emission->color = ccl::make_float3(1.0f, 1.0f, 1.0f);
-		emission->strength = 1.0f;
-		graph->add(emission);
+		ccl::ShaderEvalType shaderType;
+		int bake_pass_filter;
+		switch(m_renderMode)
+		{
+		case RenderMode::BakeAmbientOcclusion:
+			shaderType = ccl::ShaderEvalType::SHADER_EVAL_AO;
+			bake_pass_filter = ccl::BAKE_FILTER_AO;
+			break;
+		case RenderMode::BakeDiffuseLighting:
+			shaderType = ccl::ShaderEvalType::SHADER_EVAL_DIFFUSE;
+			bake_pass_filter = ccl::BAKE_FILTER_DIFFUSE | ccl::BAKE_FILTER_INDIRECT | ccl::BAKE_FILTER_DIRECT;
+			break;
+		case RenderMode::BakeNormals:
+			shaderType = ccl::ShaderEvalType::SHADER_EVAL_NORMAL;
+			bake_pass_filter = 0;
+			break;
+		}
+		bake_pass_filter = ccl::BakeManager::shader_type_to_pass_filter(shaderType,bake_pass_filter);
 
-		auto *out = graph->output();
-		graph->connect(emission->output("Emission"), out->input("Surface"));
+		if(IsCancelled())
+			return;
 
-		auto *shader = m_scene.default_light;
-		shader->set_graph(graph);
-		shader->tag_update(&m_scene);
-	}
-	*/
-	// TODO: Shader limits are arbitrarily chosen, check how Blender does it?
-	m_scene.bake_manager->set_shader_limit(256,256);
-	m_session->tile_manager.set_samples(m_session->params.samples);
+		auto numPixels = imgWidth *imgHeight;
+		if(m_bakeTarget.expired())
+		{
+			SetStatus(util::JobStatus::Failed,"Invalid bake target!");
+			return;
+		}
+		auto obj = m_bakeTarget.lock();
+		std::vector<baking::BakePixel> pixelArray;
+		pixelArray.resize(numPixels);
+		auto bakeLightmaps = (m_renderMode == RenderMode::BakeDiffuseLighting);
+		baking::prepare_bake_data(*obj,pixelArray.data(),numPixels,imgWidth,imgHeight,bakeLightmaps);
 
-	ccl::ShaderEvalType shaderType;
-	int bake_pass_filter;
-	switch(m_renderMode)
-	{
-	case RenderMode::BakeAmbientOcclusion:
-		shaderType = ccl::ShaderEvalType::SHADER_EVAL_AO;
-		bake_pass_filter = ccl::BAKE_FILTER_AO;
-		break;
-	case RenderMode::BakeDiffuseLighting:
-		shaderType = ccl::ShaderEvalType::SHADER_EVAL_DIFFUSE;
-		bake_pass_filter = ccl::BAKE_FILTER_DIFFUSE | ccl::BAKE_FILTER_INDIRECT | ccl::BAKE_FILTER_DIRECT;
-		break;
-	case RenderMode::BakeNormals:
-		shaderType = ccl::ShaderEvalType::SHADER_EVAL_NORMAL;
-		bake_pass_filter = 0;
-		break;
-	}
-	bake_pass_filter = ccl::BakeManager::shader_type_to_pass_filter(shaderType,bake_pass_filter);
+		if(IsCancelled())
+			return;
 
-	auto numPixels = imgWidth *imgHeight;
+		auto objectId = obj->GetId();
+		ccl::BakeData *bake_data = NULL;
+		uint32_t triOffset = 0u;
+		// Note: This has been commented because it can cause crashes in some cases. To fix the underlying issue, the mesh for
+		// which ao should be baked is now moved to the front so it always has a triangle offset of 0 (See 'SetAOBakeTarget'.).
+		/// It would be expected that the triangle offset is relative to the object, but that's not actually the case.
+		/// Instead, it seems to be a global triangle offset, so we have to count the number of triangles for all objects
+		/// before this one.
+		///for(auto i=decltype(objectId){0u};i<objectId;++i)
+		///	triOffset += m_objects.at(i)->GetMesh().GetTriangleCount();
+		bake_data = m_scene.bake_manager->init(objectId,triOffset /* triOffset */,numPixels);
+		baking::populate_bake_data(bake_data,objectId,pixelArray.data(),numPixels);
 
-	if(m_objects.empty())
-	{
-		Con::cerr<<"ERROR: Baking requires an object in the scene, but no object has been added!"<<Con::endl;
-		return;
-	}
-	if(m_objects.size() > 1)
-		Con::cwar<<"WARNING: More than 1 object has been added to the scene for baking! This is not supported, only the first object will be used."<<Con::endl;
+		if(IsCancelled())
+			return;
 
-	auto &obj = m_objects.front();
-	std::vector<baking::BakePixel> pixelArray;
-	pixelArray.resize(numPixels);
-	auto bakeLightmaps = (m_renderMode == RenderMode::BakeDiffuseLighting);
-	baking::prepare_bake_data(obj->GetMesh(),pixelArray.data(),numPixels,imgWidth,imgHeight,bakeLightmaps);
+		UpdateProgress(0.2f);
 
-	ccl::BakeData *bake_data = NULL;
-	bake_data = m_scene.bake_manager->init(0 /* object id */,0 /* triOffset */, numPixels /* numPixels */);
-	baking::populate_bake_data(bake_data, 0 /* objectId */, pixelArray.data(), numPixels);
+		m_session->tile_manager.set_samples(m_session->params.samples);
+		m_session->reset(const_cast<ccl::BufferParams&>(bufferParams), m_session->params.samples);
+		m_session->update_scene();
 
-	m_session->tile_manager.set_samples(m_session->params.samples);
-	m_session->reset(bufferParams, m_session->params.samples);
-	m_session->update_scene();
+		auto imgBuffer = util::ImageBuffer::Create(imgWidth,imgHeight,util::ImageBuffer::Format::RGBA_FLOAT);
+		auto r = m_scene.bake_manager->bake(m_scene.device,&m_scene.dscene,&m_scene,m_session->progress,shaderType,bake_pass_filter,bake_data,static_cast<float*>(imgBuffer->GetData()));
+		if(r == false)
+		{
+			SetStatus(util::JobStatus::Failed,"Cycles baking has failed for an unknown reason!");
+			return;
+		}
 
-	auto *pSession = m_session.get();
-	m_session->progress.set_update_callback([this,pSession]() {
-		if(m_progressCallback)
-			m_progressCallback(pSession->progress.get_progress());
+		if(IsCancelled())
+			return;
+
+		UpdateProgress(0.95f);
+
+		SetResultMessage("Baking margin...");
+		// Note: Margin has to be baked before denoising!
+		baking::ImBuf ibuf {};
+		ibuf.x = imgWidth;
+		ibuf.y = imgHeight;
+		ibuf.rect = imgBuffer;
+
+		// Apply margin
+		// TODO: Margin only required for certain bake types?
+		std::vector<uint8_t> mask_buffer {};
+		mask_buffer.resize(numPixels);
+		constexpr auto margin = 16u;
+		baking::RE_bake_mask_fill(pixelArray, numPixels, reinterpret_cast<char*>(mask_buffer.data()));
+		baking::RE_bake_margin(&ibuf, mask_buffer, margin);
+
+		if(IsCancelled())
+			return;
+
+		// Note: Denoising may not work well with baked images, since we can't supply any geometry information,
+		// but the result is decent enough as long as the sample count is high.
+		if(m_bDenoise)
+		{
+			/*if(m_renderMode == RenderMode::BakeDiffuseLighting)
+			{
+			auto lightmapInfo = m_lightmapTargetComponent.valid() ? m_lightmapTargetComponent->GetLightmapInfo() : nullptr;
+			if(lightmapInfo)
+			{
+			auto originalResolution = lightmapInfo->atlasSize;
+			// All of the lightmaps have to be denoised individually
+			for(auto &rect : lightmapInfo->lightmapAtlas)
+			{
+			auto x = rect.x +lightmapInfo->borderSize;
+			auto y = rect.y +lightmapInfo->borderSize;
+			auto w = rect.w -lightmapInfo->borderSize *2;
+			auto h = rect.h -lightmapInfo->borderSize *2;
+			Vector2 offset {
+			x /static_cast<float>(originalResolution),
+			(originalResolution -y -h) /static_cast<float>(originalResolution) // Note: y is flipped!
+			};
+			Vector2 size {
+			w /static_cast<float>(originalResolution),
+			h /static_cast<float>(originalResolution)
+			};
+
+			DenoiseHDRImageArea(
+			*imgBuffer,imgWidth,imgHeight,
+			umath::clamp<float>(umath::round(offset.x *static_cast<float>(imgWidth)),0.f,imgWidth) +0.001f, // Add a small offset to make sure something like 2.9999 isn't truncated to 2
+			umath::clamp<float>(umath::round(offset.y *static_cast<float>(imgHeight)),0.f,imgHeight) +0.001f,
+			umath::clamp<float>(umath::round(size.x *static_cast<float>(imgWidth)),0.f,imgWidth) +0.001f,
+			umath::clamp<float>(umath::round(size.y *static_cast<float>(imgHeight)),0.f,imgHeight) +0.001f
+			);
+			}
+			}
+			}
+			else*/
+			{
+				// TODO: Check if denoise flag is set
+				// Denoise the result. This has to be done before applying the margin! (Otherwise noise may flow into the margin)
+
+				SetResultMessage("Baking margin...");
+				DenoiseInfo denoiseInfo {};
+				denoiseInfo.hdr = true;
+				denoiseInfo.width = imgWidth;
+				denoiseInfo.height = imgHeight;
+				Denoise(denoiseInfo,*imgBuffer,[this](float progress) -> bool {
+					UpdateProgress(0.95f +progress *0.2f);
+					return !IsCancelled();
+				});
+			}
+		}
+
+		if(IsCancelled())
+			return;
+
+		if(m_bHDROutput == false)
+		{
+			// Convert baked data to rgba8
+			auto imgBufLDR = imgBuffer->Copy(util::ImageBuffer::Format::RGBA_LDR);
+			auto numChannels = umath::to_integral(util::ImageBuffer::Channel::Count);
+			for(auto &pxView : *imgBufLDR)
+			{
+				for(auto i=decltype(numChannels){0u};i<numChannels;++i)
+					pxView.SetValue(static_cast<util::ImageBuffer::Channel>(i),baking::unit_float_to_uchar_clamp(pxView.GetFloatValue(static_cast<util::ImageBuffer::Channel>(i))));
+			}
+			imgBuffer = imgBufLDR;
+		}
+
+		if(IsCancelled())
+			return;
+
+		m_session->params.write_render_cb(static_cast<ccl::uchar*>(imgBuffer->GetData()),imgWidth,imgHeight,4 /* channels */);
+		m_session->params.write_render_cb = nullptr; // Make sure it's not called on destruction
+		SetStatus(util::JobStatus::Successful,"Baking has been completed successfully!");
+		UpdateProgress(1.f);
 	});
-
-	std::vector<float> result;
-	result.resize(numPixels *4,1.f); // TODO: Alpha = 0, Color = black?
-	auto r = m_scene.bake_manager->bake(m_scene.device,&m_scene.dscene,&m_scene,m_session->progress,shaderType,bake_pass_filter,bake_data,result.data());
-	if(r == false)
-	{
-		Con::cerr<<"ERROR: Baking failed for an unknown reason!"<<Con::endl;
-		return;
-	}
-
-	// Converted baked data to rgba8
-	std::vector<uint8_t> pixels {};
-	pixels.resize(numPixels *4);
-	for(auto i=decltype(numPixels){0u};i<numPixels;++i)
-	{
-		auto *inData = result.data() +i *4;
-		auto *outData = pixels.data() +i *4;
-		for(uint8_t j=0;j<4;++j)
-			outData[j] = baking::unit_float_to_uchar_clamp(inData[j]);
-	}
-
-	// Apply margin
-	// TODO: Margin only required for certain bake types?
-	std::vector<uint8_t> mask_buffer {};
-	mask_buffer.resize(numPixels);
-	constexpr auto margin = 16u;
-
-	baking::ImBuf ibuf {};
-	ibuf.x = imgWidth;
-	ibuf.y = imgHeight;
-	ibuf.rect = pixels;
-
-	baking::RE_bake_mask_fill(pixelArray, numPixels, reinterpret_cast<char*>(mask_buffer.data()));
-	baking::RE_bake_margin(&ibuf, mask_buffer, margin);
-
-	m_session->params.write_render_cb(ibuf.rect.data(),imgWidth,imgHeight,4 /* channels */);
-	m_session->params.write_render_cb = nullptr; // Make sure it's not called on destruction
+	util::ParallelWorker<std::shared_ptr<util::ImageBuffer>>::Start();
 }
 
 cycles::Scene::RenderMode cycles::Scene::GetRenderMode() const {return m_renderMode;}
@@ -962,23 +1156,16 @@ float cycles::Scene::GetProgress() const
 {
 	return m_session->progress.get_progress();
 }
-bool cycles::Scene::IsComplete() const
+void cycles::Scene::Cancel(const std::string &resultMsg)
 {
-	return GetProgress() == 1.f;
-}
-bool cycles::Scene::IsCancelled() const {return m_bCancelled;}
-void cycles::Scene::Cancel()
-{
-	m_bCancelled = true;
+	util::ParallelWorker<std::shared_ptr<util::ImageBuffer>>::Cancel(resultMsg);
 	m_session->set_pause(true);
 }
 void cycles::Scene::Wait()
 {
-	m_session->wait();
-}
-void cycles::Scene::SetProgressCallback(const std::function<void(float)> &progressCallback)
-{
-	m_progressCallback = progressCallback;
+	util::ParallelWorker<std::shared_ptr<util::ImageBuffer>>::Wait();
+	if(m_session)
+		m_session->wait();
 }
 
 const std::vector<cycles::PShader> &cycles::Scene::GetShaders() const {return const_cast<Scene*>(this)->GetShaders();}
@@ -997,7 +1184,7 @@ ccl::ShaderOutput *cycles::Scene::FindShaderNodeOutput(ccl::ShaderNode &node,con
 {
 	auto it = std::find_if(node.outputs.begin(),node.outputs.end(),[&output](const ccl::ShaderOutput *shOutput) {
 		return ccl::string_iequals(shOutput->socket_type.name.string(),output);
-		});
+	});
 	return (it != node.outputs.end()) ? *it : nullptr;
 }
 
@@ -1005,7 +1192,7 @@ ccl::ShaderNode *cycles::Scene::FindShaderNode(ccl::ShaderGraph &graph,const std
 {
 	auto it = std::find_if(graph.nodes.begin(),graph.nodes.end(),[&nodeName](const ccl::ShaderNode *node) {
 		return node->name == nodeName;
-		});
+	});
 	return (it != graph.nodes.end()) ? *it : nullptr;
 }
 

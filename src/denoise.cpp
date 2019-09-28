@@ -1,4 +1,5 @@
 #include "pr_cycles/scene.hpp"
+#include <sharedutils/util_image_buffer.hpp>
 #include <OpenImageDenoise/oidn.hpp>
 #include <util/util_half.h>
 #include <iostream>
@@ -6,10 +7,8 @@
 using namespace pragma::modules;
 
 #pragma optimize("",off)
-template<typename TPixelType,bool THDR=false>
-	static bool denoise(const cycles::Scene::DenoiseInfo &denoise,const void *imgData,std::vector<uint8_t> &outData)
+bool cycles::Scene::Denoise(const DenoiseInfo &denoise,float *inOutData,const std::function<bool(float)> &fProgressCallback)
 {
-	auto numPixels = denoise.width *denoise.height;
 	auto device = oidn::newDevice();
 
 	const char *errMsg;
@@ -23,58 +22,58 @@ template<typename TPixelType,bool THDR=false>
 
 	oidn::FilterRef filter = device.newFilter("RT");
 
-	std::vector<std::array<float,3>> inputData {};
-	inputData.resize(numPixels);
-	for(auto i=decltype(numPixels){0u};i<numPixels;++i)
-	{
-		auto &pxData = *(static_cast<const std::array<TPixelType,4>*>(imgData) +i);
-		auto &dstData = inputData.at(i);
-		for(auto j=decltype(pxData.size()){0u};j<3;++j)
-		{
-			if constexpr (THDR)
-				dstData.at(j) = ccl::half_to_float(pxData.at(j));
-			else
-				dstData.at(j) = pxData.at(j) /static_cast<float>(std::numeric_limits<TPixelType>::max());
-		}
-	}
-	filter.setImage("color",inputData.data(),oidn::Format::Float3,denoise.width,denoise.height);
-	// TODO: Albedo +normal?
+	//std::vector<float> albedo {};
+	//albedo.resize(denoise.width *denoise.height *3,1.f);
 
-	std::vector<std::array<float,3>> outputData {};
-	outputData.resize(numPixels);
-	filter.setImage("output",outputData.data(),oidn::Format::Float3,denoise.width,denoise.height);
+	//std::vector<float> normal {};
+	//normal.resize(denoise.width *denoise.height *3,0.f);
+	//for(auto i=0;i<denoise.width *denoise.height;i+=3)
+	//	normal.at(i +1) = 1.f;
+
+	filter.setImage("color",inOutData,oidn::Format::Float3,denoise.width,denoise.height);
+	//filter.setImage("albedo",albedo.data(),oidn::Format::Float3,denoise.width,denoise.height); // TODO
+	//filter.setImage("normal",normal.data(),oidn::Format::Float3,denoise.width,denoise.height);
+	filter.setImage("output",inOutData,oidn::Format::Float3,denoise.width,denoise.height);
 
 	filter.set("hdr",denoise.hdr);
 
+	std::unique_ptr<std::function<bool(float)>> ptrProgressCallback = nullptr;
+	if(fProgressCallback)
+		ptrProgressCallback = std::make_unique<std::function<bool(float)>>(fProgressCallback);
 	filter.setProgressMonitorFunction([](void *userPtr,double n) -> bool {
-		std::cout<<"Monitor: "<<n<<std::endl;
+		auto *ptrProgressCallback = static_cast<std::function<bool(float)>*>(userPtr);
+		if(ptrProgressCallback)
+			return (*ptrProgressCallback)(n);
 		return true;
-	});
+	},ptrProgressCallback.get());
 
 	filter.commit();
 
 	filter.execute();
-
-	outData.resize(numPixels *sizeof(TPixelType) *4);
-	for(auto i=decltype(numPixels){0u};i<numPixels;++i)
-	{
-		auto &srcData = outputData.at(i);
-		auto dstOffset = i *4;
-		for(uint8_t j=0;j<4;++j)
-		{
-			if constexpr (THDR)
-				*(reinterpret_cast<TPixelType*>(outData.data()) +dstOffset +j) = (j < 3) ? ccl::float_to_half(srcData.at(j)) : ccl::float_to_half(std::numeric_limits<float>::max());
-			else
-				*(reinterpret_cast<TPixelType*>(outData.data()) +dstOffset +j) = (j < 3) ? (std::min<TPixelType>(srcData.at(j) *std::numeric_limits<TPixelType>::max(),std::numeric_limits<TPixelType>::max())) : std::numeric_limits<TPixelType>::max();
-		}
-	}
 	return true;
 }
 
-bool cycles::Scene::Denoise(const DenoiseInfo &denoiseInfo,const void *imgData,std::vector<uint8_t> &outData)
+bool cycles::Scene::Denoise(const DenoiseInfo &denoiseInfo,util::ImageBuffer &imgBuffer,const std::function<bool(float)> &fProgressCallback) const
 {
-	if(denoiseInfo.hdr)
-		return denoise<uint16_t,true>(denoiseInfo,imgData,outData);
-	return denoise<uint8_t,false>(denoiseInfo,imgData,outData);
+	if(imgBuffer.GetFormat() == util::ImageBuffer::Format::RGB_FLOAT)
+		return Denoise(denoiseInfo,imgBuffer,fProgressCallback); // Image is already in the right format, we can just denoise and be done with it
+
+	// Image is in the wrong format, we'll need a temporary copy
+	auto pImgDenoise = imgBuffer.Copy(util::ImageBuffer::Format::RGB_FLOAT);
+	if(Denoise(denoiseInfo,static_cast<float*>(pImgDenoise->GetData()),fProgressCallback) == false)
+		return false;
+
+	// Copy denoised data back to result buffer
+	auto itSrc = pImgDenoise->begin();
+	auto itDst = imgBuffer.begin();
+	auto numChannels = umath::to_integral(util::ImageBuffer::Channel::Count) -1; // -1, because we don't want to overwrite the old alpha channel values
+	for(;itSrc != pImgDenoise->end();++itSrc,++itDst)
+	{
+		auto &pxSrc = *itSrc;
+		auto &pxDst = *itDst;
+		for(auto i=decltype(numChannels){0u};i<numChannels;++i)
+			pxDst.CopyValue(static_cast<util::ImageBuffer::Channel>(i),pxSrc);
+	}
+	return true;
 }
 #pragma optimize("",on)
