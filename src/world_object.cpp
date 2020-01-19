@@ -13,6 +13,9 @@ const Vector3 &cycles::WorldObject::GetPos() const {return m_pose.GetOrigin();}
 void cycles::WorldObject::SetRotation(const Quat &rot) {m_pose.SetRotation(rot);}
 const Quat &cycles::WorldObject::GetRotation() const {return m_pose.GetRotation();}
 
-pragma::physics::Transform &cycles::WorldObject::GetPose() {return m_pose;}
-const pragma::physics::Transform &cycles::WorldObject::GetPose() const {return const_cast<WorldObject*>(this)->GetPose();}
+void cycles::WorldObject::SetScale(const Vector3 &scale) {m_pose.SetScale(scale);}
+const Vector3 &cycles::WorldObject::GetScale() const {return m_pose.GetScale();}
+
+pragma::physics::ScaledTransform &cycles::WorldObject::GetPose() {return m_pose;}
+const pragma::physics::ScaledTransform &cycles::WorldObject::GetPose() const {return const_cast<WorldObject*>(this)->GetPose();}
 #pragma optimize("",on)

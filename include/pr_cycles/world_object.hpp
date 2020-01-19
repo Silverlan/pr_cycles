@@ -19,12 +19,15 @@ namespace pragma::modules::cycles
 		void SetRotation(const Quat &rot);
 		const Quat &GetRotation() const;
 
-		pragma::physics::Transform &GetPose();
-		const pragma::physics::Transform &GetPose() const;
+		void SetScale(const Vector3 &scale);
+		const Vector3 &GetScale() const;
+
+		pragma::physics::ScaledTransform &GetPose();
+		const pragma::physics::ScaledTransform &GetPose() const;
 	protected:
 		WorldObject(Scene &scene);
 	private:
-		pragma::physics::Transform m_pose = {};
+		pragma::physics::ScaledTransform m_pose = {};
 	};
 };
 

@@ -35,6 +35,7 @@
 #include <pragma/lua/classes/ldef_entity.h>
 #include <luainterface.hpp>
 #include <pragma/lua/lua_entity_component.hpp>
+#include <pragma/lua/lua_call.hpp>
 
 #include "pr_cycles/scene.hpp"
 #include "pr_cycles/shader.hpp"
@@ -49,23 +50,13 @@ extern DLLCLIENT CGame *c_game;
 
 using namespace pragma::modules;
 
-static cycles::PShader setup_skybox(cycles::Scene &scene)
-{
-	auto shaderSkybox = cycles::Shader::Create(scene,*scene->default_background);
-	shaderSkybox->AddNode("sky_texture","tex");
-	auto nodeBgShader = shaderSkybox->AddNode("background_shader","bg");
-	nodeBgShader->SetInputArgument<float>("strength",8.f);
-	shaderSkybox->Link("bg","background","output","surface");
-	shaderSkybox->Link("tex","color","bg","color");
-	return shaderSkybox;
-}
-
 static void setup_light_sources(cycles::Scene &scene)
 {
 	EntityIterator entIt {*c_game};
 	entIt.AttachFilter<TEntityIteratorFilterComponent<pragma::CLightComponent>>();
 	for(auto *ent : entIt)
 	{
+		auto lightC = ent->GetComponent<pragma::CLightComponent>();
 		auto toggleC = ent->GetComponent<pragma::CToggleComponent>();
 		if(toggleC.valid() && toggleC->IsTurnedOn() == false)
 			continue;
@@ -82,8 +73,9 @@ static void setup_light_sources(cycles::Scene &scene)
 				light->SetType(cycles::Light::Type::Spot);
 				light->SetPos(ent->GetPosition());
 				light->SetRotation(ent->GetRotation());
-				light->SetConeAngle(umath::deg_to_rad(hLightSpot->GetOuterCutoffAngle()) *2.f);
+				light->SetConeAngles(umath::deg_to_rad(hLightSpot->GetInnerCutoffAngle()) *2.f,umath::deg_to_rad(hLightSpot->GetOuterCutoffAngle()) *2.f);
 				light->SetColor(color);
+				light->SetIntensity(lightC->GetLightIntensityLumen());
 			}
 			continue;
 		}
@@ -97,6 +89,7 @@ static void setup_light_sources(cycles::Scene &scene)
 				light->SetPos(ent->GetPosition());
 				light->SetRotation(ent->GetRotation());
 				light->SetColor(color);
+				light->SetIntensity(lightC->GetLightIntensityLumen());
 			}
 			continue;
 		}
@@ -110,20 +103,47 @@ static void setup_light_sources(cycles::Scene &scene)
 				light->SetPos(ent->GetPosition());
 				light->SetRotation(ent->GetRotation());
 				light->SetColor(color);
+				light->SetIntensity(lightC->GetLightIntensity());
 			}
 		}
 	}
 }
 
-static util::ParallelJob<std::shared_ptr<util::ImageBuffer>> setup_scene(cycles::Scene::RenderMode renderMode,uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,bool denoise)
+static cycles::PScene setup_scene(cycles::Scene::RenderMode renderMode,uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,bool denoise)
 {
-	auto job = cycles::Scene::Create(renderMode,sampleCount,hdrOutput,denoise);
-	if(job.IsValid() == false)
-		return {};
-	auto &scene = static_cast<cycles::Scene&>(job.GetWorker());
-	auto &cam = scene.GetCamera();
+	auto scene = cycles::Scene::Create(renderMode,sampleCount,hdrOutput,denoise);
+	if(scene == nullptr)
+		return nullptr;
+	auto &cam = scene->GetCamera();
 	cam.SetResolution(width,height);
-	return job;
+	return scene;
+}
+
+static void initialize_cycles_scene_from_game_scene(
+	cycles::Scene &scene,const Vector3 &camPos,const Quat &camRot,float nearZ,float farZ,float fov,
+	const std::function<bool(BaseEntity&)> &entFilter
+)
+{
+	setup_light_sources(scene);
+	auto &cam = scene.GetCamera();
+	cam.SetPos(camPos);
+	cam.SetRotation(camRot);
+	cam.SetNearZ(nearZ);
+	cam.SetFarZ(farZ);
+	cam.SetFOV(umath::deg_to_rad(fov));
+
+	// All entities
+	EntityIterator entIt {*c_game};
+	entIt.AttachFilter<TEntityIteratorFilterComponent<pragma::CRenderComponent>>();
+	entIt.AttachFilter<TEntityIteratorFilterComponent<pragma::CModelComponent>>();
+	for(auto *ent : entIt)
+	{
+		auto renderC = ent->GetComponent<pragma::CRenderComponent>();
+		auto renderMode = renderC->GetRenderMode();
+		if((renderMode != RenderMode::World && renderMode != RenderMode::Skybox) || renderC->ShouldDraw(camPos) == false || entFilter(*ent) == false)
+			continue;
+		scene.AddEntity(*ent);
+	}
 }
 
 extern "C"
@@ -131,64 +151,117 @@ extern "C"
 	PRAGMA_EXPORT void pr_cycles_render_image(
 		uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,bool denoise,
 		const Vector3 &camPos,const Quat &camRot,float nearZ,float farZ,umath::Degree fov,
+		std::string skyOverride,EulerAngles skyAngles,float skyStrength,
 		const std::function<bool(BaseEntity&)> &entFilter,util::ParallelJob<std::shared_ptr<util::ImageBuffer>> &outJob
 	)
 	{
 		outJob = {};
-		auto job = setup_scene(cycles::Scene::RenderMode::RenderImage,width,height,sampleCount,hdrOutput,denoise);
-		if(job.IsValid() == false)
+		auto scene = setup_scene(cycles::Scene::RenderMode::RenderImage,width,height,sampleCount,hdrOutput,denoise);
+		if(scene == nullptr)
 			return;
-		auto &scene = static_cast<cycles::Scene&>(job.GetWorker());
-		setup_skybox(scene);
-		setup_light_sources(scene);
-		auto &cam = scene.GetCamera();
-		cam.SetPos(camPos);
-		cam.SetRotation(camRot);
-		cam.SetNearZ(nearZ);
-		cam.SetFarZ(farZ);
-		cam.SetFOV(umath::deg_to_rad(fov));
-
-		// All entities
-		EntityIterator entIt {*c_game};
-		entIt.AttachFilter<TEntityIteratorFilterComponent<pragma::CRenderComponent>>();
-		entIt.AttachFilter<TEntityIteratorFilterComponent<pragma::CModelComponent>>();
-		for(auto *ent : entIt)
-		{
-			auto renderC = ent->GetComponent<pragma::CRenderComponent>();
-			if(renderC->GetRenderMode() != RenderMode::World || renderC->ShouldDraw(camPos) == false || entFilter(*ent) == false)
-				continue;
-			scene.AddEntity(*ent);
-		}
-		outJob = job;
+		initialize_cycles_scene_from_game_scene(*scene,camPos,camRot,nearZ,farZ,fov,entFilter);
+		if(skyOverride.empty() == false)
+			scene->SetSky(skyOverride);
+		scene->SetSkyAngles(skyAngles);
+		scene->SetSkyStrength(skyStrength);
+		outJob = scene->Finalize();
 	}
 	PRAGMA_EXPORT void pr_cycles_bake_ao(
 		Model &mdl,uint32_t materialIndex,uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,bool denoise,util::ParallelJob<std::shared_ptr<util::ImageBuffer>> &outJob
 	)
 	{
 		outJob = {};
-		auto job = setup_scene(cycles::Scene::RenderMode::BakeAmbientOcclusion,width,height,sampleCount,hdrOutput,denoise);
-		if(job.IsValid() == false)
+		auto scene = setup_scene(cycles::Scene::RenderMode::BakeAmbientOcclusion,width,height,sampleCount,hdrOutput,denoise);
+		if(scene == nullptr)
 			return;
-		static_cast<cycles::Scene&>(job.GetWorker()).SetAOBakeTarget(mdl,materialIndex);
-		outJob = job;
+		scene->SetAOBakeTarget(mdl,materialIndex);
+		outJob = scene->Finalize();
 	}
 	PRAGMA_EXPORT void pr_cycles_bake_lightmaps(
-		BaseEntity &entTarget,uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,bool denoise,util::ParallelJob<std::shared_ptr<util::ImageBuffer>> &outJob
+		BaseEntity &entTarget,uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,bool denoise,
+		std::string skyOverride,EulerAngles skyAngles,float skyStrength,
+		util::ParallelJob<std::shared_ptr<util::ImageBuffer>> &outJob
 	)
 	{
 		outJob = {};
-		auto job = setup_scene(cycles::Scene::RenderMode::BakeDiffuseLighting,width,height,sampleCount,hdrOutput,denoise);
-		if(job.IsValid() == false)
+		auto scene = setup_scene(cycles::Scene::RenderMode::BakeDiffuseLighting,width,height,sampleCount,hdrOutput,denoise);
+		if(scene == nullptr)
 			return;
-		auto &scene = static_cast<cycles::Scene&>(job.GetWorker());
-		setup_skybox(scene);
-		setup_light_sources(scene);
-		scene.SetLightmapBakeTarget(entTarget);
-		outJob = job;
+		setup_light_sources(*scene);
+		scene->SetLightmapBakeTarget(entTarget);
+		if(skyOverride.empty() == false)
+			scene->SetSky(skyOverride);
+		scene->SetSkyAngles(skyAngles);
+		scene->SetSkyStrength(skyStrength);
+		outJob = scene->Finalize();
 	}
 
 	void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 	{
+		auto &modCycles = l.RegisterLibrary("cycles",std::unordered_map<std::string,int32_t(*)(lua_State*)>{
+			{"create_scene",static_cast<int32_t(*)(lua_State*)>([](lua_State *l) -> int32_t {
+				auto renderMode = static_cast<cycles::Scene::RenderMode>(Lua::CheckInt(l,1));
+				auto sampleCount = Lua::CheckInt(l,2);
+				auto hdrOutput = false;
+				if(Lua::IsSet(l,3))
+					hdrOutput = Lua::CheckBool(l,3);
+				auto denoise = true;
+				if(Lua::IsSet(l,4))
+					denoise = Lua::CheckBool(l,4);
+				auto scene = cycles::Scene::Create(renderMode,sampleCount,hdrOutput,denoise);
+				if(scene == nullptr)
+					return 0;
+				Lua::Push<cycles::PScene>(l,scene);
+				return 1;
+			})}
+		});
+
+		auto defScene = luabind::class_<cycles::Scene>("Scene");
+		defScene.add_static_constant("RENDER_MODE_COMBINED",umath::to_integral(cycles::Scene::RenderMode::RenderImage));
+		defScene.add_static_constant("RENDER_MODE_BAKE_AMBIENT_OCCLUSION",umath::to_integral(cycles::Scene::RenderMode::BakeAmbientOcclusion));
+		defScene.add_static_constant("RENDER_MODE_BAKE_NORMALS",umath::to_integral(cycles::Scene::RenderMode::BakeNormals));
+		defScene.add_static_constant("RENDER_MODE_BAKE_DIFFUSE_LIGHTING",umath::to_integral(cycles::Scene::RenderMode::BakeDiffuseLighting));
+		defScene.add_static_constant("RENDER_MODE_ALBEDO",umath::to_integral(cycles::Scene::RenderMode::SceneAlbedo));
+		defScene.add_static_constant("RENDER_MODE_NORMALS",umath::to_integral(cycles::Scene::RenderMode::SceneNormals));
+		defScene.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,cycles::Scene&,const Vector3&,const Quat&,float,float,float,luabind::object)>([](lua_State *l,cycles::Scene &scene,const Vector3 &camPos,const Quat &camRot,float nearZ,float farZ,float fov,luabind::object oFilter) {
+			std::function<bool(BaseEntity&)> entFilter = nullptr;
+			Lua::CheckFunction(l,7);
+			entFilter = [l,&oFilter](BaseEntity &ent) -> bool {
+				auto r = Lua::CallFunction(l,[&oFilter,&ent](lua_State *l) {
+					oFilter.push(l);
+					
+					ent.GetLuaObject()->push(l);
+					return Lua::StatusCode::Ok;
+				},1);
+				if(r == Lua::StatusCode::Ok)
+				{
+					if(Lua::IsSet(l,-1) == false)
+						return false;
+					return Lua::CheckBool(l,-1);
+				}
+				return false;
+			};
+			initialize_cycles_scene_from_game_scene(scene,camPos,camRot,nearZ,farZ,fov,entFilter);
+		}));
+		defScene.def("SetSky",static_cast<void(*)(lua_State*,cycles::Scene&,const std::string&)>([](lua_State *l,cycles::Scene &scene,const std::string &skyPath) {
+			scene.SetSky(skyPath);
+		}));
+		defScene.def("SetSkyAngles",static_cast<void(*)(lua_State*,cycles::Scene&,const EulerAngles&)>([](lua_State *l,cycles::Scene &scene,const EulerAngles &skyAngles) {
+			scene.SetSkyAngles(skyAngles);
+		}));
+		defScene.def("SetSkyStrength",static_cast<void(*)(lua_State*,cycles::Scene&,float)>([](lua_State *l,cycles::Scene &scene,float skyStrength) {
+			scene.SetSkyStrength(skyStrength);
+		}));
+		defScene.def("CreateRenderJob",static_cast<void(*)(lua_State*,cycles::Scene&)>([](lua_State *l,cycles::Scene &scene) {
+			auto job = scene.Finalize();
+			if(job.IsValid() == false)
+				return;
+			Lua::Push(l,job);
+		}));
+		defScene.def("SetResolution",static_cast<void(*)(lua_State*,cycles::Scene&,uint32_t,uint32_t)>([](lua_State *l,cycles::Scene &scene,uint32_t width,uint32_t height) {
+			scene.GetCamera().SetResolution(width,height);
+		}));
+		modCycles[defScene];
 #if 0
 		auto &modConvert = l.RegisterLibrary("cycles",std::unordered_map<std::string,int32_t(*)(lua_State*)>{
 			{"render_image",static_cast<int32_t(*)(lua_State*)>([](lua_State *l) -> int32_t {

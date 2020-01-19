@@ -32,7 +32,7 @@ namespace pragma::modules::cycles
 		util::WeakHandle<Light> GetHandle();
 
 		void SetType(Type type);
-		void SetConeAngle(umath::Radian angle);
+		void SetConeAngles(umath::Radian innerAngle,umath::Radian outerAngle);
 		void SetColor(const Color &color);
 		void SetIntensity(Lumen intensity);
 		void SetSize(float size);
@@ -48,10 +48,12 @@ namespace pragma::modules::cycles
 	private:
 		Light(Scene &scene,ccl::Light &light);
 		ccl::Light &m_light;
-		float m_size = 0.f;
+		float m_size = util::metres_to_units(0.25f);
 		Vector3 m_color = {1.f,1.f,1.f};
 		Lumen m_intensity = 1'600.f;
 		Type m_type = Type::Point;
+		umath::Radian m_spotInnerAngle = 0.f;
+		umath::Radian m_spotOuterAngle = 0.f;
 
 		Vector3 m_axisU = {};
 		Vector3 m_axisV = {};

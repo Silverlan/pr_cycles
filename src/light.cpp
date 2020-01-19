@@ -4,6 +4,7 @@
 #include <render/light.h>
 #include <render/scene.h>
 #include <render/nodes.h>
+#include <mathutil/umath_lighting.hpp>
 
 using namespace pragma::modules;
 
@@ -57,15 +58,16 @@ void cycles::Light::SetType(Type type)
 	}
 }
 
-void cycles::Light::SetConeAngle(umath::Radian angle)
+void cycles::Light::SetConeAngles(umath::Radian innerAngle,umath::Radian outerAngle)
 {
-	m_light.spot_angle = angle;
+	m_spotInnerAngle = innerAngle;
+	m_spotOuterAngle = outerAngle;
 }
 
 void cycles::Light::SetColor(const Color &color)
 {
 	m_color = color.ToVector3();
-	m_intensity = color.a;
+	// Alpha is ignored
 }
 void cycles::Light::SetIntensity(Lumen intensity) {m_intensity = intensity;}
 
@@ -78,14 +80,7 @@ void cycles::Light::SetSizeV(float sizeV) {m_sizeV = sizeV;}
 
 void cycles::Light::DoFinalize()
 {
-	// auto ledLuminousEfficacy = 90.f; // Luminous efficacy in lumens per watt for a LED light source
-	auto ledLuminousEfficacy = 1.f;
-	if(m_type != Type::Directional)
-		ledLuminousEfficacy = 5.f; // The above will result in spot and point lights that are very dim, so we use a different value for these (arbitrarily chosen)
-	else
-		ledLuminousEfficacy = 360.f;
-	auto watt = m_intensity /ledLuminousEfficacy;
-
+	float watt = m_intensity;
 	PShader shader = nullptr;
 	switch(m_type)
 	{
@@ -102,6 +97,8 @@ void cycles::Light::DoFinalize()
 		auto forward = uquat::forward(rot);
 		m_light.spot_smooth = 1.f;
 		m_light.dir = cycles::Scene::ToCyclesNormal(forward);
+		m_light.spot_smooth = (m_spotOuterAngle > 0.f) ? (1.f -m_spotInnerAngle /m_spotOuterAngle) : 1.f;
+		m_light.spot_angle = m_spotOuterAngle;
 		break;
 	}
 	case Type::Directional:
@@ -111,6 +108,7 @@ void cycles::Light::DoFinalize()
 		auto &rot = GetRotation();
 		auto forward = uquat::forward(rot);
 		m_light.dir = cycles::Scene::ToCyclesNormal(forward);
+		watt /= 75.f;
 		break;
 	}
 	case Type::Area:
@@ -138,32 +136,39 @@ void cycles::Light::DoFinalize()
 		break;
 	}
 	}
-	/*
-#if 0
-#else
-	static auto testWatt = 40;
-	static auto testSize = 0.0;//6.32;
-	watt = testWatt;
-	m_size = testSize;
-	//m_color = {0.f,0.f,1.f};
-	m_light.max_bounces = 1'024;
-#endif
-*/
+
 	if(shader)
 	{
-		auto emissionStrength = watt;
 		auto nodeEmission = shader->AddNode("emission","emission");
-		nodeEmission->SetInputArgument<float>("strength",emissionStrength);
-		// This seems to be just a modifier, it doesn't matter if we set the light color here, or for the actual light source below.
-		nodeEmission->SetInputArgument<ccl::float3>("color",ccl::float3{1.f,1.f,1.f});
+		//nodeEmission->SetInputArgument<float>("strength",watt);
+		//nodeEmission->SetInputArgument<ccl::float3>("color",ccl::float3{1.f,1.f,1.f});
 		shader->Link("emission","emission","output","surface");
 
 		m_light.shader = **shader;
 	}
 
-	m_light.strength = ccl::float3{m_color.r,m_color.g,m_color.b};
-	m_light.size = m_size;
+	if(m_type != Type::Directional)
+	{
+		// Factor 5 is arbitrary but makes it subjectively look better
+		watt *= 5.f;
+
+		// Note: According to the Cycles source code the luminous efficacy for a D65 standard illuminant should be used for the conversion,
+		// however 160 Watt seems to be (subjectively) a much closer match to photometric values.
+		// (See Cycles source code: cycles/src/util/util_ies.cpp -> IESFile::parse)
+		watt = ulighting::lumens_to_watts(m_intensity,ulighting::get_luminous_efficacy(ulighting::LightSourceType::D65StandardIlluminant));
+	}
+
+	// Multiple importance sampling. It's disabled by default for some reason, but it's usually best to keep it on.
+	m_light.use_mis = true;
+
+	m_light.strength = ccl::float3{m_color.r,m_color.g,m_color.b} *watt;
+	m_light.size = cycles::Scene::ToCyclesLength(m_size);
 	m_light.co = cycles::Scene::ToCyclesPosition(GetPos());
+
+	// Test
+//	m_light.strength = ccl::float3{0.984539f,1.f,0.75f} *40.f;
+//	m_light.size = 0.25f;
+//	m_light.max_bounces = 1'024;
 }
 
 ccl::Light *cycles::Light::operator->() {return &m_light;}

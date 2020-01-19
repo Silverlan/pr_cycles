@@ -12,6 +12,7 @@ namespace pragma::modules::cycles
 	class Scene;
 	class Mesh;
 	using PMesh = std::shared_ptr<Mesh>;
+	using PShader = std::shared_ptr<Shader>;
 	class Mesh
 		: public SceneObject,
 		public std::enable_shared_from_this<Mesh>
@@ -25,15 +26,19 @@ namespace pragma::modules::cycles
 		const float *GetTangentSigns() const;
 		const ccl::float2 *GetUVs() const;
 		const ccl::float2 *GetLightmapUVs() const;
+		const std::vector<PShader> &GetShaders() const;
 		void SetLightmapUVs(std::vector<ccl::float2> &&lightmapUvs);
 		uint64_t GetVertexCount() const;
 		uint64_t GetTriangleCount() const;
 		uint32_t GetVertexOffset() const;
 		std::string GetName() const;
+		void SetAlbedoMap(const std::string &albedoMap);
+		const std::string &GetAlbedoMap() const;
 
 		bool AddVertex(const Vector3 &pos,const Vector3 &n,const Vector3 &t,const Vector2 &uv);
 		bool AddTriangle(uint32_t idx0,uint32_t idx1,uint32_t idx2,uint32_t shaderIndex);
 		uint32_t AddShader(Shader &shader);
+		void ClearShaders();
 		ccl::Mesh *operator->();
 		ccl::Mesh *operator*();
 	private:
@@ -41,6 +46,8 @@ namespace pragma::modules::cycles
 		std::vector<Vector2> m_perVertexUvs = {};
 		std::vector<Vector3> m_perVertexTangents = {};
 		std::vector<float> m_perVertexTangentSigns = {};
+		std::vector<PShader> m_shaders = {};
+		std::string m_albedoMap = {};
 		ccl::Mesh &m_mesh;
 		ccl::float4 *m_normals = nullptr;
 		ccl::float4 *m_tangents = nullptr;

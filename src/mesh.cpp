@@ -72,10 +72,13 @@ const float *cycles::Mesh::GetTangentSigns() const {return m_tangentSigns;}
 const ccl::float2 *cycles::Mesh::GetUVs() const {return m_uvs;}
 const ccl::float2 *cycles::Mesh::GetLightmapUVs() const {return m_lightmapUvs.data();}
 void cycles::Mesh::SetLightmapUVs(std::vector<ccl::float2> &&lightmapUvs) {m_lightmapUvs = std::move(lightmapUvs);}
+const std::vector<cycles::PShader> &cycles::Mesh::GetShaders() const {return m_shaders;}
 uint64_t cycles::Mesh::GetVertexCount() const {return m_numVerts;}
 uint64_t cycles::Mesh::GetTriangleCount() const {return m_numTris;}
 uint32_t cycles::Mesh::GetVertexOffset() const {return m_mesh.verts.size();}
 std::string cycles::Mesh::GetName() const {return m_mesh.name.string();}
+void cycles::Mesh::SetAlbedoMap(const std::string &albedoMap) {m_albedoMap = albedoMap;}
+const std::string &cycles::Mesh::GetAlbedoMap() const {return m_albedoMap;}
 
 static ccl::float4 to_float4(const ccl::float3 &v)
 {
@@ -132,8 +135,15 @@ bool cycles::Mesh::AddTriangle(uint32_t idx0,uint32_t idx1,uint32_t idx2,uint32_
 	return true;
 }
 
+void cycles::Mesh::ClearShaders()
+{
+	m_shaders.clear();
+	m_mesh.used_shaders.clear();
+}
+
 uint32_t cycles::Mesh::AddShader(Shader &shader)
 {
+	m_shaders.push_back(shader.shared_from_this());
 	m_mesh.used_shaders.push_back(*shader);
 	return m_mesh.used_shaders.size() -1;
 }

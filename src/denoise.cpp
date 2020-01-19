@@ -7,7 +7,11 @@
 using namespace pragma::modules;
 
 #pragma optimize("",off)
-bool cycles::Scene::Denoise(const DenoiseInfo &denoise,float *inOutData,const std::function<bool(float)> &fProgressCallback)
+bool cycles::Scene::Denoise(
+	const DenoiseInfo &denoise,
+	float *inOutData,float *optAlbedoData,float *optInNormalData,
+	const std::function<bool(float)> &fProgressCallback
+)
 {
 	auto device = oidn::newDevice();
 
@@ -31,8 +35,10 @@ bool cycles::Scene::Denoise(const DenoiseInfo &denoise,float *inOutData,const st
 	//	normal.at(i +1) = 1.f;
 
 	filter.setImage("color",inOutData,oidn::Format::Float3,denoise.width,denoise.height);
-	//filter.setImage("albedo",albedo.data(),oidn::Format::Float3,denoise.width,denoise.height); // TODO
-	//filter.setImage("normal",normal.data(),oidn::Format::Float3,denoise.width,denoise.height);
+	if(optAlbedoData)
+		filter.setImage("albedo",optAlbedoData,oidn::Format::Float3,denoise.width,denoise.height);
+	if(optInNormalData)
+		filter.setImage("normal",optInNormalData,oidn::Format::Float3,denoise.width,denoise.height);
 	filter.setImage("output",inOutData,oidn::Format::Float3,denoise.width,denoise.height);
 
 	filter.set("hdr",denoise.hdr);
@@ -53,14 +59,24 @@ bool cycles::Scene::Denoise(const DenoiseInfo &denoise,float *inOutData,const st
 	return true;
 }
 
-bool cycles::Scene::Denoise(const DenoiseInfo &denoiseInfo,util::ImageBuffer &imgBuffer,const std::function<bool(float)> &fProgressCallback) const
+bool cycles::Scene::Denoise(
+	const DenoiseInfo &denoiseInfo,util::ImageBuffer &imgBuffer,
+	util::ImageBuffer *optImgBufferAlbedo,util::ImageBuffer *optImgBufferNormal,
+	const std::function<bool(float)> &fProgressCallback
+) const
 {
 	if(imgBuffer.GetFormat() == util::ImageBuffer::Format::RGB_FLOAT)
-		return Denoise(denoiseInfo,imgBuffer,fProgressCallback); // Image is already in the right format, we can just denoise and be done with it
+		return Denoise(denoiseInfo,imgBuffer,optImgBufferAlbedo,optImgBufferNormal,fProgressCallback); // Image is already in the right format, we can just denoise and be done with it
 
 	// Image is in the wrong format, we'll need a temporary copy
 	auto pImgDenoise = imgBuffer.Copy(util::ImageBuffer::Format::RGB_FLOAT);
-	if(Denoise(denoiseInfo,static_cast<float*>(pImgDenoise->GetData()),fProgressCallback) == false)
+	auto pImgAlbedo = optImgBufferAlbedo ? optImgBufferAlbedo->Copy(util::ImageBuffer::Format::RGB_FLOAT) : nullptr;
+	auto pImgNormals = optImgBufferNormal ? optImgBufferNormal->Copy(util::ImageBuffer::Format::RGB_FLOAT) : nullptr;
+	if(Denoise(
+		denoiseInfo,static_cast<float*>(pImgDenoise->GetData()),
+		pImgAlbedo ? static_cast<float*>(pImgAlbedo->GetData()) : nullptr,pImgNormals ? static_cast<float*>(pImgNormals->GetData()) : nullptr,
+		fProgressCallback
+	) == false)
 		return false;
 
 	// Copy denoised data back to result buffer
