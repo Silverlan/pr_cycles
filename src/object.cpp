@@ -1,8 +1,10 @@
 #include "pr_cycles/object.hpp"
 #include "pr_cycles/mesh.hpp"
 #include "pr_cycles/scene.hpp"
+#include "pr_cycles/shader.hpp"
 #include <render/object.h>
 #include <render/scene.h>
+#include <render/mesh.h>
 
 using namespace pragma::modules;
 

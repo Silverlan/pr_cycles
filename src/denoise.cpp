@@ -1,5 +1,5 @@
 #include "pr_cycles/scene.hpp"
-#include <sharedutils/util_image_buffer.hpp>
+#include <util_image_buffer.hpp>
 #include <OpenImageDenoise/oidn.hpp>
 #include <util/util_half.h>
 #include <iostream>
@@ -24,7 +24,7 @@ bool cycles::Scene::Denoise(
 	device.set("verbose",true);
 	device.commit();
 
-	oidn::FilterRef filter = device.newFilter("RT");
+	oidn::FilterRef filter = device.newFilter(denoise.lightmap ? "RTLightmap" : "RT");
 
 	//std::vector<float> albedo {};
 	//albedo.resize(denoise.width *denoise.height *3,1.f);
@@ -35,13 +35,16 @@ bool cycles::Scene::Denoise(
 	//	normal.at(i +1) = 1.f;
 
 	filter.setImage("color",inOutData,oidn::Format::Float3,denoise.width,denoise.height);
-	if(optAlbedoData)
-		filter.setImage("albedo",optAlbedoData,oidn::Format::Float3,denoise.width,denoise.height);
-	if(optInNormalData)
-		filter.setImage("normal",optInNormalData,oidn::Format::Float3,denoise.width,denoise.height);
-	filter.setImage("output",inOutData,oidn::Format::Float3,denoise.width,denoise.height);
+	if(denoise.lightmap == false)
+	{
+		if(optAlbedoData)
+			filter.setImage("albedo",optAlbedoData,oidn::Format::Float3,denoise.width,denoise.height);
+		if(optInNormalData)
+			filter.setImage("normal",optInNormalData,oidn::Format::Float3,denoise.width,denoise.height);
 
-	filter.set("hdr",denoise.hdr);
+		filter.set("hdr",denoise.hdr);
+	}
+	filter.setImage("output",inOutData,oidn::Format::Float3,denoise.width,denoise.height);
 
 	std::unique_ptr<std::function<bool(float)>> ptrProgressCallback = nullptr;
 	if(fProgressCallback)
@@ -60,18 +63,18 @@ bool cycles::Scene::Denoise(
 }
 
 bool cycles::Scene::Denoise(
-	const DenoiseInfo &denoiseInfo,util::ImageBuffer &imgBuffer,
-	util::ImageBuffer *optImgBufferAlbedo,util::ImageBuffer *optImgBufferNormal,
+	const DenoiseInfo &denoiseInfo,uimg::ImageBuffer &imgBuffer,
+	uimg::ImageBuffer *optImgBufferAlbedo,uimg::ImageBuffer *optImgBufferNormal,
 	const std::function<bool(float)> &fProgressCallback
 ) const
 {
-	if(imgBuffer.GetFormat() == util::ImageBuffer::Format::RGB_FLOAT)
+	if(imgBuffer.GetFormat() == uimg::ImageBuffer::Format::RGB_FLOAT)
 		return Denoise(denoiseInfo,imgBuffer,optImgBufferAlbedo,optImgBufferNormal,fProgressCallback); // Image is already in the right format, we can just denoise and be done with it
 
 	// Image is in the wrong format, we'll need a temporary copy
-	auto pImgDenoise = imgBuffer.Copy(util::ImageBuffer::Format::RGB_FLOAT);
-	auto pImgAlbedo = optImgBufferAlbedo ? optImgBufferAlbedo->Copy(util::ImageBuffer::Format::RGB_FLOAT) : nullptr;
-	auto pImgNormals = optImgBufferNormal ? optImgBufferNormal->Copy(util::ImageBuffer::Format::RGB_FLOAT) : nullptr;
+	auto pImgDenoise = imgBuffer.Copy(uimg::ImageBuffer::Format::RGB_FLOAT);
+	auto pImgAlbedo = optImgBufferAlbedo ? optImgBufferAlbedo->Copy(uimg::ImageBuffer::Format::RGB_FLOAT) : nullptr;
+	auto pImgNormals = optImgBufferNormal ? optImgBufferNormal->Copy(uimg::ImageBuffer::Format::RGB_FLOAT) : nullptr;
 	if(Denoise(
 		denoiseInfo,static_cast<float*>(pImgDenoise->GetData()),
 		pImgAlbedo ? static_cast<float*>(pImgAlbedo->GetData()) : nullptr,pImgNormals ? static_cast<float*>(pImgNormals->GetData()) : nullptr,
@@ -82,13 +85,13 @@ bool cycles::Scene::Denoise(
 	// Copy denoised data back to result buffer
 	auto itSrc = pImgDenoise->begin();
 	auto itDst = imgBuffer.begin();
-	auto numChannels = umath::to_integral(util::ImageBuffer::Channel::Count) -1; // -1, because we don't want to overwrite the old alpha channel values
+	auto numChannels = umath::to_integral(uimg::ImageBuffer::Channel::Count) -1; // -1, because we don't want to overwrite the old alpha channel values
 	for(;itSrc != pImgDenoise->end();++itSrc,++itDst)
 	{
 		auto &pxSrc = *itSrc;
 		auto &pxDst = *itDst;
 		for(auto i=decltype(numChannels){0u};i<numChannels;++i)
-			pxDst.CopyValue(static_cast<util::ImageBuffer::Channel>(i),pxSrc);
+			pxDst.CopyValue(static_cast<uimg::ImageBuffer::Channel>(i),pxSrc);
 	}
 	return true;
 }

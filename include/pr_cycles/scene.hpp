@@ -3,6 +3,7 @@
 
 #include <sharedutils/util_weak_handle.hpp>
 #include <sharedutils/util_parallel_job.hpp>
+#include "nodes.hpp"
 #include <memory>
 #include <mathutil/uvec.h>
 #include <functional>
@@ -40,8 +41,9 @@ namespace pragma
 	namespace physics {class Transform; class ScaledTransform;};
 };
 namespace util::bsp {struct LightMapInfo;};
-namespace util {class ImageBuffer;};
+namespace uimg {class ImageBuffer;};
 class Model;
+class ModelMesh;
 class ModelSubMesh;
 class Material;
 namespace pragma::modules::cycles
@@ -49,6 +51,7 @@ namespace pragma::modules::cycles
 	class SceneObject;
 	class Scene;
 	class Shader;
+	class ShaderModuleRoughness;
 	using PShader = std::shared_ptr<Shader>;
 	class Object;
 	using PObject = std::shared_ptr<Object>;
@@ -59,16 +62,17 @@ namespace pragma::modules::cycles
 	using PScene = std::shared_ptr<Scene>;
 	class Mesh;
 	using PMesh = std::shared_ptr<Mesh>;
+	struct Socket;
 
 	class SceneWorker
-		: public util::ParallelWorker<std::shared_ptr<util::ImageBuffer>>
+		: public util::ParallelWorker<std::shared_ptr<uimg::ImageBuffer>>
 	{
 	public:
 		friend Scene;
 		SceneWorker(Scene &scene);
 		virtual void Cancel(const std::string &resultMsg) override;
 		virtual void Wait() override;
-		virtual std::shared_ptr<util::ImageBuffer> GetResult() override;
+		virtual std::shared_ptr<uimg::ImageBuffer> GetResult() override;
 	private:
 		PScene m_scene = nullptr;
 		template<typename TJob,typename... TARGS>
@@ -85,6 +89,7 @@ namespace pragma::modules::cycles
 			uint32_t width = 0;
 			uint32_t height = 0;
 			bool hdr = false;
+			bool lightmap = false;
 		};
 		enum class ColorSpace : uint8_t
 		{
@@ -126,10 +131,17 @@ namespace pragma::modules::cycles
 		static constexpr uint32_t OUTPUT_CHANNEL_COUNT = 4u;
 
 		~Scene();
-		PObject AddEntity(BaseEntity &ent,std::vector<ModelSubMesh*> *optOutTargetMeshes=nullptr);
+		PObject AddEntity(
+			BaseEntity &ent,std::vector<ModelSubMesh*> *optOutTargetMeshes=nullptr,
+			const std::function<bool(ModelMesh&)> &meshFilter=nullptr,const std::function<bool(ModelSubMesh&)> &subMeshFilter=nullptr
+		);
 		void AddSkybox(const std::string &texture);
-		PMesh AddModel(Model &mdl,const std::string &meshName,uint32_t skinId=0,CAnimatedComponent *optAnimC=nullptr,const std::function<bool(ModelSubMesh&)> &optMeshFilter=nullptr);
-		void SetAOBakeTarget(Model &mdl,uint32_t matIndex);
+		PMesh AddModel(
+			BaseEntity &ent,Model &mdl,const std::string &meshName,uint32_t skinId=0,CAnimatedComponent *optAnimC=nullptr,
+			const std::function<bool(ModelMesh&)> &optMeshFilter=nullptr,
+			const std::function<bool(ModelSubMesh&)> &optSubMeshFilter=nullptr
+		);
+		void SetAOBakeTarget(BaseEntity &ent,Model &mdl,uint32_t matIndex);
 		void SetLightmapBakeTarget(BaseEntity &ent);
 		Camera &GetCamera();
 		float GetProgress() const;
@@ -148,8 +160,9 @@ namespace pragma::modules::cycles
 		void SetSkyAngles(const EulerAngles &angSky);
 		void SetSkyStrength(float strength);
 
-		util::ParallelJob<std::shared_ptr<util::ImageBuffer>> Finalize();
+		util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> Finalize();
 
+		void AddShader(CCLShader &shader);
 		ccl::Session *GetCCLSession();
 	private:
 		friend Shader;
@@ -159,30 +172,24 @@ namespace pragma::modules::cycles
 		static ccl::ShaderOutput *FindShaderNodeOutput(ccl::ShaderNode &node,const std::string &output);
 		static ccl::ShaderNode *FindShaderNode(ccl::ShaderGraph &graph,const std::string &nodeName);
 		static ccl::ShaderNode *FindShaderNode(ccl::ShaderGraph &graph,const OpenImageIO_v2_1::ustring &name);
-		void InitializeAlbedoPass();
-		void InitializeNormalPass();
-		void ApplyPostProcessing(util::ImageBuffer &imgBuffer,cycles::Scene::RenderMode renderMode);
-		void DenoiseHDRImageArea(util::ImageBuffer &imgBuffer,uint32_t imgWidth,uint32_t imgHeight,uint32_t x,uint32_t y,uint32_t w,uint32_t h) const;
-		void AddMesh(Model &mdl,Mesh &mesh,ModelSubMesh &mdlMesh,pragma::CAnimatedComponent *optAnimC=nullptr,uint32_t skinId=0);
-		void LinkAlbedoMap(
-			Shader &shader,Material &mat,const std::string &bsdfName,const std::string &diffuseTexPath,
-			bool envMap,const std::string &bsdfAttrName,bool useAlpha=true
-		) const;
-		ccl::ImageTextureNode *LinkRoughnessMap(Shader &shader,Material &mat,const std::string &bsdfName) const;
-		void LinkNormalMap(Shader &shader,Material &mat,const std::string &meshName,const std::string &toNodeName,const std::string &toSocketName);
-		PShader CreateShader(Mesh &mesh,Model &mdl,ModelSubMesh &subMesh,uint32_t skinId=0);
+		void InitializeAlbedoPass(bool reloadShaders);
+		void InitializeNormalPass(bool reloadShaders);
+		void ApplyPostProcessing(uimg::ImageBuffer &imgBuffer,cycles::Scene::RenderMode renderMode);
+		void DenoiseHDRImageArea(uimg::ImageBuffer &imgBuffer,uint32_t imgWidth,uint32_t imgHeight,uint32_t x,uint32_t y,uint32_t w,uint32_t h) const;
+		void AddMesh(BaseEntity &ent,Model &mdl,Mesh &mesh,ModelSubMesh &mdlMesh,pragma::CAnimatedComponent *optAnimC=nullptr,uint32_t skinId=0);
+		void AddRoughnessMapImageTextureNode(ShaderModuleRoughness &shader,Material &mat,float defaultRoughness) const;
+		PShader CreateShader(BaseEntity &ent,Mesh &mesh,Model &mdl,ModelSubMesh &subMesh,uint32_t skinId=0);
+		Material *GetMaterial(Model &mdl,ModelSubMesh &subMesh,uint32_t skinId) const;
 		bool Denoise(
-			const DenoiseInfo &denoise,util::ImageBuffer &imgBuffer,
-			util::ImageBuffer *optImgBufferAlbedo=nullptr,
-			util::ImageBuffer *optImgBufferNormal=nullptr,
+			const DenoiseInfo &denoise,uimg::ImageBuffer &imgBuffer,
+			uimg::ImageBuffer *optImgBufferAlbedo=nullptr,
+			uimg::ImageBuffer *optImgBufferNormal=nullptr,
 			const std::function<bool(float)> &fProgressCallback=nullptr
 		) const;
 		bool IsValidTexture(const std::string &filePath) const;
-		ccl::ImageTextureNode *AssignTexture(Shader &shader,const std::string &texIdentifier,const std::string &texFilePath,ColorSpace colorSpace=ColorSpace::SRGB) const;
-		ccl::EnvironmentTextureNode *AssignEnvironmentTexture(Shader &shader,const std::string &texIdentifier,const std::string &texFilePath,ColorSpace colorSpace=ColorSpace::SRGB) const;
 		void CloseCyclesScene();
 		void FinalizeAndCloseCyclesScene();
-		std::shared_ptr<util::ImageBuffer> FinalizeCyclesScene();
+		std::shared_ptr<uimg::ImageBuffer> FinalizeCyclesScene();
 		ccl::BufferParams GetBufferParameters() const;
 
 		void OnParallelWorkerCancelled();
@@ -193,6 +200,7 @@ namespace pragma::modules::cycles
 		std::string m_sky = "";
 		float m_skyStrength = 1.f;
 		std::vector<PShader> m_shaders = {};
+		std::vector<std::shared_ptr<CCLShader>> m_cclShaders = {};
 		std::vector<PObject> m_objects = {};
 		std::vector<PLight> m_lights = {};
 		std::unique_ptr<ccl::Session> m_session = nullptr;
@@ -202,9 +210,9 @@ namespace pragma::modules::cycles
 		RenderMode m_renderMode = RenderMode::RenderImage;
 		std::weak_ptr<Object> m_bakeTarget = {};
 		util::WeakHandle<pragma::CLightMapComponent> m_lightmapTargetComponent = {};
-		std::shared_ptr<util::ImageBuffer> m_resultImageBuffer = nullptr;
-		std::shared_ptr<util::ImageBuffer> m_normalImageBuffer = nullptr;
-		std::shared_ptr<util::ImageBuffer> m_albedoImageBuffer = nullptr;
+		std::shared_ptr<uimg::ImageBuffer> m_resultImageBuffer = nullptr;
+		std::shared_ptr<uimg::ImageBuffer> m_normalImageBuffer = nullptr;
+		std::shared_ptr<uimg::ImageBuffer> m_albedoImageBuffer = nullptr;
 	};
 };
 REGISTER_BASIC_BITWISE_OPERATORS(pragma::modules::cycles::Scene::StateFlags)

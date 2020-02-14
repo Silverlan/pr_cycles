@@ -385,10 +385,18 @@ void cycles::baking::prepare_bake_data(cycles::Object &o,BakePixel *pixelArray,u
 	}
 }
 
+// Source: blender/blenlib/intern/math_base_inline.c
 unsigned char cycles::baking::unit_float_to_uchar_clamp(float val)
 {
 	return (unsigned char)((
 		(val <= 0.0f) ? 0 : ((val > (1.0f - 0.5f / 255.0f)) ? 255 : ((255.0f * val) + 0.5f))));
+}
+
+unsigned short cycles::baking::unit_float_to_ushort_clamp(float val)
+{
+	return (unsigned short)((val >= 1.0f - 0.5f / 65535) ?
+		65535 :
+		(val <= 0.0f) ? 0 : (val * 65535.0f + 0.5f));
 }
 
 static int filter_make_index(const int x, const int y, const int w, const int h)

@@ -18,7 +18,7 @@
 #define __PR_CYCLES_UTIL_BAKING_HPP__
 
 #include "render/bake.h"
-#include <sharedutils/util_image_buffer.hpp>
+#include <util_image_buffer.hpp>
 #include <cinttypes>
 #include <vector>
 
@@ -38,7 +38,7 @@ namespace pragma::modules::cycles
 
 		typedef struct ImBuf {
 			int x, y;
-			std::shared_ptr<util::ImageBuffer> rect;
+			std::shared_ptr<uimg::ImageBuffer> rect;
 		} ImBuf;
 
 		void prepare_bake_data(cycles::Object &o,BakePixel *pixelArray,uint32_t numPixels,uint32_t imgWidth,uint32_t imgHeight,bool useLightmapUvs=false);
@@ -47,6 +47,7 @@ namespace pragma::modules::cycles
 			BakePixel *pixel_array,
 			const int num_pixels);
 		unsigned char unit_float_to_uchar_clamp(float val);
+		unsigned short unit_float_to_ushort_clamp(float val);
 		void RE_bake_mask_fill(const std::vector<BakePixel> pixel_array, const size_t num_pixels, char *mask);
 		void RE_bake_margin(ImBuf *ibuf, std::vector<uint8_t> &mask, const int margin);
 	};

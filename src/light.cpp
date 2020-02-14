@@ -86,12 +86,12 @@ void cycles::Light::DoFinalize()
 	{
 	case Type::Point:
 	{
-		shader = cycles::Shader::Create(GetScene(),"point_shader");
+		shader = cycles::Shader::Create<cycles::ShaderGeneric>(GetScene(),"point_shader");
 		break;
 	}
 	case Type::Spot:
 	{
-		shader = cycles::Shader::Create(GetScene(),"spot_shader");
+		shader = cycles::Shader::Create<cycles::ShaderGeneric>(GetScene(),"spot_shader");
 
 		auto &rot = GetRotation();
 		auto forward = uquat::forward(rot);
@@ -103,17 +103,18 @@ void cycles::Light::DoFinalize()
 	}
 	case Type::Directional:
 	{
-		shader = cycles::Shader::Create(GetScene(),"distance_shader");
+		shader = cycles::Shader::Create<cycles::ShaderGeneric>(GetScene(),"distance_shader");
 
 		auto &rot = GetRotation();
 		auto forward = uquat::forward(rot);
 		m_light.dir = cycles::Scene::ToCyclesNormal(forward);
-		watt /= 75.f;
+		static auto intensity = 7.5f;
+		watt /= intensity;
 		break;
 	}
 	case Type::Area:
 	{
-		shader = cycles::Shader::Create(GetScene(),"area_shader");
+		shader = cycles::Shader::Create<cycles::ShaderGeneric>(GetScene(),"area_shader");
 		m_light.axisu = cycles::Scene::ToCyclesNormal(m_axisU);
 		m_light.axisv = cycles::Scene::ToCyclesNormal(m_axisV);
 		m_light.sizeu = cycles::Scene::ToCyclesLength(m_sizeU);
@@ -127,48 +128,51 @@ void cycles::Light::DoFinalize()
 	}
 	case Type::Background:
 	{
-		shader = cycles::Shader::Create(GetScene(),"background_shader");
+		shader = cycles::Shader::Create<cycles::ShaderGeneric>(GetScene(),"background_shader");
 		break;
 	}
 	case Type::Triangle:
 	{
-		shader = cycles::Shader::Create(GetScene(),"triangle_shader");
+		shader = cycles::Shader::Create<cycles::ShaderGeneric>(GetScene(),"triangle_shader");
 		break;
 	}
 	}
 
-	if(shader)
+	auto cclShader = shader ? shader->GenerateCCLShader() : nullptr;
+	if(cclShader)
 	{
-		auto nodeEmission = shader->AddNode("emission","emission");
+		auto nodeEmission = cclShader->AddEmissionNode();
 		//nodeEmission->SetInputArgument<float>("strength",watt);
 		//nodeEmission->SetInputArgument<ccl::float3>("color",ccl::float3{1.f,1.f,1.f});
-		shader->Link("emission","emission","output","surface");
+		cclShader->Link(nodeEmission,cclShader->GetOutputNode().inSurface);
 
-		m_light.shader = **shader;
+		m_light.shader = **cclShader;
 	}
 
 	if(m_type != Type::Directional)
 	{
-		// Factor 5 is arbitrary but makes it subjectively look better
-		watt *= 5.f;
-
-		// Note: According to the Cycles source code the luminous efficacy for a D65 standard illuminant should be used for the conversion,
-		// however 160 Watt seems to be (subjectively) a much closer match to photometric values.
-		// (See Cycles source code: cycles/src/util/util_ies.cpp -> IESFile::parse)
-		watt = ulighting::lumens_to_watts(m_intensity,ulighting::get_luminous_efficacy(ulighting::LightSourceType::D65StandardIlluminant));
+		watt = ulighting::lumens_to_watts(m_intensity,ulighting::get_luminous_efficacy(ulighting::LightSourceType::LEDLamp));
+		static auto mulFactor = 30.f;
+		watt *= mulFactor; // Arbitrary, but results in a closer match
 	}
 
 	// Multiple importance sampling. It's disabled by default for some reason, but it's usually best to keep it on.
 	m_light.use_mis = true;
 
+	static float lightIntensityFactor = 10.f;
+	watt *= lightIntensityFactor;
+
 	m_light.strength = ccl::float3{m_color.r,m_color.g,m_color.b} *watt;
 	m_light.size = cycles::Scene::ToCyclesLength(m_size);
 	m_light.co = cycles::Scene::ToCyclesPosition(GetPos());
-
+	m_light.samples = 4;
+	m_light.max_bounces = 1'024;
+	m_light.map_resolution = 2'048;
 	// Test
-//	m_light.strength = ccl::float3{0.984539f,1.f,0.75f} *40.f;
-//	m_light.size = 0.25f;
-//	m_light.max_bounces = 1'024;
+	/*m_light.strength = ccl::float3{0.984539f,1.f,0.75f} *40.f;
+	m_light.size = 0.25f;
+	m_light.max_bounces = 1'024;
+	m_light.type = ccl::LightType::LIGHT_POINT;*/
 }
 
 ccl::Light *cycles::Light::operator->() {return &m_light;}

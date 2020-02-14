@@ -19,6 +19,7 @@
 #include <render/integrator.h>
 #include <render/svm.h>
 #include <render/bake.h>
+#include <render/particles.h>
 #include <optional>
 #include <pragma/c_engine.h>
 #include <pragma/util/util_game.hpp>
@@ -31,17 +32,23 @@
 #include <pragma/entities/baseentity.h>
 #include <pragma/entities/entity_component_system_t.hpp>
 #include <pragma/entities/components/c_animated_component.hpp>
+#include <pragma/entities/components/c_eye_component.hpp>
 #include <pragma/entities/components/c_vertex_animated_component.hpp>
 #include <pragma/entities/components/c_light_map_component.hpp>
 #include <pragma/entities/c_skybox.h>
 #include <pragma/rendering/shaders/c_shader_cubemap_to_equirectangular.hpp>
 #include <sharedutils/util_file.h>
 #include <sharedutils/util.h>
-#include <sharedutils/util_image_buffer.hpp>
+#include <util_image_buffer.hpp>
+#include <util_texture_info.hpp>
+#include <datasystem_color.h>
+#include <datasystem_vector.h>
 #include <texturemanager/texture.h>
 #include <cmaterialmanager.h>
-#include <pr_dds.hpp>
 #include <buffers/prosper_dynamic_resizable_buffer.hpp>
+
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
 
 // ccl happens to have the same include guard name as sharedutils, so we have to undef it here
 #undef __UTIL_STRING_H__
@@ -56,23 +63,23 @@ extern DLLCLIENT ClientState *client;
 extern DLLCLIENT CGame *c_game;
 
 cycles::SceneWorker::SceneWorker(Scene &scene)
-	: util::ParallelWorker<std::shared_ptr<util::ImageBuffer>>{},m_scene{scene.shared_from_this()}
+	: util::ParallelWorker<std::shared_ptr<uimg::ImageBuffer>>{},m_scene{scene.shared_from_this()}
 {}
 void cycles::SceneWorker::Cancel(const std::string &resultMsg)
 {
-	util::ParallelWorker<std::shared_ptr<util::ImageBuffer>>::Cancel(resultMsg);
+	util::ParallelWorker<std::shared_ptr<uimg::ImageBuffer>>::Cancel(resultMsg);
 	m_scene->OnParallelWorkerCancelled();
 }
 void cycles::SceneWorker::Wait()
 {
-	util::ParallelWorker<std::shared_ptr<util::ImageBuffer>>::Wait();
+	util::ParallelWorker<std::shared_ptr<uimg::ImageBuffer>>::Wait();
 	m_scene->Wait();
 }
-std::shared_ptr<util::ImageBuffer> cycles::SceneWorker::GetResult() {return m_scene->m_resultImageBuffer;}
+std::shared_ptr<uimg::ImageBuffer> cycles::SceneWorker::GetResult() {return m_scene->m_resultImageBuffer;}
 
 ///////////////////
 
-void cycles::Scene::ApplyPostProcessing(util::ImageBuffer &imgBuffer,cycles::Scene::RenderMode renderMode)
+void cycles::Scene::ApplyPostProcessing(uimg::ImageBuffer &imgBuffer,cycles::Scene::RenderMode renderMode)
 {
 	// For some reason the image is flipped horizontally when rendering an image,
 	// so we'll just flip it the right way here
@@ -201,7 +208,7 @@ cycles::Scene::~Scene()
 	FinalizeAndCloseCyclesScene();
 }
 
-std::shared_ptr<util::ImageBuffer> cycles::Scene::FinalizeCyclesScene()
+std::shared_ptr<uimg::ImageBuffer> cycles::Scene::FinalizeCyclesScene()
 {
 	// Note: We want the HDR output values from cycles which haven't been tonemapped yet, but Cycles
 	// makes this impossible to do, so we'll have to use this work-around.
@@ -243,16 +250,16 @@ std::shared_ptr<util::ImageBuffer> cycles::Scene::FinalizeCyclesScene()
 
 	auto w = m_session->display->draw_width;
 	auto h = m_session->display->draw_height;
-	std::shared_ptr<util::ImageBuffer> imgBuffer = nullptr;
+	std::shared_ptr<uimg::ImageBuffer> imgBuffer = nullptr;
 	if(outputWithHDR)
 	{
 		auto *pixels = m_session->display->rgba_half.copy_from_device(0, w, h);
-		imgBuffer = util::ImageBuffer::Create(pixels,w,h,util::ImageBuffer::Format::RGBA_HDR,false);
+		imgBuffer = uimg::ImageBuffer::Create(pixels,w,h,uimg::ImageBuffer::Format::RGBA_HDR,false);
 	}
 	else
 	{
 		auto *pixels = m_session->display->rgba_byte.copy_from_device(0, w, h);
-		imgBuffer = util::ImageBuffer::Create(pixels,w,h,util::ImageBuffer::Format::RGBA_LDR,false);
+		imgBuffer = uimg::ImageBuffer::Create(pixels,w,h,uimg::ImageBuffer::Format::RGBA_LDR,false);
 	}
 	return imgBuffer;
 }
@@ -298,9 +305,7 @@ enum class PreparedTextureOutputFlags : uint8_t
 	Envmap = 1u
 };
 REGISTER_BASIC_BITWISE_OPERATORS(PreparedTextureOutputFlags)
-#define STB_IMAGE_IMPLEMENTATION
-#include <pragma/util/stb_image.h>
-#include <image/prosper_sampler.hpp>
+
 static std::optional<std::string> prepare_texture(
 	TextureInfo *texInfo,bool &outSuccess,bool &outConverted,PreparedTextureInputFlags inFlags,PreparedTextureOutputFlags *optOutFlags=nullptr
 )
@@ -365,36 +370,36 @@ static std::optional<std::string> prepare_texture(
 
 	// Output path for the DDS-file we're about to create
 	auto ddsPath = "addons/converted/materials/" +texName;
-	ImageWriteInfo imgWriteInfo {};
-	imgWriteInfo.containerFormat = ImageWriteInfo::ContainerFormat::DDS; // Cycles doesn't support KTX
+	uimg::TextureInfo imgWriteInfo {};
+	imgWriteInfo.containerFormat = uimg::TextureInfo::ContainerFormat::DDS; // Cycles doesn't support KTX
 	if(tex->HasFlag(Texture::Flags::SRGB))
-		imgWriteInfo.flags |= ImageWriteInfo::Flags::SRGB;
+		imgWriteInfo.flags |= uimg::TextureInfo::Flags::SRGB;
 
 	// Try to determine appropriate formats
 	if(tex->HasFlag(Texture::Flags::NormalMap))
 	{
-		imgWriteInfo.flags |= ImageWriteInfo::Flags::NormalMap;
-		imgWriteInfo.inputFormat = ImageWriteInfo::InputFormat::R32G32B32A32_Float;
-		imgWriteInfo.outputFormat = ImageWriteInfo::OutputFormat::NormalMap;
+		imgWriteInfo.flags |= uimg::TextureInfo::Flags::NormalMap;
+		imgWriteInfo.inputFormat = uimg::TextureInfo::InputFormat::R32G32B32A32_Float;
+		imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::NormalMap;
 	}
 	else
 	{
 		auto format = img->GetFormat();
 		if(prosper::util::is_16bit_format(format))
 		{
-			imgWriteInfo.inputFormat = ImageWriteInfo::InputFormat::R16G16B16A16_Float;
-			imgWriteInfo.outputFormat = ImageWriteInfo::OutputFormat::HDRColorMap;
+			imgWriteInfo.inputFormat = uimg::TextureInfo::InputFormat::R16G16B16A16_Float;
+			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::HDRColorMap;
 		}
 		else if(prosper::util::is_32bit_format(format) || prosper::util::is_64bit_format(format))
 		{
-			imgWriteInfo.inputFormat = ImageWriteInfo::InputFormat::R32G32B32A32_Float;
-			imgWriteInfo.outputFormat = ImageWriteInfo::OutputFormat::HDRColorMap;
+			imgWriteInfo.inputFormat = uimg::TextureInfo::InputFormat::R32G32B32A32_Float;
+			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::HDRColorMap;
 		}
 		else
 		{
-			imgWriteInfo.inputFormat = ImageWriteInfo::InputFormat::R8G8B8A8_UInt;
+			imgWriteInfo.inputFormat = uimg::TextureInfo::InputFormat::R8G8B8A8_UInt;
 			// TODO: Check the alpha channel values to determine whether we actually need a full alpha channel?
-			imgWriteInfo.outputFormat = ImageWriteInfo::OutputFormat::ColorMapSmoothAlpha;
+			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::ColorMapSmoothAlpha;
 		}
 		switch(format)
 		{
@@ -402,33 +407,33 @@ static std::optional<std::string> prepare_texture(
 		case Anvil::Format::BC1_RGBA_UNORM_BLOCK:
 		case Anvil::Format::BC1_RGB_SRGB_BLOCK:
 		case Anvil::Format::BC1_RGB_UNORM_BLOCK:
-			imgWriteInfo.outputFormat = ImageWriteInfo::OutputFormat::BC1;
+			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::BC1;
 			break;
 		case Anvil::Format::BC2_SRGB_BLOCK:
 		case Anvil::Format::BC2_UNORM_BLOCK:
-			imgWriteInfo.outputFormat = ImageWriteInfo::OutputFormat::BC2;
+			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::BC2;
 			break;
 		case Anvil::Format::BC3_SRGB_BLOCK:
 		case Anvil::Format::BC3_UNORM_BLOCK:
-			imgWriteInfo.outputFormat = ImageWriteInfo::OutputFormat::BC3;
+			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::BC3;
 			break;
 		case Anvil::Format::BC4_SNORM_BLOCK:
 		case Anvil::Format::BC4_UNORM_BLOCK:
-			imgWriteInfo.outputFormat = ImageWriteInfo::OutputFormat::BC4;
+			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::BC4;
 			break;
 		case Anvil::Format::BC5_SNORM_BLOCK:
 		case Anvil::Format::BC5_UNORM_BLOCK:
-			imgWriteInfo.outputFormat = ImageWriteInfo::OutputFormat::BC5;
+			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::BC5;
 			break;
 		case Anvil::Format::BC6H_SFLOAT_BLOCK:
 		case Anvil::Format::BC6H_UFLOAT_BLOCK:
-			imgWriteInfo.inputFormat = ImageWriteInfo::InputFormat::R16G16B16A16_Float;
-			imgWriteInfo.outputFormat = ImageWriteInfo::OutputFormat::BC6;
+			imgWriteInfo.inputFormat = uimg::TextureInfo::InputFormat::R16G16B16A16_Float;
+			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::BC6;
 			break;
 		case Anvil::Format::BC7_SRGB_BLOCK:
 		case Anvil::Format::BC7_UNORM_BLOCK:
-			imgWriteInfo.inputFormat = ImageWriteInfo::InputFormat::R16G16B16A16_Float;
-			imgWriteInfo.outputFormat = ImageWriteInfo::OutputFormat::BC7;
+			imgWriteInfo.inputFormat = uimg::TextureInfo::InputFormat::R16G16B16A16_Float;
+			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::BC7;
 			break;
 		}
 	}
@@ -491,118 +496,45 @@ bool cycles::Scene::IsValidTexture(const std::string &filePath) const
 	return FileManager::Exists(filePath,fsys::SearchFlags::Local);
 }
 
-ccl::EnvironmentTextureNode *cycles::Scene::AssignEnvironmentTexture(Shader &shader,const std::string &texIdentifier,const std::string &texFilePath,ColorSpace colorSpace) const
+void cycles::Scene::AddRoughnessMapImageTextureNode(ShaderModuleRoughness &shader,Material &mat,float defaultRoughness) const
 {
-	auto *node = static_cast<ccl::EnvironmentTextureNode*>(**shader.AddNode("environment_texture",texIdentifier));
-	node->filename = texFilePath;
-	node->projection = ccl::NodeEnvironmentProjection::NODE_ENVIRONMENT_EQUIRECTANGULAR;
-	switch(colorSpace)
+	// If no roughness map is available, just use roughness or specular factor directly
+	auto roughnessFactor = defaultRoughness;
+	auto hasRoughnessFactor = mat.GetDataBlock()->GetFloat("roughness_factor",&roughnessFactor);
+
+	float specularFactor;
+	if(mat.GetDataBlock()->GetFloat("specular_factor",&specularFactor))
 	{
-	case ColorSpace::Raw:
-		node->colorspace = ccl::u_colorspace_raw;
-		break;
-	case ColorSpace::SRGB:
-		node->colorspace = ccl::u_colorspace_srgb;
-		break;
+		if(hasRoughnessFactor == false)
+			roughnessFactor = 1.f;
+		roughnessFactor *= (1.f -specularFactor);
 	}
-	return node;
-}
+	shader.SetRoughness(roughnessFactor);
 
-ccl::ImageTextureNode *cycles::Scene::AssignTexture(Shader &shader,const std::string &texIdentifier,const std::string &texFilePath,ColorSpace colorSpace) const
-{
-	auto *node = static_cast<ccl::ImageTextureNode*>(**shader.AddNode("image_texture",texIdentifier));
-	node->filename = texFilePath;
-	switch(colorSpace)
+	auto roughnessPath = prepare_texture(m_scene,mat.GetRoughnessMap(),PreparedTextureInputFlags::None);
+	if(roughnessPath.has_value() == false)
 	{
-	case ColorSpace::Raw:
-		node->colorspace = ccl::u_colorspace_raw;
-		break;
-	case ColorSpace::SRGB:
-		node->colorspace = ccl::u_colorspace_srgb;
-		break;
-	}
-	return node;
-}
-
-void cycles::Scene::LinkNormalMap(Shader &shader,Material &mat,const std::string &meshName,const std::string &toNodeName,const std::string &toSocketName)
-{
-	// Normal map
-	auto normalTexPath = prepare_texture(m_scene,mat.GetNormalMap(),PreparedTextureInputFlags::None);
-	if(normalTexPath.has_value() == false)
-		return;
-	auto *nodeImgNormal = AssignTexture(shader,"img_normal_map",*normalTexPath,ColorSpace::Raw);
-	if(nodeImgNormal == nullptr)
-		return;
-	auto *nodeNormalMap = static_cast<ccl::NormalMapNode*>(**shader.AddNode("normal_map","nmap"));
-	nodeNormalMap->space = ccl::NodeNormalMapSpace::NODE_NORMAL_MAP_TANGENT;
-	nodeNormalMap->attribute = meshName;
-
-	constexpr auto flipYAxis = false;
-	if(flipYAxis)
-	{
-		// We need to invert the y-axis for cycles, so we separate the rgb components, invert the g channel and put them back together
-		// Separate rgb components of input image
-		auto *nodeSeparate = static_cast<ccl::SeparateRGBNode*>(**shader.AddNode("separate_rgb","separate_normal"));
-		shader.Link("img_normal_map","color","separate_normal","color");
-
-		// Invert y-axis of normal
-		auto *nodeInvert = static_cast<ccl::MathNode*>(**shader.AddNode("math","invert_normal_y"));
-		nodeInvert->type = ccl::NodeMathType::NODE_MATH_SUBTRACT;
-		nodeInvert->value1 = 1.f;
-		shader.Link("separate_normal","g","invert_normal_y","value2");
-
-		// Re-combine rgb components
-		auto *nodeCombine = static_cast<ccl::CombineRGBNode*>(**shader.AddNode("combine_rgb","combine_normal"));
-		shader.Link("separate_normal","r","combine_normal","r");
-		shader.Link("invert_normal_y","value","combine_normal","g");
-		shader.Link("separate_normal","b","combine_normal","b");
-
-		shader.Link("combine_normal","image","nmap","color");
+		// No roughness map available; Attempt to use specular map instead
+		auto specularPath = prepare_texture(m_scene,mat.GetSpecularMap(),PreparedTextureInputFlags::None);
+		if(specularPath.has_value())
+			shader.SetSpecularMap(*specularPath);
 	}
 	else
-		shader.Link("img_normal_map","color","nmap","color");
-	shader.Link("nmap","normal",toNodeName,toSocketName);
+		shader.SetRoughnessMap(*roughnessPath);
 }
 
-void cycles::Scene::LinkAlbedoMap(
-	Shader &shader,Material &mat,const std::string &bsdfName,const std::string &diffuseTexPath,
-	bool envMap,const std::string &bsdfAttrName,bool useAlpha
-) const
+Material *cycles::Scene::GetMaterial(Model &mdl,ModelSubMesh &subMesh,uint32_t skinId) const
 {
-	auto hasAlbedoNode = envMap ?
-		(AssignEnvironmentTexture(shader,"albedo",diffuseTexPath) != nullptr) :
-		(AssignTexture(shader,"albedo",diffuseTexPath) != nullptr);
-	if(hasAlbedoNode == false)
-		return;
-	shader.Link("albedo","color",bsdfName,bsdfAttrName);
-	if(useAlpha && mat.IsTranslucent())
-		shader.Link("albedo","alpha",bsdfName,"alpha");
+	auto texIdx = mdl.GetMaterialIndex(subMesh,skinId);
+	return texIdx.has_value() ? mdl.GetMaterial(*texIdx) : nullptr;
 }
 
-ccl::ImageTextureNode *cycles::Scene::LinkRoughnessMap(Shader &shader,Material &mat,const std::string &bsdfName) const
-{
-	auto roughnessTexPath = prepare_texture(m_scene,mat.GetTextureInfo("roughness_map"),PreparedTextureInputFlags::None);
-	if(roughnessTexPath.has_value() == false)
-		return nullptr;
-	auto *nodeRoughness = AssignTexture(shader,"img_roughness_map",*roughnessTexPath,ColorSpace::Raw);
-	if(nodeRoughness == nullptr)
-		return nullptr;
-	// We only need one channel value, so we'll just grab the red channel
-	auto *nodeSeparate = static_cast<ccl::SeparateRGBNode*>(**shader.AddNode("separate_rgb","separate_roughness"));
-	shader.Link("img_roughness_map","color","separate_roughness","color");
-
-	// Use float as roughness value
-	shader.Link("separate_roughness","r",bsdfName,"roughness");
-	return nodeRoughness;
-}
-
-cycles::PShader cycles::Scene::CreateShader(Mesh &mesh,Model &mdl,ModelSubMesh &subMesh,uint32_t skinId)
+cycles::PShader cycles::Scene::CreateShader(BaseEntity &ent,Mesh &mesh,Model &mdl,ModelSubMesh &subMesh,uint32_t skinId)
 {
 	// Make sure all textures have finished loading
 	static_cast<CMaterialManager&>(client->GetMaterialManager()).GetTextureManager().WaitForTextures();
 
-	auto texIdx = mdl.GetMaterialIndex(subMesh,skinId);
-	auto *mat = texIdx.has_value() ? mdl.GetMaterial(*texIdx) : nullptr;
+	auto *mat = GetMaterial(mdl,subMesh,skinId);
 	TextureInfo *diffuseMap = nullptr;
 	if(mat != nullptr)
 	{
@@ -621,7 +553,7 @@ cycles::PShader cycles::Scene::CreateShader(Mesh &mesh,Model &mdl,ModelSubMesh &
 		Disney = 0u,
 		Toon
 	};
-	constexpr auto shaderType = ShaderType::Disney;
+	static auto shaderType = ShaderType::Disney;
 
 	// TODO: Only allow toon shader when baking diffuse lighting
 	const std::string bsdfName = "bsdf_scene";
@@ -630,144 +562,219 @@ cycles::PShader cycles::Scene::CreateShader(Mesh &mesh,Model &mdl,ModelSubMesh &
 	{
 		return nullptr;
 	}
-	mesh.SetAlbedoMap(*diffuseTexPath);
 	auto meshName = mesh.GetName();
-	auto shader = cycles::Shader::Create(*this,meshName +"_shader");
 
-	if(m_renderMode == RenderMode::SceneAlbedo)
+	/*if(true)
 	{
+		// TODO: Hair shader requires meshes with curves
+		auto nodeBsdf = shader->AddNode("principled_hair_bsdf",bsdfName);
+		auto *pNodeBsdf = static_cast<ccl::PrincipledHairBsdfNode*>(**nodeBsdf);
+
+		// Default settings (Taken from Blender)
+		pNodeBsdf->roughness = 0.3f;
+		pNodeBsdf->radial_roughness = 0.3f;
+		pNodeBsdf->coat = 100.f;
+		pNodeBsdf->ior = 1.55f;
+		pNodeBsdf->offset = 2.f;
+		pNodeBsdf->random_roughness = 0.f;
+
 		auto hasAlbedoNode = umath::is_flag_set(flags,PreparedTextureOutputFlags::Envmap) ?
 			(AssignEnvironmentTexture(*shader,"albedo",*diffuseTexPath) != nullptr) :
 			(AssignTexture(*shader,"albedo",*diffuseTexPath) != nullptr);
 		if(hasAlbedoNode)
 			shader->Link("albedo","color","output","surface");
+
+		// Roughness map
+		//LinkRoughnessMap(*shader,*mat,bsdfName);
+
+		// Normal map
+		//LinkNormalMap(*shader,*mat,meshName,bsdfName,"normal");
 		return shader;
+	}
+	*/
+
+	cycles::PShader resShader = nullptr;
+	if(m_renderMode == RenderMode::SceneAlbedo)
+	{
+		auto shader = cycles::Shader::Create<ShaderAlbedo>(*this,meshName +"_shader");
+		shader->SetMeshName(meshName);
+		shader->SetAlbedoMap(*diffuseTexPath);
+		shader->SetTransparent(*shader,mat->IsTranslucent());
+		resShader = shader;
 	}
 	else if(m_renderMode == RenderMode::SceneNormals)
 	{
-		auto *nodeGeo = static_cast<ccl::GeometryNode*>(**shader->AddNode("geometry","geometry_data"));
-		shader->Link("geometry_data","normal","output","surface");
-		return shader;
-	}
-	if(shaderType == ShaderType::Toon)
-	{
-		auto nodeBsdf = shader->AddNode("toon_bsdf",bsdfName);
-		auto *pNodeBsdf = static_cast<ccl::ToonBsdfNode*>(**nodeBsdf);
-
-		// Albedo map
-		LinkAlbedoMap(*shader,*mat,bsdfName,*diffuseTexPath,umath::is_flag_set(flags,PreparedTextureOutputFlags::Envmap),"color");
-
-		LinkNormalMap(*shader,*mat,meshName,bsdfName,"normal");
-	}
-	else if(ustring::compare(mat->GetShaderIdentifier(),"glass",false))
-	{
-		auto nodeBsdf = shader->AddNode("glass_bsdf",bsdfName);
-		auto *pNodeBsdf = static_cast<ccl::GlassBsdfNode*>(**nodeBsdf);
-
-		// Default settings (Taken from Blender)
-		pNodeBsdf->IOR = 1.45f;
-		pNodeBsdf->distribution = ccl::ClosureType::CLOSURE_BSDF_MICROFACET_BECKMANN_GLASS_ID;
-
-		// Albedo map
-		LinkAlbedoMap(*shader,*mat,bsdfName,*diffuseTexPath,umath::is_flag_set(flags,PreparedTextureOutputFlags::Envmap),"color",false);
-
-		// Normal map
-		LinkNormalMap(*shader,*mat,meshName,bsdfName,"normal");
-
-		// Roughness map
-		LinkRoughnessMap(*shader,*mat,bsdfName);
+		auto shader = cycles::Shader::Create<ShaderNormal>(*this,meshName +"_shader");
+		shader->SetMeshName(meshName);
+		shader->SetAlbedoMap(*diffuseTexPath);
+		shader->SetTransparent(*shader,mat->IsTranslucent());
+		auto normalTexPath = prepare_texture(m_scene,mat->GetNormalMap(),PreparedTextureInputFlags::None);
+		if(normalTexPath.has_value())
+			shader->SetNormalMap(*normalTexPath);
+		resShader = shader;
 	}
 	else
 	{
-		auto nodeBsdf = shader->AddNode("principled_bsdf",bsdfName);
-		auto *pNodeBsdf = static_cast<ccl::PrincipledBsdfNode*>(**nodeBsdf);
-		//if(m_renderMode == RenderMode::RenderImage || m_renderMode == RenderMode::BakeAmbientOcclusion)// || m_renderMode == RenderMode::BakeDiffuseLighting)
+		if(shaderType == ShaderType::Toon)
 		{
-			// Default settings (Taken from Blender)
-			pNodeBsdf->subsurface = 0.f;
-			pNodeBsdf->metallic = 0.f;
-			pNodeBsdf->specular = 0.5f;
-			pNodeBsdf->specular_tint = 0.f;
-			pNodeBsdf->roughness = 0.5f;
-			pNodeBsdf->anisotropic = 0.f;
-			pNodeBsdf->anisotropic_rotation = 0.f;
-			pNodeBsdf->sheen = 0.f;
-			pNodeBsdf->sheen_tint = 0.5f;
-			pNodeBsdf->clearcoat = 0.f;
-			pNodeBsdf->clearcoat_roughness = 0.03f;
-			pNodeBsdf->ior = 1.45f;
-			pNodeBsdf->transmission = 0.f;
-			pNodeBsdf->transmission_roughness = 0.f;
+			auto shader = cycles::Shader::Create<ShaderToon>(*this,meshName +"_shader");
+			shader->SetMeshName(meshName);
+			shader->SetAlbedoMap(*diffuseTexPath);
+			shader->SetTransparent(*shader,mat->IsTranslucent());
+			auto normalTexPath = prepare_texture(m_scene,mat->GetNormalMap(),PreparedTextureInputFlags::None);
+			if(normalTexPath.has_value())
+				shader->SetNormalMap(*normalTexPath);
+			resShader = shader;
+		}
+		else if(ustring::compare(mat->GetShaderIdentifier(),"glass",false))
+		{
+			auto shader = cycles::Shader::Create<ShaderGlass>(*this,meshName +"_shader");
+			shader->SetMeshName(meshName);
+			shader->SetAlbedoMap(*diffuseTexPath);
+			auto normalTexPath = prepare_texture(m_scene,mat->GetNormalMap(),PreparedTextureInputFlags::None);
+			if(normalTexPath.has_value())
+				shader->SetNormalMap(*normalTexPath);
+
+			// Roughness map
+			AddRoughnessMapImageTextureNode(*shader,*mat,0.f);
+
+			resShader = shader;
+		}
+		else
+		{
+			auto shader = cycles::Shader::Create<ShaderPBR>(*this,meshName +"_shader");
+			shader->SetMeshName(meshName);
+
+			auto data = mat->GetDataBlock();
+			float subsurface;
+			if(data->GetFloat("subsurface_multiplier",&subsurface))
+				shader->SetSubsurface(subsurface);
+
+			auto &dvSubsurfaceColor = data->GetValue("subsurface_color");
+			if(dvSubsurfaceColor != nullptr && typeid(*dvSubsurfaceColor) == typeid(ds::Color))
+			{
+				auto &color = static_cast<ds::Color&>(*dvSubsurfaceColor).GetValue();
+				shader->SetSubsurfaceColor(color.ToVector3());
+			}
+
+			const std::unordered_map<SurfaceMaterial::PBRInfo::SubsurfaceMethod,ccl::ClosureType> bssrdfToCclType = {
+				{SurfaceMaterial::PBRInfo::SubsurfaceMethod::Cubic,ccl::ClosureType::CLOSURE_BSSRDF_CUBIC_ID},
+				{SurfaceMaterial::PBRInfo::SubsurfaceMethod::Gaussian,ccl::ClosureType::CLOSURE_BSSRDF_GAUSSIAN_ID},
+				{SurfaceMaterial::PBRInfo::SubsurfaceMethod::Principled,ccl::ClosureType::CLOSURE_BSDF_BSSRDF_PRINCIPLED_ID},
+				{SurfaceMaterial::PBRInfo::SubsurfaceMethod::Burley,ccl::ClosureType::CLOSURE_BSSRDF_BURLEY_ID},
+				{SurfaceMaterial::PBRInfo::SubsurfaceMethod::RandomWalk,ccl::ClosureType::CLOSURE_BSSRDF_RANDOM_WALK_ID},
+				{SurfaceMaterial::PBRInfo::SubsurfaceMethod::PrincipledRandomWalk,ccl::ClosureType::CLOSURE_BSSRDF_PRINCIPLED_RANDOM_WALK_ID}
+			};
+
+			int32_t subsurfaceMethod;
+			if(mat->GetDataBlock()->GetInt("subsurface_method",&subsurfaceMethod))
+			{
+				auto it = bssrdfToCclType.find(static_cast<SurfaceMaterial::PBRInfo::SubsurfaceMethod>(subsurfaceMethod));
+				if(it != bssrdfToCclType.end())
+					subsurfaceMethod = it->second;
+			}
+
+			auto &dvSubsurfaceRadius = data->GetValue("subsurface_radius");
+			if(dvSubsurfaceRadius != nullptr && typeid(*dvSubsurfaceRadius) == typeid(ds::Vector))
+				shader->SetSubsurfaceRadius(static_cast<ds::Vector&>(*dvSubsurfaceRadius).GetValue());
+			//
 
 			// Note: We always need the albedo texture information for the translucency.
 			// Whether metalness/roughness/etc. affect baking in any way is unclear (probably not),
 			// but it also doesn't hurt to have them.
 
 			// Albedo map
-			LinkAlbedoMap(*shader,*mat,bsdfName,*diffuseTexPath,umath::is_flag_set(flags,PreparedTextureOutputFlags::Envmap),"base_color");
+			shader->SetAlbedoMap(*diffuseTexPath);
+			shader->SetTransparent(*shader,mat->IsTranslucent());
 
-			LinkNormalMap(*shader,*mat,meshName,bsdfName,"normal");
+			// Normal map
+			auto normalTexPath = prepare_texture(m_scene,mat->GetNormalMap(),PreparedTextureInputFlags::None);
+			if(normalTexPath)
+				shader->SetNormalMap(*normalTexPath);
 
 			// Metalness map
-			auto metalnessTexPath = prepare_texture(m_scene,mat->GetTextureInfo("metalness_map"),PreparedTextureInputFlags::None);
+			auto metalnessTexPath = prepare_texture(m_scene,mat->GetMetalnessMap(),PreparedTextureInputFlags::None);
 			if(metalnessTexPath)
-			{
-				auto *nodeMetalness = AssignTexture(*shader,"img_metalness_map",*metalnessTexPath,ColorSpace::Raw);
-				if(nodeMetalness)
-				{
-					// We only need one channel value, so we'll just grab the red channel
-					auto *nodeSeparate = static_cast<ccl::SeparateRGBNode*>(**shader->AddNode("separate_rgb","separate_metalness"));
-					shader->Link("img_metalness_map","color","separate_metalness","color");
+				shader->SetMetalnessMap(*metalnessTexPath);
 
-					float metalnessFactor;
-					if(mat->GetDataBlock()->GetFloat("metalness_factor",&metalnessFactor))
-					{
-						// Material has a metalness factor, which we need to multiply with the value from the metalness texture
-						auto *nodeMetalnessFactor = static_cast<ccl::MathNode*>(**shader->AddNode("math","mul_metalness_factor"));
-						nodeMetalnessFactor->type = ccl::NodeMathType::NODE_MATH_MULTIPLY;
-						nodeMetalnessFactor->value2 = metalnessFactor;
-						shader->Link("separate_metalness","r","mul_metalness_factor","Value1");
-						shader->Link("mul_metalness_factor","Value",bsdfName,"metallic");
-					}
-					else
-					{
-						// Use float as metallic value
-						shader->Link("separate_metalness","r",bsdfName,"metallic");
-					}
-				}
-			}
+			// If no metalness map is available, just use metalness factor directly
+			float metalnessFactor;
+			if(mat->GetDataBlock()->GetFloat("metalness_factor",&metalnessFactor))
+				shader->SetMetalnessFactor(metalnessFactor);
 
 			// Roughness map
-			LinkRoughnessMap(*shader,*mat,bsdfName);
+			AddRoughnessMapImageTextureNode(*shader,*mat,0.f);
 
 			// Emission map
 			auto emissionTexPath = prepare_texture(m_scene,mat->GetGlowMap(),PreparedTextureInputFlags::None);
 			if(emissionTexPath)
 			{
-				auto *nodeEmission = AssignTexture(*shader,"emission",*emissionTexPath);
-				if(nodeEmission)
-					shader->Link("emission","color",bsdfName,"emission");
+				shader->SetEmissionMap(*emissionTexPath);
+				if(data->GetBool("glow_alpha_only") == true)
+				{
+					shader->SetEmissionFromAlbedoAlpha(*shader,true);
+
+					// Glow intensity
+					auto glowBlendDiffuseScale = 1.f;
+					data->GetFloat("glow_blend_diffuse_scale",&glowBlendDiffuseScale);
+
+					auto glowScale = 1.f;
+					data->GetFloat("glow_scale",&glowScale);
+
+					auto glowIntensity = glowBlendDiffuseScale *glowScale +1.f; // +1 to match Pragma more closely
+					shader->SetEmissionFactor(glowIntensity);
+				}
 			}
 
 			// Wrinkle maps
 			auto wrinkleStretchMap = prepare_texture(m_scene,mat->GetTextureInfo(Material::WRINKLE_STRETCH_MAP_IDENTIFIER),PreparedTextureInputFlags::None);
 			if(wrinkleStretchMap)
-			{
-
-			}
+				shader->SetWrinkleStretchMap(*wrinkleStretchMap);
 
 			auto wrinkleCompressMap = prepare_texture(m_scene,mat->GetTextureInfo(Material::WRINKLE_COMPRESS_MAP_IDENTIFIER),PreparedTextureInputFlags::None);
 			if(wrinkleCompressMap)
-			{
-
-			}
+				shader->SetWrinkleCompressMap(*wrinkleCompressMap);
+			resShader = shader;
 		}
 	}
-	shader->Link(bsdfName,"bsdf","output","surface");
-	return shader;
+	if(resShader)
+	{
+		auto normalMapSpace = NormalMapNode::Space::Tangent;
+		if(mat && ustring::compare(mat->GetShaderIdentifier(),"eye",false))
+		{
+			normalMapSpace = NormalMapNode::Space::Object;
+
+			// Eye shader; We'll have to do some additional steps to get the proper UV coordinates.
+			auto eyeC = ent.GetComponent<CEyeComponent>();
+			uint32_t eyeballIndex;
+			if(eyeC.valid() && eyeC->FindEyeballIndex(subMesh.GetSkinTextureIndex(),eyeballIndex))
+			{
+				auto *eyeballData = eyeC->GetEyeballData(eyeballIndex);
+				auto *eyeball = mdl.GetEyeball(eyeballIndex);
+				if(eyeball && eyeballData)
+				{
+					Vector4 irisProjU,irisProjV;
+					if(eyeC->GetEyeballProjectionVectors(eyeballIndex,irisProjU,irisProjV))
+					{
+						auto dilationFactor = eyeballData->config.dilation;
+						auto maxDilationFactor = eyeball->maxDilationFactor;
+						auto irisUvRadius = eyeball->irisUvRadius;
+						auto uvHandler = std::make_shared<UVHandlerEye>(irisProjU,irisProjV,dilationFactor,maxDilationFactor,irisUvRadius);
+						resShader->SetUVHandler(Shader::TextureType::Albedo,uvHandler);
+						resShader->SetUVHandler(Shader::TextureType::Emission,uvHandler);
+					}
+				}
+			}
+		}
+
+		auto *normalModule = dynamic_cast<ShaderModuleNormal*>(resShader.get());
+		if(normalModule)
+			normalModule->SetNormalMapSpace(normalMapSpace);
+	}
+	return resShader;
 }
 
-void cycles::Scene::SetAOBakeTarget(Model &mdl,uint32_t matIndex)
+void cycles::Scene::SetAOBakeTarget(BaseEntity &ent,Model &mdl,uint32_t matIndex)
 {
 	std::vector<ModelSubMesh*> materialMeshes;
 	std::vector<ModelSubMesh*> envMeshes;
@@ -776,7 +783,7 @@ void cycles::Scene::SetAOBakeTarget(Model &mdl,uint32_t matIndex)
 	uint32_t numVertsEnv = 0;
 	uint32_t numTrisEnv = 0;
 
-	AddModel(mdl,"ao_mesh",0 /* skin */,nullptr,[matIndex,&materialMeshes,&envMeshes,&numVerts,&numTris,&numVertsEnv,&numTrisEnv,&mdl](ModelSubMesh &mesh) -> bool {
+	AddModel(ent,mdl,"ao_mesh",0 /* skin */,nullptr,nullptr,[matIndex,&materialMeshes,&envMeshes,&numVerts,&numTris,&numVertsEnv,&numTrisEnv,&mdl](ModelSubMesh &mesh) -> bool {
 		auto texIdx = mdl.GetMaterialIndex(mesh);
 		if(texIdx.has_value() && *texIdx == matIndex)
 		{
@@ -795,7 +802,7 @@ void cycles::Scene::SetAOBakeTarget(Model &mdl,uint32_t matIndex)
 	// This way we can map the uv coordinates to the ao output texture more easily.
 	auto mesh = Mesh::Create(*this,"ao_target",numVerts,numTris);
 	for(auto &matMesh : materialMeshes)
-		AddMesh(mdl,*mesh,*matMesh);
+		AddMesh(ent,mdl,*mesh,*matMesh);
 	auto o = Object::Create(*this,*mesh);
 	m_bakeTarget = o;
 
@@ -809,9 +816,11 @@ void cycles::Scene::SetAOBakeTarget(Model &mdl,uint32_t matIndex)
 	// The reason for this is currently unknown.
 	auto meshEnv = Mesh::Create(*this,"ao_mesh",numVertsEnv,numTrisEnv);
 	for(auto *subMesh : envMeshes)
-		AddMesh(mdl,*meshEnv,*subMesh);
+		AddMesh(ent,mdl,*meshEnv,*subMesh);
 	Object::Create(*this,*meshEnv);
 }
+
+void cycles::Scene::AddShader(CCLShader &shader) {m_cclShaders.push_back(shader.shared_from_this());}
 
 void cycles::Scene::SetLightmapBakeTarget(BaseEntity &ent)
 {
@@ -858,12 +867,13 @@ void cycles::Scene::SetLightmapBakeTarget(BaseEntity &ent)
 	m_bakeTarget = o;
 }
 
-void cycles::Scene::AddMesh(Model &mdl,Mesh &mesh,ModelSubMesh &mdlMesh,pragma::CAnimatedComponent *optAnimC,uint32_t skinId)
+void cycles::Scene::AddMesh(BaseEntity &ent,Model &mdl,Mesh &mesh,ModelSubMesh &mdlMesh,pragma::CAnimatedComponent *optAnimC,uint32_t skinId)
 {
-	auto shader = CreateShader(mesh,mdl,mdlMesh,skinId);
+	auto shader = CreateShader(ent,mesh,mdl,mdlMesh,skinId);
 	if(shader == nullptr)
 		return;
-	auto shaderIdx = mesh.AddShader(*shader);
+	auto *mat = GetMaterial(mdl,mdlMesh,skinId);
+	auto shaderIdx = mesh.AddSubMeshShader(*shader);
 	auto triIndexVertexOffset = mesh.GetVertexOffset();
 	auto &verts = mdlMesh.GetVertices();
 	for(auto vertIdx=decltype(verts.size()){0u};vertIdx<verts.size();++vertIdx)
@@ -905,7 +915,10 @@ void cycles::Scene::AddMesh(Model &mdl,Mesh &mesh,ModelSubMesh &mdlMesh,pragma::
 		mesh.AddTriangle(triIndexVertexOffset +tris.at(i),triIndexVertexOffset +tris.at(i +1),triIndexVertexOffset +tris.at(i +2),shaderIdx);
 }
 
-cycles::PMesh cycles::Scene::AddModel(Model &mdl,const std::string &meshName,uint32_t skinId,pragma::CAnimatedComponent *optAnimC,const std::function<bool(ModelSubMesh&)> &optMeshFilter)
+cycles::PMesh cycles::Scene::AddModel(
+	BaseEntity &ent,Model &mdl,const std::string &meshName,uint32_t skinId,pragma::CAnimatedComponent *optAnimC,
+	const std::function<bool(ModelMesh&)> &optMeshFilter,const std::function<bool(ModelSubMesh&)> &optSubMeshFilter
+)
 {
 	std::vector<std::shared_ptr<ModelMesh>> lodMeshes {};
 	std::vector<uint32_t> bodyGroups {};
@@ -918,9 +931,11 @@ cycles::PMesh cycles::Scene::AddModel(Model &mdl,const std::string &meshName,uin
 	uint64_t numTris = 0ull;
 	for(auto &lodMesh : lodMeshes)
 	{
+		if(optMeshFilter != nullptr && optMeshFilter(*lodMesh) == false)
+			continue;
 		for(auto &subMesh : lodMesh->GetSubMeshes())
 		{
-			if(subMesh->GetGeometryType() != ModelSubMesh::GeometryType::Triangles || (optMeshFilter != nullptr && optMeshFilter(*subMesh) == false))
+			if(subMesh->GetGeometryType() != ModelSubMesh::GeometryType::Triangles || (optSubMeshFilter != nullptr && optSubMeshFilter(*subMesh) == false))
 				continue;
 			targetMeshes.push_back(subMesh.get());
 			numVerts += subMesh->GetVertexCount();
@@ -935,7 +950,7 @@ cycles::PMesh cycles::Scene::AddModel(Model &mdl,const std::string &meshName,uin
 	// TODO: If multiple entities are using same model, CACHE the mesh(es)! (Unless they're animated)
 	auto mesh = Mesh::Create(*this,meshName,numVerts,numTris);
 	for(auto *subMesh : targetMeshes)
-		AddMesh(mdl,*mesh,*subMesh,optAnimC,skinId);
+		AddMesh(ent,mdl,*mesh,*subMesh,optAnimC,skinId);
 	return mesh;
 }
 
@@ -952,33 +967,22 @@ void cycles::Scene::AddSkybox(const std::string &texture)
 		return;
 
 	// Setup the skybox as a background shader
-	auto shader = cycles::Shader::Create(*this,*m_scene.default_background);
-	auto nodeBgShader = shader->AddNode("background_shader","bg_sky");
+	auto shader = cycles::Shader::Create<ShaderGeneric>(*this,"background");
+	auto cclShader = shader->GenerateCCLShader(*m_scene.default_background);
+	auto nodeBg = cclShader->AddBackgroundNode();
+	nodeBg.SetStrength(m_skyStrength);
 
-	auto *node = static_cast<ccl::EnvironmentTextureNode*>(**shader->AddNode("environment_texture","sky_color"));
-	node->filename = absPath;
-	node->projection = ccl::NodeEnvironmentProjection::NODE_ENVIRONMENT_EQUIRECTANGULAR;
-	node->colorspace = ccl::u_colorspace_srgb;
+	auto nodeTex = cclShader->AddEnvironmentTextureNode(absPath);
+	cclShader->Link(nodeTex,nodeBg.inColor);
+	cclShader->Link(nodeBg,cclShader->GetOutputNode().inSurface);
 
-	nodeBgShader->SetInputArgument<float>("strength",m_skyStrength);
+	auto nodeTexCoord = cclShader->AddTextureCoordinateNode();
+	auto nodeMapping = cclShader->AddMappingNode();
+	nodeMapping.SetType(MappingNode::Type::Point);
+	nodeMapping.SetRotation(m_skyAngles);
+	cclShader->Link(nodeTexCoord.outGenerated,nodeMapping.inVector);
 
-	shader->Link("sky_color","color","bg_sky","color");
-	shader->Link("bg_sky","background","output","surface");
-
-	auto *nodeTexCoord = static_cast<ccl::TextureCoordinateNode*>(**shader->AddNode("texture_coordinate","sky_tex_coord"));
-	auto *nodeMapping = static_cast<ccl::MappingNode*>(**shader->AddNode("mapping","sky_tex_coord_mapping"));
-	
-	auto skyAngles = m_skyAngles;
-	skyAngles.p -= 90.f;
-	nodeMapping->tex_mapping.rotation = {
-		static_cast<float>(umath::deg_to_rad(-skyAngles.p)),
-		static_cast<float>(umath::deg_to_rad(skyAngles.r)),
-		static_cast<float>(umath::deg_to_rad(-skyAngles.y))
-	};
-	nodeMapping->tex_mapping.type = ccl::TextureMapping::POINT;
-	shader->Link("sky_tex_coord","generated","sky_tex_coord_mapping","vector");
-
-	shader->Link("sky_tex_coord_mapping","vector","sky_color","vector");
+	cclShader->Link(nodeMapping.outVector,nodeTex.inVector);
 
 	// Add the light source for the background
 	auto *light = new ccl::Light{}; // Object will be removed automatically by cycles
@@ -994,7 +998,10 @@ void cycles::Scene::AddSkybox(const std::string &texture)
 	light->tag_update(&m_scene);
 }
 
-cycles::PObject cycles::Scene::AddEntity(BaseEntity &ent,std::vector<ModelSubMesh*> *optOutTargetMeshes)
+cycles::PObject cycles::Scene::AddEntity(
+	BaseEntity &ent,std::vector<ModelSubMesh*> *optOutTargetMeshes,
+	const std::function<bool(ModelMesh&)> &meshFilter,const std::function<bool(ModelSubMesh&)> &subMeshFilter
+)
 {
 #if 0
 	if(m_renderMode == RenderMode::BakeDiffuseLighting && ent.IsWorld() == false)
@@ -1016,7 +1023,9 @@ cycles::PObject cycles::Scene::AddEntity(BaseEntity &ent,std::vector<ModelSubMes
 	auto skyC = ent.GetComponent<CSkyboxComponent>();
 	if(skyC.valid())
 	{
-		AddModel(*mdl,name,ent.GetSkin(),animC.get(),[&targetMeshes](ModelSubMesh &mesh) -> bool {
+		AddModel(ent,*mdl,name,ent.GetSkin(),animC.get(),meshFilter,[&targetMeshes,&subMeshFilter](ModelSubMesh &mesh) -> bool {
+			if(subMeshFilter && subMeshFilter(mesh) == false)
+				return false;
 			targetMeshes->push_back(&mesh);
 			return false;
 		});
@@ -1042,7 +1051,9 @@ cycles::PObject cycles::Scene::AddEntity(BaseEntity &ent,std::vector<ModelSubMes
 		return nullptr;
 	}
 
-	auto mesh = AddModel(*mdl,name,ent.GetSkin(),animC.get(),[&targetMeshes](ModelSubMesh &mesh) -> bool {
+	auto mesh = AddModel(ent,*mdl,name,ent.GetSkin(),animC.get(),meshFilter,[&targetMeshes,&subMeshFilter](ModelSubMesh &mesh) -> bool {
+		if(subMeshFilter && subMeshFilter(mesh) == false)
+			return false;
 		targetMeshes->push_back(&mesh);
 		return true;
 	});
@@ -1106,7 +1117,7 @@ static void shrink_area_to_fit(const float *inOutImgData,uint32_t imgWidth,uint3
 		--w;
 }
 
-void cycles::Scene::DenoiseHDRImageArea(util::ImageBuffer &imgBuffer,uint32_t imgWidth,uint32_t imgHeight,uint32_t xOffset,uint32_t yOffset,uint32_t w,uint32_t h) const
+void cycles::Scene::DenoiseHDRImageArea(uimg::ImageBuffer &imgBuffer,uint32_t imgWidth,uint32_t imgHeight,uint32_t xOffset,uint32_t yOffset,uint32_t w,uint32_t h) const
 {
 	// In some cases the borders may not contain any image data (i.e. fully transparent) if the pixels are not actually
 	// being used by any geometry. Since the denoiser does not know transparency, we have to shrink the image area to exclude the
@@ -1287,8 +1298,6 @@ static void apply_default_settings(
 	switch(renderMode)
 	{
 	case cycles::Scene::RenderMode::SceneNormals:
-		ccl::Pass::add(ccl::PassType::PASS_NORMAL,passes);
-		break;
 	case cycles::Scene::RenderMode::SceneAlbedo:
 		ccl::Pass::add(ccl::PassType::PASS_DIFFUSE_COLOR,passes);
 		break;
@@ -1398,7 +1407,7 @@ ccl::BufferParams cycles::Scene::GetBufferParameters() const
 	return bufferParams;
 }
 
-void cycles::Scene::InitializeAlbedoPass()
+void cycles::Scene::InitializeAlbedoPass(bool reloadShaders)
 {
 	auto bufferParams = GetBufferParameters();
 	uint32_t sampleCount = 1;
@@ -1407,63 +1416,118 @@ void cycles::Scene::InitializeAlbedoPass()
 
 	m_scene.lights.clear();
 
-	int i = 1;
+	if(reloadShaders == false)
+		return;
+	// Note: For denoising the scene has to be rendered three times:
+	// 1) With lighting
+	// 2) Albedo colors only
+	// 3) Normals only
+	// However, Cycles doesn't allow rendering to multiple outputs at once, so we
+	// need three separate render passes. For the additional render passes
+	// we have to replace the shaders, which is also impossible to do with Cycles.
+	// Instead, we have to create an additional set of shaders for each object and
+	// re-assign the shader indices of the mesh.
 	for(auto &o : m_objects)
 	{
 		auto &mesh = o->GetMesh();
-		auto &albedoTex = mesh.GetAlbedoMap();
-		if(albedoTex.empty())
-			continue;
-		auto shader = cycles::Shader::Create(*this,"shader_albedo" +std::to_string(i++));
-		auto *nodeGeo = static_cast<ccl::ColorNode*>(**shader->AddNode("color","geometry_data"));
-		AssignTexture(*shader,"albedo",albedoTex);
-		shader->Link("albedo","color","output","surface");
-		shader->Finalize();
-
-		auto shaderIndex = mesh.AddShader(*shader);
-		for(auto i=decltype(mesh->shader.size()){0};i<mesh->shader.size();++i)
+		auto &subMeshShaders = mesh.GetSubMeshShaders();
+		auto numShaders = subMeshShaders.size();
+		auto shaderOffset = mesh->used_shaders.size();
+		mesh->used_shaders.resize(mesh->used_shaders.size() +numShaders);
+		for(auto i=decltype(numShaders){0u};i<numShaders;++i)
 		{
-			mesh->shader[i] = shaderIndex;
-			mesh->tag_update(&m_scene,true);
+			auto &shader = subMeshShaders.at(i);
+			auto *albedoModule = dynamic_cast<ShaderModuleAlbedo*>(shader.get());
+			if(albedoModule == nullptr)
+				continue;
+			auto &albedoMap = albedoModule->GetAlbedoMap();
+			if(albedoMap.has_value() == false)
+				continue;
+			auto albedoShader = Shader::Create<ShaderAlbedo>(*this,mesh.GetName() +"_albedo");
+			albedoShader->SetUVHandlers(shader->GetUVHandlers());
+			albedoShader->SetTransparent(*albedoShader,shader->HasFlag(Shader::Flags::Transparent));
+			albedoShader->SetAlbedoMap(*albedoMap);
+
+			auto cclShader = albedoShader->GenerateCCLShader();
+			cclShader->Finalize();
+
+			mesh->used_shaders[i +shaderOffset] = **cclShader;
 		}
-		(*shader)->tag_update(&m_scene);
+		for(auto i=decltype(mesh->shader.size()){0};i<mesh->shader.size();++i)
+			mesh->shader[i] += numShaders;
+		mesh->tag_update(&m_scene,false);
 	}
 }
 
-void cycles::Scene::InitializeNormalPass()
+void cycles::Scene::InitializeNormalPass(bool reloadShaders)
 {
+	// Also see cycles::Scene::CreateShader
 	auto bufferParams = GetBufferParameters();
 	uint32_t sampleCount = 1;
 	m_session->params.samples = sampleCount;
 	m_session->reset(bufferParams,sampleCount); // We only need the normals and albedo colors for the first sample
 
-	auto shaderNormals = cycles::Shader::Create(*this,"shader_normals");
-	auto *nodeGeo = static_cast<ccl::GeometryNode*>(**shaderNormals->AddNode("geometry","geometry_data"));
-	shaderNormals->Link("geometry_data","normal","output","surface");
-	shaderNormals->Finalize();
+	// Disable the sky (by making it black)
+	auto shader = cycles::Shader::Create<ShaderGeneric>(*this,"clear_sky");
+	auto cclShader = shader->GenerateCCLShader();
 
-	auto shaderSky = cycles::Shader::Create(*this,"clear_sky");
-	auto *nodeColor = static_cast<ccl::ColorNode*>(**shaderSky->AddNode("color","sky_color"));
-	nodeColor->value = {0.f,0.f,0.f};
-	shaderSky->Link("sky_color","color","output","surface");
-	shaderSky->Finalize();
-	m_scene.default_background = **shaderSky;
-	(*shaderSky)->tag_update(&m_scene);
+	auto nodeColor = cclShader->AddColorNode();
+	nodeColor.SetColor({0.f,0.f,0.f});
+	cclShader->Link(nodeColor.outColor,cclShader->GetOutputNode().inSurface);
+	cclShader->Finalize();
+	m_scene.default_background = **cclShader;
+	(*cclShader)->tag_update(&m_scene);
 
+	if(reloadShaders == false)
+		return;
+	// Note: For denoising the scene has to be rendered three times:
+	// 1) With lighting
+	// 2) Albedo colors only
+	// 3) Normals only
+	// However, Cycles doesn't allow rendering to multiple outputs at once, so we
+	// need three separate render passes. For the additional render passes
+	// we have to replace the shaders, which is also impossible to do with Cycles.
+	// Instead, we have to create an additional set of shaders for each object and
+	// re-assign the shader indices of the mesh.
 	for(auto &o : m_objects)
 	{
 		auto &mesh = o->GetMesh();
-		auto shaderIndex = mesh.AddShader(*shaderNormals);
-		for(auto i=decltype(mesh->shader.size()){0};i<mesh->shader.size();++i)
+		auto &subMeshShaders = mesh.GetSubMeshShaders();
+		auto numShaders = subMeshShaders.size();
+		auto shaderOffset = mesh->used_shaders.size();
+		mesh->used_shaders.resize(mesh->used_shaders.size() +numShaders);
+		for(auto i=decltype(numShaders){0u};i<numShaders;++i)
 		{
-			mesh->shader[i] = shaderIndex;
-			mesh->tag_update(&m_scene,true);
+			auto &shader = subMeshShaders.at(i);
+			auto *normalModule = dynamic_cast<ShaderModuleNormal*>(shader.get());
+			if(normalModule == nullptr)
+				continue;
+			auto &albedoMap = normalModule->GetAlbedoMap();
+			auto &normalMap = normalModule->GetNormalMap();
+
+			auto normalShader = Shader::Create<ShaderNormal>(*this,mesh.GetName() +"_normal");
+			normalShader->SetUVHandlers(shader->GetUVHandlers());
+			normalShader->SetTransparent(*normalShader,shader->HasFlag(Shader::Flags::Transparent));
+			if(albedoMap.has_value())
+				normalShader->SetAlbedoMap(*albedoMap);
+			if(normalMap.has_value())
+			{
+				normalShader->SetNormalMap(*normalMap);
+				normalShader->SetNormalMapSpace(normalModule->GetNormalMapSpace());
+			}
+
+			auto cclShader = normalShader->GenerateCCLShader();
+			cclShader->Finalize();
+
+			mesh->used_shaders[i +shaderOffset] = **cclShader;
 		}
+		for(auto i=decltype(mesh->shader.size()){0};i<mesh->shader.size();++i)
+			mesh->shader[i] += numShaders;
+		mesh->tag_update(&m_scene,false);
 	}
-	(*shaderNormals)->tag_update(&m_scene);
 }
 
-util::ParallelJob<std::shared_ptr<util::ImageBuffer>> cycles::Scene::Finalize()
+util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> cycles::Scene::Finalize()
 {
 	if(m_sky.empty() == false)
 		AddSkybox(m_sky);
@@ -1482,6 +1546,8 @@ util::ParallelJob<std::shared_ptr<util::ImageBuffer>> cycles::Scene::Finalize()
 		o->Finalize();
 	for(auto &shader : m_shaders)
 		shader->Finalize();
+	for(auto &cclShader : m_cclShaders)
+		cclShader->Finalize();
 
 	enum class RenderProcessResult : uint8_t
 	{
@@ -1535,7 +1601,7 @@ util::ParallelJob<std::shared_ptr<util::ImageBuffer>> cycles::Scene::Finalize()
 				// Render albedo colors (required for denoising)
 				m_renderMode = RenderMode::SceneAlbedo;
 
-				InitializeAlbedoPass();
+				InitializeAlbedoPass(true);
 
 				m_session->start();
 				worker.AddThread([this,&worker,fRenderThread]() {
@@ -1547,7 +1613,7 @@ util::ParallelJob<std::shared_ptr<util::ImageBuffer>> cycles::Scene::Finalize()
 						// Render albedo colors (required for denoising)
 						m_renderMode = RenderMode::SceneNormals;
 
-						InitializeNormalPass();
+						InitializeNormalPass(true);
 
 						m_session->start();
 						worker.AddThread([this,&worker,fRenderThread]() {
@@ -1562,9 +1628,18 @@ util::ParallelJob<std::shared_ptr<util::ImageBuffer>> cycles::Scene::Finalize()
 								denoiseInfo.width = m_resultImageBuffer->GetWidth();
 								denoiseInfo.height = m_resultImageBuffer->GetHeight();
 
-								Denoise(denoiseInfo,*m_resultImageBuffer,m_albedoImageBuffer.get(),m_normalImageBuffer.get(),[this,&worker](float progress) -> bool {
-									return !worker.IsCancelled();
-								});
+								static auto dbgAlbedo = false;
+								static auto dbgNormals = false;
+								if(dbgAlbedo)
+									m_resultImageBuffer = m_albedoImageBuffer;
+								else if(dbgNormals)
+									m_resultImageBuffer = m_normalImageBuffer;
+								else
+								{
+									Denoise(denoiseInfo,*m_resultImageBuffer,m_albedoImageBuffer.get(),m_normalImageBuffer.get(),[this,&worker](float progress) -> bool {
+										return !worker.IsCancelled();
+									});
+								}
 								CloseCyclesScene();
 								return RenderProcessResult::Complete; // End of the line
 							});
@@ -1582,9 +1657,9 @@ util::ParallelJob<std::shared_ptr<util::ImageBuffer>> cycles::Scene::Finalize()
 	else if(m_renderMode == RenderMode::SceneAlbedo || m_renderMode == RenderMode::SceneNormals)
 	{
 		if(m_renderMode == RenderMode::SceneAlbedo)
-			InitializeAlbedoPass();
+			InitializeAlbedoPass(false);
 		else
-			InitializeNormalPass();
+			InitializeNormalPass(false);
 		m_session->start();
 
 		worker.AddThread([this,&worker,fRenderThread]() {
@@ -1684,7 +1759,7 @@ util::ParallelJob<std::shared_ptr<util::ImageBuffer>> cycles::Scene::Finalize()
 		m_session->reset(const_cast<ccl::BufferParams&>(bufferParams), m_session->params.samples);
 		m_session->update_scene();
 
-		auto imgBuffer = util::ImageBuffer::Create(imgWidth,imgHeight,util::ImageBuffer::Format::RGBA_FLOAT);
+		auto imgBuffer = uimg::ImageBuffer::Create(imgWidth,imgHeight,uimg::ImageBuffer::Format::RGBA_FLOAT);
 		auto r = m_scene.bake_manager->bake(m_scene.device,&m_scene.dscene,&m_scene,m_session->progress,shaderType,bake_pass_filter,bake_data,static_cast<float*>(imgBuffer->GetData()));
 		if(r == false)
 		{
@@ -1697,8 +1772,11 @@ util::ParallelJob<std::shared_ptr<util::ImageBuffer>> cycles::Scene::Finalize()
 
 		worker.UpdateProgress(0.95f);
 
+		if(worker.IsCancelled())
+			return;
+
 		worker.SetResultMessage("Baking margin...");
-		// Note: Margin has to be baked before denoising!
+
 		baking::ImBuf ibuf {};
 		ibuf.x = imgWidth;
 		ibuf.y = imgHeight;
@@ -1759,6 +1837,7 @@ util::ParallelJob<std::shared_ptr<util::ImageBuffer>> cycles::Scene::Finalize()
 				worker.SetResultMessage("Baking margin...");
 				DenoiseInfo denoiseInfo {};
 				denoiseInfo.hdr = true;
+				denoiseInfo.lightmap = bakeLightmaps;
 				denoiseInfo.width = imgWidth;
 				denoiseInfo.height = imgHeight;
 				Denoise(denoiseInfo,*imgBuffer,nullptr,nullptr,[this,&worker](float progress) -> bool {
@@ -1771,24 +1850,46 @@ util::ParallelJob<std::shared_ptr<util::ImageBuffer>> cycles::Scene::Finalize()
 		if(worker.IsCancelled())
 			return;
 
+		ApplyPostProcessing(*imgBuffer,m_renderMode);
+
+		if(worker.IsCancelled())
+			return;
+
 		if(umath::is_flag_set(m_stateFlags,StateFlags::OutputResultWithHDRColors) == false)
 		{
 			// Convert baked data to rgba8
-			auto imgBufLDR = imgBuffer->Copy(util::ImageBuffer::Format::RGBA_LDR);
-			auto numChannels = umath::to_integral(util::ImageBuffer::Channel::Count);
-			for(auto &pxView : *imgBufLDR)
+			auto imgBufLDR = imgBuffer->Copy(uimg::ImageBuffer::Format::RGBA_LDR);
+			auto numChannels = umath::to_integral(uimg::ImageBuffer::Channel::Count);
+			auto itSrc = imgBuffer->begin();
+			for(auto &pxViewDst : *imgBufLDR)
 			{
+				auto &pxViewSrc = *itSrc;
 				for(auto i=decltype(numChannels){0u};i<numChannels;++i)
-					pxView.SetValue(static_cast<util::ImageBuffer::Channel>(i),baking::unit_float_to_uchar_clamp(pxView.GetFloatValue(static_cast<util::ImageBuffer::Channel>(i))));
+					pxViewDst.SetValue(static_cast<uimg::ImageBuffer::Channel>(i),baking::unit_float_to_uchar_clamp(pxViewSrc.GetFloatValue(static_cast<uimg::ImageBuffer::Channel>(i))));
+				++itSrc;
 			}
 			imgBuffer = imgBufLDR;
+		}
+		else
+		{
+			// Image data is float data, but we only need 16 bits for our purposes
+			auto imgBufHDR = imgBuffer->Copy(uimg::ImageBuffer::Format::RGBA_HDR);
+			auto numChannels = umath::to_integral(uimg::ImageBuffer::Channel::Count);
+			auto itSrc = imgBuffer->begin();
+			for(auto &pxViewDst : *imgBufHDR)
+			{
+				auto &pxViewSrc = *itSrc;
+				for(auto i=decltype(numChannels){0u};i<numChannels;++i)
+					pxViewDst.SetValue(static_cast<uimg::ImageBuffer::Channel>(i),static_cast<uint16_t>(umath::float32_to_float16_glm(pxViewSrc.GetFloatValue(static_cast<uimg::ImageBuffer::Channel>(i)))));
+				++itSrc;
+			}
+			imgBuffer = imgBufHDR;
 		}
 
 		if(worker.IsCancelled())
 			return;
 
 		m_resultImageBuffer = imgBuffer;
-		ApplyPostProcessing(*imgBuffer,m_renderMode);
 		// m_session->params.write_render_cb(static_cast<ccl::uchar*>(imgBuffer->GetData()),imgWidth,imgHeight,4 /* channels */);
 		m_session->params.write_render_cb = nullptr; // Make sure it's not called on destruction
 		worker.SetStatus(util::JobStatus::Successful,"Baking has been completed successfully!");
