@@ -8,11 +8,13 @@
 #include <vector>
 #include <optional>
 #include <mathutil/umath.h>
+#include <sharedutils/util_event_reply.hpp>
 
 namespace ccl
 {
 	class Scene; class Shader; class ShaderGraph; class ShaderNode; class ShaderInput; class ShaderOutput;
 	enum NodeMathType : int32_t;
+	enum AttributeStandard : int32_t;
 };
 namespace pragma::modules::cycles
 {
@@ -119,12 +121,14 @@ namespace pragma::modules::cycles
 		GeometryNode AddGeometryNode();
 		NormalMapNode AddNormalMapNode();
 		MixClosureNode AddMixClosureNode();
-		MixNode AddMixNode(const Socket &socketColor1,const Socket &socketColor2,MixNode::Type type=MixNode::Type::Mix,float fac=0.5f);
+		MixNode AddMixNode(const Socket &socketColor1,const Socket &socketColor2,MixNode::Type type=MixNode::Type::Mix,const std::optional<const NumberSocket> &fac={});
 		BackgroundNode AddBackgroundNode();
 		TextureCoordinateNode AddTextureCoordinateNode();
 		MappingNode AddMappingNode();
 		ColorNode AddColorNode();
+		AttributeNode AddAttributeNode(ccl::AttributeStandard attrType);
 		EmissionNode AddEmissionNode();
+		NumberSocket AddVertexAlphaNode();
 
 		PrincipledBSDFNode AddPrincipledBSDFNode();
 		ToonBSDFNode AddToonBSDFNode();
@@ -171,21 +175,44 @@ namespace pragma::modules::cycles
 		ccl::ShaderNode &m_shaderNode;
 	};
 
+	class ShaderAlbedoSet
+	{
+	public:
+		virtual ~ShaderAlbedoSet()=default;
+		void SetAlbedoMap(const std::string &albedoMap);
+		const std::optional<std::string> &GetAlbedoMap() const;
+		const std::optional<ImageTextureNode> &GetAlbedoNode() const;
+
+		std::optional<ImageTextureNode> AddAlbedoMap(CCLShader &shader);
+	private:
+		std::optional<std::string> m_albedoMap;
+		std::optional<ImageTextureNode> m_albedoNode = {};
+	};
+
 	class ShaderModuleAlbedo
 	{
 	public:
 		virtual ~ShaderModuleAlbedo()=default;
-		void SetTransparent(Shader &shader,bool transparent);
-		void SetEmissionFromAlbedoAlpha(Shader &shader,bool b);
-		void SetAlbedoMap(const std::string &albedoMap);
-		const std::optional<std::string> &GetAlbedoMap() const;
 
-		std::optional<ImageTextureNode> AddAlbedoMap(CCLShader &shader);
-		void LinkAlbedo(const Socket &color,const NumberSocket &alpha);
+		void SetEmissionFromAlbedoAlpha(Shader &shader,bool b);
+		void SetTransparent(Shader &shader,bool transparent);
+
+		const ShaderAlbedoSet &GetAlbedoSet() const;
+		ShaderAlbedoSet &GetAlbedoSet();
+
+		const ShaderAlbedoSet &GetAlbedoSet2() const;
+		ShaderAlbedoSet &GetAlbedoSet2();
+
+		void SetUseVertexAlphasForBlending(bool useAlphasForBlending);
+		bool ShouldUseVertexAlphasForBlending() const;
+
+		void LinkAlbedo(const Socket &color,const NumberSocket &alpha,bool useAlphaIfFlagSet=true);
 		void LinkAlbedoToBSDF(const Socket &bsdf);
 	private:
-		std::optional<std::string> m_albedoMap;
-		std::optional<ImageTextureNode> m_albedoNode = {};
+		bool SetupAlbedoNodes(CCLShader &shader,Socket &outColor,NumberSocket &outAlpha);
+		ShaderAlbedoSet m_albedoSet = {};
+		ShaderAlbedoSet m_albedoSet2 = {};
+		bool m_useVertexAlphasForBlending = false;
 	};
 
 	class ShaderModuleNormal
@@ -229,7 +256,7 @@ namespace pragma::modules::cycles
 		void SetRoughnessMap(const std::string &roughnessMap);
 		void SetSpecularMap(const std::string &specularMap);
 
-		void SetRoughness(float roughness);
+		void SetRoughnessFactor(float roughness);
 
 		std::optional<NumberSocket> AddRoughnessMap(CCLShader &shader);
 		void LinkRoughness(const NumberSocket &roughness);
@@ -239,7 +266,6 @@ namespace pragma::modules::cycles
 
 		std::optional<NumberSocket> m_roughnessSocket = {};
 		std::optional<float> m_roughnessFactor = {};
-		float m_roughness = 0.5f;
 	};
 
 	class ShaderModuleEmission
@@ -342,6 +368,7 @@ namespace pragma::modules::cycles
 		void SetSubsurfaceRadius(const Vector3 &radius);
 	protected:
 		virtual bool InitializeCCLShader(CCLShader &cclShader) override;
+		virtual util::EventReply InitializeTransparency(CCLShader &cclShader,ImageTextureNode &albedoNode,const NumberSocket &alphaSocket) const;
 		using Shader::Shader;
 	private:
 		std::optional<std::string> m_wrinkleStretchMap;
@@ -366,6 +393,18 @@ namespace pragma::modules::cycles
 		Vector3 m_subsurfaceColor = {1.f,1.f,1.f};
 		PrincipledBSDFNode::SubsurfaceMethod m_subsurfaceMethod = PrincipledBSDFNode::SubsurfaceMethod::Burley;
 		Vector3 m_subsurfaceRadius = {0.f,0.f,0.f};
+	};
+
+	class ShaderParticle
+		: public ShaderPBR
+	{
+	public:
+		using ShaderPBR::ShaderPBR;
+		void SetRenderFlags(uint32_t flags);
+	protected:
+		virtual util::EventReply InitializeTransparency(CCLShader &cclShader,ImageTextureNode &albedoNode,const NumberSocket &alphaSocket) const override;
+	private:
+		uint32_t m_renderFlags = 0u;
 	};
 
 	struct UVHandler

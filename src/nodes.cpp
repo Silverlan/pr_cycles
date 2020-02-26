@@ -45,6 +45,9 @@ cycles::MathNode::MathNode(CCLShader &shader,const std::string &nodeName,ccl::Ma
 	NumberSocket::m_shader = &shader;
 }
 
+cycles::NumberSocket::NumberSocket()
+	: NumberSocket{0.f}
+{}
 cycles::NumberSocket::NumberSocket(const Socket &socket)
 	: m_socket{socket}
 {
@@ -298,6 +301,16 @@ cycles::ColorNode::ColorNode(CCLShader &shader,const std::string &nodeName,ccl::
 cycles::ColorNode::operator const cycles::Socket&() const {return outColor;}
 
 void cycles::ColorNode::SetColor(const Vector3 &color) {m_node->value = {color.r,color.g,color.b};}
+
+::
+cycles::AttributeNode::AttributeNode(CCLShader &shader,const std::string &nodeName,ccl::AttributeNode &node)
+	: Node{shader},outColor{shader,nodeName,"color"},outVector{shader,nodeName,"vector"},outFactor{shader,nodeName,"fac"},
+	m_node{&node}
+{}
+void cycles::AttributeNode::SetAttribute(ccl::AttributeStandard attrType)
+{
+	m_node->attribute = ccl::Attribute::standard_name(attrType);
+}
 
 cycles::MixNode::MixNode(CCLShader &shader,const std::string &nodeName,ccl::MixNode &node)
 	: Node{shader},inFac{Socket{shader,nodeName,"fac",false}},inColor1{shader,nodeName,"color1",false},inColor2{shader,nodeName,"color2",false},outColor{shader,nodeName,"color"},

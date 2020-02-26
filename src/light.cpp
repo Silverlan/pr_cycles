@@ -159,9 +159,10 @@ void cycles::Light::DoFinalize()
 	// Multiple importance sampling. It's disabled by default for some reason, but it's usually best to keep it on.
 	m_light.use_mis = true;
 
-	static float lightIntensityFactor = 10.f;
-	watt *= lightIntensityFactor;
+	//static float lightIntensityFactor = 10.f;
+	//watt *= lightIntensityFactor;
 
+	watt *= GetScene().GetLightIntensityFactor();
 	m_light.strength = ccl::float3{m_color.r,m_color.g,m_color.b} *watt;
 	m_light.size = cycles::Scene::ToCyclesLength(m_size);
 	m_light.co = cycles::Scene::ToCyclesPosition(GetPos());

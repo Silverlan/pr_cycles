@@ -54,6 +54,16 @@ add_def(FREEGLUT_LIB_PRAGMAS=0)
 add_def(CCL_NAMESPACE_BEGIN=namespace\ ccl\ {)
 add_def(CCL_NAMESPACE_END=})
 
+option(CONFIG_ENABLE_CYCLES_LOGGING "Enable logging for the Cycles renderer. Requires glog and gflags, as well as Cycles built with logging enabled!" OFF)
+
+if(CONFIG_ENABLE_CYCLES_LOGGING)
+	link_external_library(glog)
+	link_external_library(gflags)
+	add_include_dir(glog_os)
+
+	add_def(ENABLE_CYCLES_LOGGING)
+endif()
+
 link_generic_module_libraries()
 register_pragma_module(${PROJ_NAME})
 

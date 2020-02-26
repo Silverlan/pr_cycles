@@ -29,6 +29,7 @@ namespace ccl
 	class ImageTextureNode;
 	class EnvironmentTextureNode;
 	class BufferParams;
+	class SessionParams;
 };
 namespace OpenImageIO_v2_1
 {
@@ -38,6 +39,8 @@ namespace pragma
 {
 	class CAnimatedComponent;
 	class CLightMapComponent;
+	class CParticleSystemComponent;
+	class CSkyCameraComponent;
 	namespace physics {class Transform; class ScaledTransform;};
 };
 namespace util::bsp {struct LightMapInfo;};
@@ -46,6 +49,7 @@ class Model;
 class ModelMesh;
 class ModelSubMesh;
 class Material;
+class CParticle;
 namespace pragma::modules::cycles
 {
 	class SceneObject;
@@ -112,9 +116,24 @@ namespace pragma::modules::cycles
 			OutputResultWithHDRColors = DenoiseResult<<1u,
 			SkyInitialized = OutputResultWithHDRColors<<1u
 		};
+		enum class DeviceType : uint8_t
+		{
+			CPU = 0u,
+			GPU,
+
+			Count
+		};
+		struct CreateInfo
+		{
+			std::optional<uint32_t> samples = {};
+			bool hdrOutput = false;
+			bool denoise = true;
+			DeviceType deviceType = DeviceType::GPU;
+		};
 		static bool IsRenderSceneMode(RenderMode renderMode);
-		static std::shared_ptr<Scene> Create(RenderMode renderMode,std::optional<uint32_t> sampleCount={},bool hdrOutput=false,bool denoise=true);
+		static std::shared_ptr<Scene> Create(RenderMode renderMode,const CreateInfo &createInfo={});
 		//
+		static Vector3 ToPragmaPosition(const ccl::float3 &pos);
 		static ccl::float3 ToCyclesVector(const Vector3 &v);
 		static ccl::float3 ToCyclesPosition(const Vector3 &pos);
 		static ccl::float3 ToCyclesNormal(const Vector3 &n);
@@ -133,15 +152,18 @@ namespace pragma::modules::cycles
 		~Scene();
 		PObject AddEntity(
 			BaseEntity &ent,std::vector<ModelSubMesh*> *optOutTargetMeshes=nullptr,
-			const std::function<bool(ModelMesh&)> &meshFilter=nullptr,const std::function<bool(ModelSubMesh&)> &subMeshFilter=nullptr
+			const std::function<bool(ModelMesh&)> &meshFilter=nullptr,const std::function<bool(ModelSubMesh&)> &subMeshFilter=nullptr,
+			const std::string &nameSuffix=""
 		);
+		void AddParticleSystem(pragma::CParticleSystemComponent &ptc,const Vector3 &camPos,const Mat4 &vp,float nearZ,float farZ);
 		void AddSkybox(const std::string &texture);
 		PMesh AddModel(
-			BaseEntity &ent,Model &mdl,const std::string &meshName,uint32_t skinId=0,CAnimatedComponent *optAnimC=nullptr,
+			Model &mdl,const std::string &meshName,BaseEntity *optEnt=nullptr,uint32_t skinId=0,CAnimatedComponent *optAnimC=nullptr,
 			const std::function<bool(ModelMesh&)> &optMeshFilter=nullptr,
 			const std::function<bool(ModelSubMesh&)> &optSubMeshFilter=nullptr
 		);
-		void SetAOBakeTarget(BaseEntity &ent,Model &mdl,uint32_t matIndex);
+		void Add3DSkybox(pragma::CSkyCameraComponent &skyCam,const Vector3 &camPos);
+		void SetAOBakeTarget(Model &mdl,uint32_t matIndex);
 		void SetLightmapBakeTarget(BaseEntity &ent);
 		Camera &GetCamera();
 		float GetProgress() const;
@@ -156,19 +178,32 @@ namespace pragma::modules::cycles
 		const std::vector<PLight> &GetLights() const;
 		std::vector<PLight> &GetLights();
 
+		void SetLightIntensityFactor(float f);
+		float GetLightIntensityFactor() const;
+
 		void SetSky(const std::string &skyPath);
 		void SetSkyAngles(const EulerAngles &angSky);
 		void SetSkyStrength(float strength);
+		void SetMaxTransparencyBounces(uint32_t maxBounces);
 
 		util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> Finalize();
 
 		void AddShader(CCLShader &shader);
 		ccl::Session *GetCCLSession();
 	private:
+		struct ShaderInfo
+		{
+			// These are only required if the shader is used for eyeballs
+			std::optional<BaseEntity*> entity = {};
+			std::optional<ModelSubMesh*> subMesh = {};
+
+			std::optional<pragma::CParticleSystemComponent*> particleSystem = {};
+			std::optional<const void*> particle = {};
+		};
 		friend Shader;
 		friend Object;
 		friend Light;
-		Scene(std::unique_ptr<ccl::Session> session,ccl::Scene &scene,RenderMode renderMode);
+		Scene(std::unique_ptr<ccl::Session> session,ccl::Scene &scene,RenderMode renderMode,DeviceType deviceType);
 		static ccl::ShaderOutput *FindShaderNodeOutput(ccl::ShaderNode &node,const std::string &output);
 		static ccl::ShaderNode *FindShaderNode(ccl::ShaderGraph &graph,const std::string &nodeName);
 		static ccl::ShaderNode *FindShaderNode(ccl::ShaderGraph &graph,const OpenImageIO_v2_1::ustring &name);
@@ -176,9 +211,10 @@ namespace pragma::modules::cycles
 		void InitializeNormalPass(bool reloadShaders);
 		void ApplyPostProcessing(uimg::ImageBuffer &imgBuffer,cycles::Scene::RenderMode renderMode);
 		void DenoiseHDRImageArea(uimg::ImageBuffer &imgBuffer,uint32_t imgWidth,uint32_t imgHeight,uint32_t x,uint32_t y,uint32_t w,uint32_t h) const;
-		void AddMesh(BaseEntity &ent,Model &mdl,Mesh &mesh,ModelSubMesh &mdlMesh,pragma::CAnimatedComponent *optAnimC=nullptr,uint32_t skinId=0);
+		void AddMesh(Model &mdl,Mesh &mesh,ModelSubMesh &mdlMesh,pragma::CAnimatedComponent *optAnimC=nullptr,BaseEntity *optEnt=nullptr,uint32_t skinId=0);
 		void AddRoughnessMapImageTextureNode(ShaderModuleRoughness &shader,Material &mat,float defaultRoughness) const;
-		PShader CreateShader(BaseEntity &ent,Mesh &mesh,Model &mdl,ModelSubMesh &subMesh,uint32_t skinId=0);
+		PShader CreateShader(Material &mat,const std::string &meshName,const ShaderInfo &shaderInfo={});
+		PShader CreateShader(Mesh &mesh,Model &mdl,ModelSubMesh &subMesh,BaseEntity *optEnt=nullptr,uint32_t skinId=0);
 		Material *GetMaterial(Model &mdl,ModelSubMesh &subMesh,uint32_t skinId) const;
 		bool Denoise(
 			const DenoiseInfo &denoise,uimg::ImageBuffer &imgBuffer,
@@ -192,6 +228,11 @@ namespace pragma::modules::cycles
 		std::shared_ptr<uimg::ImageBuffer> FinalizeCyclesScene();
 		ccl::BufferParams GetBufferParameters() const;
 
+		void SetupRenderSettings(
+			ccl::Scene &scene,ccl::Session &session,ccl::BufferParams &bufferParams,cycles::Scene::RenderMode renderMode,
+			uint32_t maxTransparencyBounces
+		) const;
+
 		void OnParallelWorkerCancelled();
 		void Wait();
 		friend SceneWorker;
@@ -199,6 +240,9 @@ namespace pragma::modules::cycles
 		EulerAngles m_skyAngles = {};
 		std::string m_sky = "";
 		float m_skyStrength = 1.f;
+		float m_lightIntensityFactor = 1.f;
+		uint32_t m_maxTransparencyBounces = 64;
+		DeviceType m_deviceType = DeviceType::GPU;
 		std::vector<PShader> m_shaders = {};
 		std::vector<std::shared_ptr<CCLShader>> m_cclShaders = {};
 		std::vector<PObject> m_objects = {};

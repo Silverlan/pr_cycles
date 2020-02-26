@@ -9,7 +9,7 @@ using namespace pragma::modules;
 #pragma optimize("",off)
 static const std::string TANGENT_POSTFIX = ".tangent";
 static const std::string TANGENT_SIGN_POSTIFX = ".tangent_sign";
-cycles::PMesh cycles::Mesh::Create(Scene &scene,const std::string &name,uint64_t numVerts,uint64_t numTris)
+cycles::PMesh cycles::Mesh::Create(Scene &scene,const std::string &name,uint64_t numVerts,uint64_t numTris,Flags flags)
 {
 	auto *mesh = new ccl::Mesh{}; // Object will be removed automatically by cycles
 	mesh->name = name;
@@ -34,21 +34,28 @@ cycles::PMesh cycles::Mesh::Create(Scene &scene,const std::string &name,uint64_t
 		attrTS->resize(numTris *3);
 		attrTS->name = name +TANGENT_SIGN_POSTIFX;
 	}
+
+	if(umath::is_flag_set(flags,Flags::HasAlphas))
+	{
+		auto *attrAlpha = mesh->attributes.add(Mesh::ALPHA_ATTRIBUTE_TYPE);
+		attrAlpha->resize(numVerts);
+	}
 	
 	// TODO: Add support for hair/curves
 
 	mesh->reserve_mesh(numVerts,numTris);
 	scene->meshes.push_back(mesh);
-	auto meshWrapper = PMesh{new Mesh{scene,*mesh,numVerts,numTris}};
+	auto meshWrapper = PMesh{new Mesh{scene,*mesh,numVerts,numTris,flags}};
 	meshWrapper->m_perVertexUvs.reserve(numVerts);
 	meshWrapper->m_perVertexTangents.reserve(numVerts);
 	meshWrapper->m_perVertexTangentSigns.reserve(numVerts);
+	meshWrapper->m_perVertexAlphas.reserve(numVerts);
 	return meshWrapper;
 }
 
-cycles::Mesh::Mesh(Scene &scene,ccl::Mesh &mesh,uint64_t numVerts,uint64_t numTris)
+cycles::Mesh::Mesh(Scene &scene,ccl::Mesh &mesh,uint64_t numVerts,uint64_t numTris,Flags flags)
 	: SceneObject{scene},m_mesh{mesh},m_numVerts{numVerts},
-	m_numTris{numTris}
+	m_numTris{numTris},m_flags{flags}
 {
 	auto *normals = m_mesh.attributes.find(ccl::ATTR_STD_VERTEX_NORMAL);
 	m_normals = normals ? normals->data_float4() : nullptr;
@@ -61,6 +68,20 @@ cycles::Mesh::Mesh(Scene &scene,ccl::Mesh &mesh,uint64_t numVerts,uint64_t numTr
 
 	auto *tangentSigns = m_mesh.attributes.find(ccl::ATTR_STD_UV_TANGENT_SIGN);
 	m_tangentSigns = tangentSigns ? tangentSigns->data_float() : nullptr;
+
+	if(HasAlphas())
+	{
+		// Note: There's no option to supply user-data for vertices in Cycles, so we're (ab)using ATTR_STD_VOLUME_FLAME arbitrarily,
+		// which is currently only used for Fluid Domain in Cycles, which we don't use anyway (State: 2020-02-25). This may change in the future!
+		auto *alphas = m_mesh.attributes.find(ALPHA_ATTRIBUTE_TYPE);
+		m_alphas = alphas ? alphas->data_float() : nullptr;
+		if(alphas)
+		{
+			// Clear alpha values to 0
+			for(auto i=decltype(numVerts){0u};i<numVerts;++i)
+				m_alphas[i] = 0.f;
+		}
+	}
 }
 
 util::WeakHandle<cycles::Mesh> cycles::Mesh::GetHandle()
@@ -86,6 +107,7 @@ void cycles::Mesh::DoFinalize()
 const ccl::float4 *cycles::Mesh::GetNormals() const {return m_normals;}
 const ccl::float4 *cycles::Mesh::GetTangents() const {return m_tangents;}
 const float *cycles::Mesh::GetTangentSigns() const {return m_tangentSigns;}
+const float *cycles::Mesh::GetAlphas() const {return m_alphas;}
 const ccl::float2 *cycles::Mesh::GetUVs() const {return m_uvs;}
 const ccl::float2 *cycles::Mesh::GetLightmapUVs() const {return m_lightmapUvs.data();}
 void cycles::Mesh::SetLightmapUVs(std::vector<ccl::float2> &&lightmapUvs) {m_lightmapUvs = std::move(lightmapUvs);}
@@ -95,6 +117,7 @@ uint64_t cycles::Mesh::GetVertexCount() const {return m_numVerts;}
 uint64_t cycles::Mesh::GetTriangleCount() const {return m_numTris;}
 uint32_t cycles::Mesh::GetVertexOffset() const {return m_mesh.verts.size();}
 std::string cycles::Mesh::GetName() const {return m_mesh.name.string();}
+bool cycles::Mesh::HasAlphas() const {return umath::is_flag_set(m_flags,Flags::HasAlphas);}
 
 static ccl::float4 to_float4(const ccl::float3 &v)
 {
@@ -111,6 +134,15 @@ bool cycles::Mesh::AddVertex(const Vector3 &pos,const Vector3 &n,const Vector3 &
 	m_mesh.add_vertex(Scene::ToCyclesPosition(pos));
 	m_perVertexUvs.push_back(uv);
 	m_perVertexTangents.push_back(t);
+	return true;
+}
+
+bool cycles::Mesh::AddAlpha(float alpha)
+{
+	if(HasAlphas() == false)
+		return false;
+	m_alphas[m_perVertexAlphas.size()] = alpha;
+	m_perVertexAlphas.push_back(alpha);
 	return true;
 }
 
@@ -148,6 +180,12 @@ bool cycles::Mesh::AddTriangle(uint32_t idx0,uint32_t idx1,uint32_t idx2,uint32_
 	m_tangents[offset +2] = to_float4(Scene::ToCyclesNormal(t2));
 
 	m_tangentSigns[offset] = m_tangentSigns[offset +1] = m_tangentSigns[offset +2] = 1.f;
+	if(HasAlphas() && idx0 < m_perVertexAlphas.size() && idx1 < m_perVertexAlphas.size() && idx2 < m_perVertexAlphas.size())
+	{
+		m_alphas[offset] = m_perVertexAlphas.at(idx0);
+		m_alphas[offset +1] = m_perVertexAlphas.at(idx1);
+		m_alphas[offset +2] = m_perVertexAlphas.at(idx2);
+	}
 	return true;
 }
 

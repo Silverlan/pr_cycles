@@ -8,7 +8,8 @@ namespace ccl
 {
 	class PrincipledBsdfNode; class NormalMapNode; class ToonBsdfNode; class GlassBsdfNode; class MixClosureNode; class TransparentBsdfNode; class MixNode;
 	class SeparateXYZNode; class CombineXYZNode; class SeparateRGBNode; class CombineRGBNode; class BackgroundNode; class TextureCoordinateNode; class MappingNode;
-	class EnvironmentTextureNode; class ImageTextureNode; class ColorNode; class MathNode;
+	class EnvironmentTextureNode; class ImageTextureNode; class ColorNode; class MathNode; class AttributeNode;
+	enum AttributeStandard : int32_t;
 };
 namespace pragma::modules::cycles {struct NumberSocket;};
 pragma::modules::cycles::NumberSocket operator+(float value,const pragma::modules::cycles::NumberSocket &socket);
@@ -59,6 +60,7 @@ namespace pragma::modules::cycles
 	// Special socket type for numeric types
 	struct NumberSocket
 	{
+		NumberSocket();
 		NumberSocket(const Socket &socket);
 		NumberSocket(float value);
 
@@ -299,6 +301,18 @@ namespace pragma::modules::cycles
 		void SetColor(const Vector3 &color);
 	private:
 		ccl::ColorNode *m_node = nullptr;
+	};
+	struct AttributeNode
+		: public Node
+	{
+		AttributeNode(CCLShader &shader,const std::string &nodeName,ccl::AttributeNode &node);
+		Socket outColor;
+		Socket outVector;
+		Socket outFactor;
+
+		void SetAttribute(ccl::AttributeStandard attrType);
+	private:
+		ccl::AttributeNode *m_node = nullptr;
 	};
 	struct MixNode
 		: public Node
