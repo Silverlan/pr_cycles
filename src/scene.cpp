@@ -41,6 +41,8 @@
 #include <pragma/entities/components/c_eye_component.hpp>
 #include <pragma/entities/components/c_vertex_animated_component.hpp>
 #include <pragma/entities/components/c_light_map_component.hpp>
+#include <pragma/entities/components/c_render_component.hpp>
+#include <pragma/entities/components/c_model_component.hpp>
 #include <pragma/entities/c_skybox.h>
 #include <pragma/rendering/shaders/c_shader_cubemap_to_equirectangular.hpp>
 #include <pragma/rendering/shaders/particles/c_shader_particle.hpp>
@@ -94,7 +96,18 @@ void cycles::Scene::ApplyPostProcessing(uimg::ImageBuffer &imgBuffer,cycles::Sce
 {
 	// For some reason the image is flipped horizontally when rendering an image,
 	// so we'll just flip it the right way here
-	if(IsRenderSceneMode(renderMode))
+	auto flipHorizontally = IsRenderSceneMode(renderMode);
+	if(m_scene.camera->type == ccl::CameraType::CAMERA_PANORAMA)
+	{
+		switch(m_scene.camera->panorama_type)
+		{
+		case ccl::PanoramaType::PANORAMA_EQUIRECTANGULAR:
+		case ccl::PanoramaType::PANORAMA_FISHEYE_EQUIDISTANT:
+			flipHorizontally = false; // I have no idea why some types have to be flipped and others don't
+			break;
+		}
+	}
+	if(flipHorizontally)
 		imgBuffer.FlipHorizontally();
 
 	// We will also always have to flip the image vertically, since the data seems to be bottom->top and we need it top->bottom
@@ -167,6 +180,10 @@ std::shared_ptr<cycles::Scene> cycles::Scene::Create(RenderMode renderMode,const
 		}
 		if(is_device_type_available(ccl::DeviceType::DEVICE_OPENCL))
 		{
+			// Note: In some cases Cycles has to rebuild OpenCL shaders, but by default Cycles tries to do so using Blender's python implementation.
+			// Since this isn't Blender, Cycles will create several instances of Pragma and the process will get stuck.
+			// To fix the issue, a change in the Cycles library is required: OpenCLDevice::OpenCLProgram::compile_separate has
+			// to always return false! This will make it fall back to an internal build function that doesn't require Blender / Python.
 			cclDeviceType = ccl::DeviceType::DEVICE_OPENCL;
 			break;
 		}
@@ -201,8 +218,20 @@ std::shared_ptr<cycles::Scene> cycles::Scene::Create(RenderMode renderMode,const
 	sessionParams.shadingsystem = ccl::SHADINGSYSTEM_SVM;
 	sessionParams.device = *device;
 	sessionParams.progressive = true; // TODO: This should be set to false, but doing so causes a crash during rendering
-	sessionParams.background = (deviceType == DeviceType::CPU); // Has to be set to false for GPU rendering, otherwise Cycles will create a bunch of new instances of Pragma for whatever reason
+	sessionParams.background = true;
+	sessionParams.progressive_refine = false;
 	sessionParams.display_buffer_linear = createInfo.hdrOutput;
+
+	switch(deviceType)
+	{
+	case DeviceType::GPU:
+		sessionParams.tile_size = {256,256};
+		break;
+	default:
+		sessionParams.tile_size = {16,16};
+		break;
+	}
+	sessionParams.tile_order = ccl::TileOrder::TILE_HILBERT_SPIRAL;
 	
 	if(createInfo.denoise && renderMode == RenderMode::RenderImage)
 	{
@@ -236,7 +265,7 @@ std::shared_ptr<cycles::Scene> cycles::Scene::Create(RenderMode renderMode,const
 #ifdef ENABLE_TEST_AMBIENT_OCCLUSION
 	if(IsRenderSceneMode(renderMode) == false)
 	{
-		sessionParams.background = true;
+		//sessionParams.background = true;
 		sessionParams.progressive_refine = false;
 		sessionParams.progressive = false;
 		sessionParams.experimental = false;
@@ -254,8 +283,8 @@ std::shared_ptr<cycles::Scene> cycles::Scene::Create(RenderMode renderMode,const
 		sessionParams.shadingsystem = ccl::SHADINGSYSTEM_SVM;
 	}
 #endif
-
 	auto session = std::make_unique<ccl::Session>(sessionParams);
+
 	ccl::SceneParams sceneParams {};
 	sceneParams.shadingsystem = ccl::SHADINGSYSTEM_SVM;
 
@@ -264,6 +293,7 @@ std::shared_ptr<cycles::Scene> cycles::Scene::Create(RenderMode renderMode,const
 
 	auto *pSession = session.get();
 	auto scene = std::shared_ptr<Scene>{new Scene{std::move(session),*cclScene,renderMode,deviceType}};
+
 	scene->m_camera = Camera::Create(*scene);
 	umath::set_flag(scene->m_stateFlags,StateFlags::OutputResultWithHDRColors,createInfo.hdrOutput);
 	umath::set_flag(scene->m_stateFlags,StateFlags::DenoiseResult,createInfo.denoise);
@@ -290,14 +320,13 @@ std::shared_ptr<uimg::ImageBuffer> cycles::Scene::FinalizeCyclesScene()
 	public:
 		void Finalize(bool hdr)
 		{
-			// Same code as Session::~Session()
-			auto *ptr = reinterpret_cast<ccl::Session*>(this);
+			// This part is the same code as the respective part in Session::~Session()
 			if (session_thread) {
 				/* wait for session thread to end */
 				progress.set_cancel("Exiting");
 
-				gpu_need_tonemap = false;
-				gpu_need_tonemap_cond.notify_all();
+				gpu_need_display_buffer_update = false;
+				gpu_need_display_buffer_update_cond.notify_all();
 
 				{
 					ccl::thread_scoped_lock pause_lock(pause_mutex);
@@ -307,13 +336,14 @@ std::shared_ptr<uimg::ImageBuffer> cycles::Scene::FinalizeCyclesScene()
 
 				wait();
 			}
+			//
 
 			/* tonemap and write out image if requested */
 			delete display;
 
 			display = new ccl::DisplayBuffer(device, hdr);
 			display->reset(buffers->params);
-			tonemap(params.samples);
+			copy_to_display_buffer(params.samples);
 		}
 	};
 	auto &session = reinterpret_cast<SessionWrapper&>(*m_session);
@@ -379,7 +409,8 @@ enum class PreparedTextureOutputFlags : uint8_t
 REGISTER_BASIC_BITWISE_OPERATORS(PreparedTextureOutputFlags)
 
 static std::optional<std::string> prepare_texture(
-	TextureInfo *texInfo,bool &outSuccess,bool &outConverted,PreparedTextureInputFlags inFlags,PreparedTextureOutputFlags *optOutFlags=nullptr
+	TextureInfo *texInfo,bool &outSuccess,bool &outConverted,PreparedTextureInputFlags inFlags,PreparedTextureOutputFlags *optOutFlags=nullptr,
+	const std::optional<std::string> &defaultTexture={}
 )
 {
 	if(optOutFlags)
@@ -390,10 +421,30 @@ static std::optional<std::string> prepare_texture(
 	if(texInfo == nullptr)
 		return {};
 	auto tex = texInfo ? std::static_pointer_cast<Texture>(texInfo->texture) : nullptr;
-
+	std::string texName {};
 	// Make sure texture has been fully loaded!
 	if(tex == nullptr || tex->IsLoaded() == false)
+	{
+		tex = nullptr;
+		if(defaultTexture.has_value())
+		{
+			TextureManager::LoadInfo loadInfo {};
+			loadInfo.flags = TextureLoadFlags::LoadInstantly;
+			std::shared_ptr<void> ptrTex;
+			if(static_cast<CMaterialManager&>(client->GetMaterialManager()).GetTextureManager().Load(c_engine->GetRenderContext(),*defaultTexture,loadInfo,&ptrTex))
+			{
+				texName = *defaultTexture;
+				tex = std::static_pointer_cast<Texture>(ptrTex);
+				if(tex->IsLoaded() == false)
+					tex = nullptr;
+			}
+		}
+	}
+	else
+		texName = texInfo->name;
+	if(tex == nullptr || tex->IsError() || tex->HasValidVkTexture() == false)
 		return get_abs_error_texture_path();
+
 	/*if(tex->IsLoaded() == false)
 	{
 	TextureManager::LoadInfo loadInfo {};
@@ -403,12 +454,10 @@ static std::optional<std::string> prepare_texture(
 	return get_abs_error_texture_path();
 	}
 	*/
-
-	auto texName = texInfo->name;
 	ufile::remove_extension_from_filename(texName); // DDS-writer will add the extension for us
 
 	auto vkTex = tex->GetVkTexture();
-	auto img = vkTex->GetImage();
+	auto *img = &vkTex->GetImage();
 	auto isCubemap = img->IsCubemap();
 	if(isCubemap)
 	{
@@ -418,7 +467,7 @@ static std::optional<std::string> prepare_texture(
 		auto &shader = static_cast<pragma::ShaderCubemapToEquirectangular&>(*c_engine->GetShader("cubemap_to_equirectangular"));
 		auto equiRectMap = shader.CubemapToEquirectangularTexture(*vkTex);
 		vkTex = equiRectMap;
-		img = vkTex->GetImage();
+		img = &vkTex->GetImage();
 		texName += "_equirect";
 
 		if(optOutFlags)
@@ -450,9 +499,8 @@ static std::optional<std::string> prepare_texture(
 	// Try to determine appropriate formats
 	if(tex->HasFlag(Texture::Flags::NormalMap))
 	{
-		imgWriteInfo.flags |= uimg::TextureInfo::Flags::NormalMap;
 		imgWriteInfo.inputFormat = uimg::TextureInfo::InputFormat::R32G32B32A32_Float;
-		imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::NormalMap;
+		imgWriteInfo.SetNormalMap();
 	}
 	else
 	{
@@ -475,37 +523,43 @@ static std::optional<std::string> prepare_texture(
 		}
 		switch(format)
 		{
-		case Anvil::Format::BC1_RGBA_SRGB_BLOCK:
-		case Anvil::Format::BC1_RGBA_UNORM_BLOCK:
-		case Anvil::Format::BC1_RGB_SRGB_BLOCK:
-		case Anvil::Format::BC1_RGB_UNORM_BLOCK:
+		case prosper::Format::BC1_RGBA_SRGB_Block:
+		case prosper::Format::BC1_RGBA_UNorm_Block:
+		case prosper::Format::BC1_RGB_SRGB_Block:
+		case prosper::Format::BC1_RGB_UNorm_Block:
 			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::BC1;
 			break;
-		case Anvil::Format::BC2_SRGB_BLOCK:
-		case Anvil::Format::BC2_UNORM_BLOCK:
+		case prosper::Format::BC2_SRGB_Block:
+		case prosper::Format::BC2_UNorm_Block:
 			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::BC2;
 			break;
-		case Anvil::Format::BC3_SRGB_BLOCK:
-		case Anvil::Format::BC3_UNORM_BLOCK:
+		case prosper::Format::BC3_SRGB_Block:
+		case prosper::Format::BC3_UNorm_Block:
 			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::BC3;
 			break;
-		case Anvil::Format::BC4_SNORM_BLOCK:
-		case Anvil::Format::BC4_UNORM_BLOCK:
+		case prosper::Format::BC4_SNorm_Block:
+		case prosper::Format::BC4_UNorm_Block:
 			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::BC4;
 			break;
-		case Anvil::Format::BC5_SNORM_BLOCK:
-		case Anvil::Format::BC5_UNORM_BLOCK:
+		case prosper::Format::BC5_SNorm_Block:
+		case prosper::Format::BC5_UNorm_Block:
 			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::BC5;
 			break;
-		case Anvil::Format::BC6H_SFLOAT_BLOCK:
-		case Anvil::Format::BC6H_UFLOAT_BLOCK:
+		case prosper::Format::BC6H_SFloat_Block:
+		case prosper::Format::BC6H_UFloat_Block:
+			// TODO: As of 20-03-26, Cycles (/oiio) does not have support for BC6, so we'll
+			// fall back to a different format
 			imgWriteInfo.inputFormat = uimg::TextureInfo::InputFormat::R16G16B16A16_Float;
-			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::BC6;
+			// imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::BC6;
+			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::DXT5;
 			break;
-		case Anvil::Format::BC7_SRGB_BLOCK:
-		case Anvil::Format::BC7_UNORM_BLOCK:
+		case prosper::Format::BC7_SRGB_Block:
+		case prosper::Format::BC7_UNorm_Block:
+			// TODO: As of 20-03-26, Cycles (/oiio) does not have support for BC7, so we'll
+			// fall back to a different format
 			imgWriteInfo.inputFormat = uimg::TextureInfo::InputFormat::R16G16B16A16_Float;
-			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::BC7;
+			// imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::BC7;
+			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::DXT1;
 			break;
 		}
 	}
@@ -521,7 +575,10 @@ static std::optional<std::string> prepare_texture(
 	return get_abs_error_texture_path();
 }
 
-static std::optional<std::string> prepare_texture(ccl::Scene &scene,TextureInfo *texInfo,PreparedTextureInputFlags inFlags,PreparedTextureOutputFlags *optOutFlags=nullptr)
+static std::optional<std::string> prepare_texture(
+	ccl::Scene &scene,TextureInfo *texInfo,PreparedTextureInputFlags inFlags,PreparedTextureOutputFlags *optOutFlags=nullptr,
+	const std::optional<std::string> &defaultTexture={}
+)
 {
 	if(optOutFlags)
 		*optOutFlags = PreparedTextureOutputFlags::None;
@@ -529,7 +586,7 @@ static std::optional<std::string> prepare_texture(ccl::Scene &scene,TextureInfo 
 		return {};
 	auto success = false;
 	auto converted = false;
-	auto result = prepare_texture(texInfo,success,converted,inFlags,optOutFlags);
+	auto result = prepare_texture(texInfo,success,converted,inFlags,optOutFlags,defaultTexture);
 	if(success == false)
 	{
 		Con::cwar<<"WARNING: Unable to prepare texture '";
@@ -580,25 +637,51 @@ void cycles::Scene::AddRoughnessMapImageTextureNode(ShaderModuleRoughness &shade
 		if(hasRoughnessFactor == false)
 			roughnessFactor = 1.f;
 		roughnessFactor *= (1.f -specularFactor);
+		hasRoughnessFactor = true;
 	}
 	shader.SetRoughnessFactor(roughnessFactor);
 
-	auto roughnessPath = prepare_texture(m_scene,mat.GetRoughnessMap(),PreparedTextureInputFlags::None);
-	if(roughnessPath.has_value() == false)
+	auto rmaPath = prepare_texture(m_scene,mat.GetRMAMap(),PreparedTextureInputFlags::None,nullptr,"white");
+	if(rmaPath.has_value() == false)
 	{
+#if 0
 		// No roughness map available; Attempt to use specular map instead
 		auto specularPath = prepare_texture(m_scene,mat.GetSpecularMap(),PreparedTextureInputFlags::None);
 		if(specularPath.has_value())
+		{
 			shader.SetSpecularMap(*specularPath);
+			if(hasRoughnessFactor == false)
+				shader.SetRoughnessFactor(1.f);
+		}
+#endif
 	}
 	else
-		shader.SetRoughnessMap(*roughnessPath);
+	{
+		shader.SetRoughnessMap(*rmaPath);
+		if(hasRoughnessFactor == false)
+			shader.SetRoughnessFactor(1.f);
+	}
+}
+
+Material *cycles::Scene::GetMaterial(BaseEntity &ent,ModelSubMesh &subMesh,uint32_t skinId) const
+{
+	auto mdlC = ent.GetModelComponent();
+	return mdlC.valid() ? GetMaterial(static_cast<pragma::CModelComponent&>(*mdlC),subMesh,skinId) : nullptr;
 }
 
 Material *cycles::Scene::GetMaterial(Model &mdl,ModelSubMesh &subMesh,uint32_t skinId) const
 {
 	auto texIdx = mdl.GetMaterialIndex(subMesh,skinId);
 	return texIdx.has_value() ? mdl.GetMaterial(*texIdx) : nullptr;
+}
+
+Material *cycles::Scene::GetMaterial(pragma::CModelComponent &mdlC,ModelSubMesh &subMesh,uint32_t skinId) const
+{
+	auto mdl = mdlC.GetModel();
+	if(mdl == nullptr)
+		return nullptr;
+	auto texIdx = mdl->GetMaterialIndex(subMesh,skinId);
+	return texIdx.has_value() ? mdlC.GetRenderMaterial(*texIdx) : nullptr;
 }
 
 cycles::PShader cycles::Scene::CreateShader(Material &mat,const std::string &meshName,const ShaderInfo &shaderInfo)
@@ -666,6 +749,14 @@ cycles::PShader cycles::Scene::CreateShader(Material &mat,const std::string &mes
 	}
 	*/
 
+	auto fApplyColorFactor = [&mat](ShaderAlbedoSet &albedoSet) {
+		auto &colorFactor = mat.GetDataBlock()->GetValue("color_factor");
+		if(colorFactor == nullptr || typeid(*colorFactor) != typeid(ds::Vector4))
+			return;
+		auto &color = static_cast<ds::Vector4*>(colorFactor.get())->GetValue();
+		albedoSet.SetColorFactor(color);
+	};
+
 	cycles::PShader resShader = nullptr;
 	if(m_renderMode == RenderMode::SceneAlbedo)
 	{
@@ -677,7 +768,7 @@ cycles::PShader cycles::Scene::CreateShader(Material &mat,const std::string &mes
 			shader->GetAlbedoSet2().SetAlbedoMap(*albedo2TexPath);
 			shader->SetUseVertexAlphasForBlending(true);
 		}
-		shader->SetTransparent(*shader,mat.IsTranslucent());
+		shader->SetAlphaMode(mat.GetAlphaMode(),mat.GetAlphaCutoff());
 		resShader = shader;
 	}
 	else if(m_renderMode == RenderMode::SceneNormals)
@@ -690,7 +781,7 @@ cycles::PShader cycles::Scene::CreateShader(Material &mat,const std::string &mes
 			shader->GetAlbedoSet2().SetAlbedoMap(*albedo2TexPath);
 			shader->SetUseVertexAlphasForBlending(true);
 		}
-		shader->SetTransparent(*shader,mat.IsTranslucent());
+		shader->SetAlphaMode(mat.GetAlphaMode(),mat.GetAlphaCutoff());
 		auto normalTexPath = prepare_texture(m_scene,mat.GetNormalMap(),PreparedTextureInputFlags::None);
 		if(normalTexPath.has_value())
 			shader->SetNormalMap(*normalTexPath);
@@ -701,6 +792,7 @@ cycles::PShader cycles::Scene::CreateShader(Material &mat,const std::string &mes
 		if(shaderType == ShaderType::Toon)
 		{
 			auto shader = cycles::Shader::Create<ShaderToon>(*this,meshName +"_shader");
+			fApplyColorFactor(shader->GetAlbedoSet());
 			shader->SetMeshName(meshName);
 			shader->GetAlbedoSet().SetAlbedoMap(*diffuseTexPath);
 			if(albedo2TexPath.has_value())
@@ -708,7 +800,7 @@ cycles::PShader cycles::Scene::CreateShader(Material &mat,const std::string &mes
 				shader->GetAlbedoSet2().SetAlbedoMap(*albedo2TexPath);
 				shader->SetUseVertexAlphasForBlending(true);
 			}
-			shader->SetTransparent(*shader,mat.IsTranslucent());
+			shader->SetAlphaMode(mat.GetAlphaMode(),mat.GetAlphaCutoff());
 			auto normalTexPath = prepare_texture(m_scene,mat.GetNormalMap(),PreparedTextureInputFlags::None);
 			if(normalTexPath.has_value())
 				shader->SetNormalMap(*normalTexPath);
@@ -717,6 +809,7 @@ cycles::PShader cycles::Scene::CreateShader(Material &mat,const std::string &mes
 		else if(ustring::compare(mat.GetShaderIdentifier(),"glass",false))
 		{
 			auto shader = cycles::Shader::Create<ShaderGlass>(*this,meshName +"_shader");
+			fApplyColorFactor(shader->GetAlbedoSet());
 			shader->SetMeshName(meshName);
 			shader->GetAlbedoSet().SetAlbedoMap(*diffuseTexPath);
 			if(albedo2TexPath.has_value())
@@ -729,17 +822,21 @@ cycles::PShader cycles::Scene::CreateShader(Material &mat,const std::string &mes
 				shader->SetNormalMap(*normalTexPath);
 
 			// Roughness map
-			AddRoughnessMapImageTextureNode(*shader,mat,0.f);
+			AddRoughnessMapImageTextureNode(*shader,mat,0.5f);
 
 			resShader = shader;
 		}
 		else
 		{
 			std::shared_ptr<cycles::ShaderPBR> shader = nullptr;
-			auto isParticleSystemShader = shaderInfo.particleSystem.has_value();
+			auto isParticleSystemShader = (shaderInfo.particleSystem.has_value() && shaderInfo.particle.has_value());
 			if(isParticleSystemShader)
 			{
 				shader = cycles::Shader::Create<ShaderParticle>(*this,meshName +"_shader");
+				auto *ptShader = static_cast<ShaderParticle*>(shader.get());
+				auto *pt = static_cast<const pragma::CParticleSystemComponent::ParticleData*>(*shaderInfo.particle);
+				Color color {static_cast<int16_t>(pt->color.at(0)),static_cast<int16_t>(pt->color.at(1)),static_cast<int16_t>(pt->color.at(2)),static_cast<int16_t>(pt->color.at(3))};
+				ptShader->SetColor(color);
 
 				auto *pShader = static_cast<pragma::ShaderParticle*>(c_engine->GetShader("particle").get());
 				if(pShader)
@@ -747,40 +844,45 @@ cycles::PShader cycles::Scene::CreateShader(Material &mat,const std::string &mes
 			}
 			else
 				shader = cycles::Shader::Create<ShaderPBR>(*this,meshName +"_shader");
+			fApplyColorFactor(shader->GetAlbedoSet());
 			shader->SetMeshName(meshName);
 
 			auto data = mat.GetDataBlock();
-			float subsurface;
-			if(data->GetFloat("subsurface_multiplier",&subsurface))
-				shader->SetSubsurface(subsurface);
-
-			auto &dvSubsurfaceColor = data->GetValue("subsurface_color");
-			if(dvSubsurfaceColor != nullptr && typeid(*dvSubsurfaceColor) == typeid(ds::Color))
+			auto dataSSS = data->GetBlock("subsurface_scattering");
+			if(dataSSS)
 			{
-				auto &color = static_cast<ds::Color&>(*dvSubsurfaceColor).GetValue();
-				shader->SetSubsurfaceColor(color.ToVector3());
-			}
+				float subsurface;
+				if(dataSSS->GetFloat("factor",&subsurface))
+					shader->SetSubsurface(subsurface);
 
-			const std::unordered_map<SurfaceMaterial::PBRInfo::SubsurfaceMethod,ccl::ClosureType> bssrdfToCclType = {
-				{SurfaceMaterial::PBRInfo::SubsurfaceMethod::Cubic,ccl::ClosureType::CLOSURE_BSSRDF_CUBIC_ID},
+				auto &dvSubsurfaceColor = dataSSS->GetValue("color");
+				if(dvSubsurfaceColor != nullptr && typeid(*dvSubsurfaceColor) == typeid(ds::Color))
+				{
+					auto &color = static_cast<ds::Color&>(*dvSubsurfaceColor).GetValue();
+					shader->SetSubsurfaceColor(color.ToVector3());
+				}
+
+				const std::unordered_map<SurfaceMaterial::PBRInfo::SubsurfaceMethod,ccl::ClosureType> bssrdfToCclType = {
+					{SurfaceMaterial::PBRInfo::SubsurfaceMethod::Cubic,ccl::ClosureType::CLOSURE_BSSRDF_CUBIC_ID},
 				{SurfaceMaterial::PBRInfo::SubsurfaceMethod::Gaussian,ccl::ClosureType::CLOSURE_BSSRDF_GAUSSIAN_ID},
 				{SurfaceMaterial::PBRInfo::SubsurfaceMethod::Principled,ccl::ClosureType::CLOSURE_BSDF_BSSRDF_PRINCIPLED_ID},
 				{SurfaceMaterial::PBRInfo::SubsurfaceMethod::Burley,ccl::ClosureType::CLOSURE_BSSRDF_BURLEY_ID},
 				{SurfaceMaterial::PBRInfo::SubsurfaceMethod::RandomWalk,ccl::ClosureType::CLOSURE_BSSRDF_RANDOM_WALK_ID},
 				{SurfaceMaterial::PBRInfo::SubsurfaceMethod::PrincipledRandomWalk,ccl::ClosureType::CLOSURE_BSSRDF_PRINCIPLED_RANDOM_WALK_ID}
-			};
+				};
 
-			int32_t subsurfaceMethod;
-			if(mat.GetDataBlock()->GetInt("subsurface_method",&subsurfaceMethod))
-			{
-				auto it = bssrdfToCclType.find(static_cast<SurfaceMaterial::PBRInfo::SubsurfaceMethod>(subsurfaceMethod));
-				if(it != bssrdfToCclType.end())
-					subsurfaceMethod = it->second;
+				int32_t subsurfaceMethod;
+				if(dataSSS->GetInt("method",&subsurfaceMethod))
+				{
+					auto it = bssrdfToCclType.find(static_cast<SurfaceMaterial::PBRInfo::SubsurfaceMethod>(subsurfaceMethod));
+					if(it != bssrdfToCclType.end())
+						subsurfaceMethod = it->second;
+				}
+
+				auto &dvSubsurfaceRadius = dataSSS->GetValue("radius");
+				if(dvSubsurfaceRadius != nullptr && typeid(*dvSubsurfaceRadius) == typeid(ds::Vector))
+					shader->SetSubsurfaceRadius(static_cast<ds::Vector&>(*dvSubsurfaceRadius).GetValue());
 			}
-
-			auto &dvSubsurfaceRadius = data->GetValue("subsurface_radius");
-			if(dvSubsurfaceRadius != nullptr && typeid(*dvSubsurfaceRadius) == typeid(ds::Vector))
-				shader->SetSubsurfaceRadius(static_cast<ds::Vector&>(*dvSubsurfaceRadius).GetValue());
 			//
 
 			// Note: We always need the albedo texture information for the translucency.
@@ -794,7 +896,7 @@ cycles::PShader cycles::Scene::CreateShader(Material &mat,const std::string &mes
 				shader->GetAlbedoSet2().SetAlbedoMap(*albedo2TexPath);
 				shader->SetUseVertexAlphasForBlending(true);
 			}
-			shader->SetTransparent(*shader,mat.IsTranslucent());
+			shader->SetAlphaMode(mat.GetAlphaMode(),mat.GetAlphaCutoff());
 
 			// Normal map
 			auto normalTexPath = prepare_texture(m_scene,mat.GetNormalMap(),PreparedTextureInputFlags::None);
@@ -802,7 +904,7 @@ cycles::PShader cycles::Scene::CreateShader(Material &mat,const std::string &mes
 				shader->SetNormalMap(*normalTexPath);
 
 			// Metalness map
-			auto metalnessTexPath = prepare_texture(m_scene,mat.GetMetalnessMap(),PreparedTextureInputFlags::None);
+			auto metalnessTexPath = prepare_texture(m_scene,mat.GetRMAMap(),PreparedTextureInputFlags::None,nullptr,"white");
 			if(metalnessTexPath)
 				shader->SetMetalnessMap(*metalnessTexPath);
 
@@ -812,33 +914,47 @@ cycles::PShader cycles::Scene::CreateShader(Material &mat,const std::string &mes
 				shader->SetMetalnessFactor(metalnessFactor);
 
 			// Roughness map
-			AddRoughnessMapImageTextureNode(*shader,mat,0.f);
+			AddRoughnessMapImageTextureNode(*shader,mat,0.5f);
 
 			// Emission map
-			auto *emissionTex = mat.GetGlowMap();
-			if(isParticleSystemShader)
+			auto globalEmissionStrength = m_emissionStrength;
+			shader->SetEmissionIntensity(globalEmissionStrength);
+			if(globalEmissionStrength > 0.f)
 			{
-				emissionTex = emissionTex ? emissionTex : diffuseMap;
-				static auto emissionFactor = 2.f;
-				shader->SetEmissionFactor(emissionFactor);
-			}
-			auto emissionTexPath = prepare_texture(m_scene,emissionTex,PreparedTextureInputFlags::None);
-			if(emissionTexPath)
-			{
-				shader->SetEmissionMap(*emissionTexPath);
-				if(data->GetBool("glow_alpha_only") == true)
+				auto *emissionTex = mat.GetGlowMap();
+				static auto particleLightEmissionFactor = 0.f;
+				if(particleLightEmissionFactor > 0.f && isParticleSystemShader)
 				{
-					shader->SetEmissionFromAlbedoAlpha(*shader,true);
+					emissionTex = emissionTex ? emissionTex : diffuseMap;
+					auto strength = particleLightEmissionFactor;
+					shader->SetEmissionFactor({strength,strength,strength});
+				}
+				auto emissionTexPath = prepare_texture(m_scene,emissionTex,PreparedTextureInputFlags::None);
+				if(emissionTexPath)
+				{
+					shader->SetEmissionMap(*emissionTexPath);
+					if(data->GetBool("glow_alpha_only") == true)
+					{
+						shader->SetEmissionFromAlbedoAlpha(*shader,true);
 
-					// Glow intensity
-					auto glowBlendDiffuseScale = 1.f;
-					data->GetFloat("glow_blend_diffuse_scale",&glowBlendDiffuseScale);
+						// Glow intensity
+						auto glowBlendDiffuseScale = 1.f;
+						data->GetFloat("glow_blend_diffuse_scale",&glowBlendDiffuseScale);
 
-					auto glowScale = 1.f;
-					data->GetFloat("glow_scale",&glowScale);
+						auto glowScale = 1.f;
+						data->GetFloat("glow_scale",&glowScale);
 
-					auto glowIntensity = glowBlendDiffuseScale *glowScale +1.f; // +1 to match Pragma more closely
-					shader->SetEmissionFactor(glowIntensity);
+						auto glowIntensity = glowBlendDiffuseScale *glowScale +1.f; // +1 to match Pragma more closely
+						auto strength = glowIntensity;
+						shader->SetEmissionFactor({strength,strength,strength});
+					}
+				}
+
+				auto valEmissionFactor = mat.GetDataBlock()->GetValue("emission_factor");
+				if(valEmissionFactor && typeid(*valEmissionFactor) == typeid(ds::Vector))
+				{
+					auto &emissionFactor = static_cast<ds::Vector&>(*valEmissionFactor).GetValue();
+					shader->SetEmissionFactor(emissionFactor);
 				}
 			}
 
@@ -858,11 +974,11 @@ cycles::PShader cycles::Scene::CreateShader(Material &mat,const std::string &mes
 		auto normalMapSpace = NormalMapNode::Space::Tangent;
 		if(ustring::compare(mat.GetShaderIdentifier(),"eye",false))
 		{
-			normalMapSpace = NormalMapNode::Space::Object;
+			//normalMapSpace = NormalMapNode::Space::Object;
 
 			// Eye shader; We'll have to do some additional steps to get the proper UV coordinates.
 			auto eyeC = (*shaderInfo.entity)->GetComponent<CEyeComponent>();
-			auto mdl = *(*shaderInfo.entity)->GetModel();
+			auto &mdl = *(*shaderInfo.entity)->GetModel();
 			uint32_t eyeballIndex;
 			if(eyeC.valid() && eyeC->FindEyeballIndex((*shaderInfo.subMesh)->GetSkinTextureIndex(),eyeballIndex))
 			{
@@ -895,10 +1011,14 @@ cycles::PShader cycles::Scene::CreateShader(Mesh &mesh,Model &mdl,ModelSubMesh &
 	// Make sure all textures have finished loading
 	static_cast<CMaterialManager&>(client->GetMaterialManager()).GetTextureManager().WaitForTextures();
 
-	auto *mat = GetMaterial(mdl,subMesh,skinId);
+	auto *mat = optEnt ? GetMaterial(*optEnt,subMesh,skinId) : GetMaterial(mdl,subMesh,skinId);
 	if(mat == nullptr)
 		return nullptr;
-	return CreateShader(*mat,mesh.GetName());
+	ShaderInfo shaderInfo {};
+	if(optEnt)
+		shaderInfo.entity = optEnt;
+	shaderInfo.subMesh = &subMesh;
+	return CreateShader(*mat,mesh.GetName(),shaderInfo);
 }
 
 void cycles::Scene::SetAOBakeTarget(Model &mdl,uint32_t matIndex)
@@ -910,7 +1030,7 @@ void cycles::Scene::SetAOBakeTarget(Model &mdl,uint32_t matIndex)
 	uint32_t numVertsEnv = 0;
 	uint32_t numTrisEnv = 0;
 
-	AddModel(mdl,"ao_mesh",nullptr,0 /* skin */,nullptr,nullptr,[matIndex,&materialMeshes,&envMeshes,&numVerts,&numTris,&numVertsEnv,&numTrisEnv,&mdl](ModelSubMesh &mesh) -> bool {
+	AddModel(mdl,"ao_mesh",nullptr,0 /* skin */,nullptr,nullptr,nullptr,[matIndex,&materialMeshes,&envMeshes,&numVerts,&numTris,&numVertsEnv,&numTrisEnv,&mdl](ModelSubMesh &mesh) -> bool {
 		auto texIdx = mdl.GetMaterialIndex(mesh);
 		if(texIdx.has_value() && *texIdx == matIndex)
 		{
@@ -965,8 +1085,6 @@ void cycles::Scene::SetLightmapBakeTarget(BaseEntity &ent)
 	auto &mesh = o->GetMesh();
 
 	// Lightmap uvs per mesh
-	auto &lightmapUvs = lightmapC->GetLightmapUvs();
-
 	auto numTris = mesh.GetTriangleCount();
 	std::vector<ccl::float2> cclLightmapUvs {};
 	cclLightmapUvs.resize(numTris *3);
@@ -974,18 +1092,17 @@ void cycles::Scene::SetLightmapBakeTarget(BaseEntity &ent)
 	for(auto *subMesh : targetMeshes)
 	{
 		auto &tris = subMesh->GetTriangles();
-		auto refId = subMesh->GetReferenceId();
-		if(refId < lightmapUvs.size())
+		auto *uvSet = subMesh->GetUVSet("lightmap");
+		if(uvSet)
 		{
-			auto &meshUvs = lightmapUvs.at(refId);
 			for(auto i=decltype(tris.size()){0u};i<tris.size();i+=3)
 			{
 				auto idx0 = tris.at(i);
 				auto idx1 = tris.at(i +1);
 				auto idx2 = tris.at(i +2);
-				cclLightmapUvs.at(uvOffset +i) = Scene::ToCyclesUV(meshUvs.at(idx0));
-				cclLightmapUvs.at(uvOffset +i +1) = Scene::ToCyclesUV(meshUvs.at(idx1));
-				cclLightmapUvs.at(uvOffset +i +2) = Scene::ToCyclesUV(meshUvs.at(idx2));
+				cclLightmapUvs.at(uvOffset +i) = Scene::ToCyclesUV(uvSet->at(idx0));
+				cclLightmapUvs.at(uvOffset +i +1) = Scene::ToCyclesUV(uvSet->at(idx1));
+				cclLightmapUvs.at(uvOffset +i +2) = Scene::ToCyclesUV(uvSet->at(idx2));
 			}
 		}
 		uvOffset += tris.size();
@@ -994,12 +1111,12 @@ void cycles::Scene::SetLightmapBakeTarget(BaseEntity &ent)
 	m_bakeTarget = o;
 }
 
-void cycles::Scene::AddMesh(Model &mdl,Mesh &mesh,ModelSubMesh &mdlMesh,pragma::CAnimatedComponent *optAnimC,BaseEntity *optEnt,uint32_t skinId)
+void cycles::Scene::AddMesh(Model &mdl,Mesh &mesh,ModelSubMesh &mdlMesh,pragma::CModelComponent *optMdlC,pragma::CAnimatedComponent *optAnimC,BaseEntity *optEnt,uint32_t skinId)
 {
 	auto shader = CreateShader(mesh,mdl,mdlMesh,optEnt,skinId);
 	if(shader == nullptr)
 		return;
-	auto *mat = GetMaterial(mdl,mdlMesh,skinId);
+	auto *mat = optMdlC ? GetMaterial(*optMdlC,mdlMesh,skinId) : GetMaterial(mdl,mdlMesh,skinId);
 	auto shaderIdx = mesh.AddSubMeshShader(*shader);
 	auto triIndexVertexOffset = mesh.GetVertexOffset();
 	auto &verts = mdlMesh.GetVertices();
@@ -1011,7 +1128,9 @@ void cycles::Scene::AddMesh(Model &mdl,Mesh &mesh,ModelSubMesh &mdlMesh,pragma::
 		if(IsRenderSceneMode(m_renderMode))
 		{
 			// TODO: Do we really need the tangent?
-			auto transformMat = optAnimC ? optAnimC->GetVertexTransformMatrix(mdlMesh,vertIdx) : std::optional<Mat4>{};
+			Vector3 normalOffset {};
+			float wrinkle = 0.f;
+			auto transformMat = optAnimC ? optAnimC->GetVertexTransformMatrix(mdlMesh,vertIdx,&normalOffset,&wrinkle) : std::optional<Mat4>{};
 			if(transformMat.has_value())
 			{
 				// Apply vertex matrix (including animations, flexes, etc.)
@@ -1022,15 +1141,18 @@ void cycles::Scene::AddMesh(Model &mdl,Mesh &mesh,ModelSubMesh &mdlMesh,pragma::
 				pos /= vpos.w;
 
 				Vector3 n {vn.x,vn.y,vn.z};
+				n += normalOffset;
 				uvec::normalize(&n);
 
 				Vector3 t {vt.x,vt.y,vt.z};
+				t += normalOffset;
 				uvec::normalize(&t);
 
 				mesh.AddVertex(pos,n,t,v.uv);
 			}
 			else
 				mesh.AddVertex(v.position,v.normal,v.tangent,v.uv);
+			mesh.AddWrinkleFactor(wrinkle);
 		}
 		else
 		{
@@ -1050,26 +1172,23 @@ void cycles::Scene::AddMesh(Model &mdl,Mesh &mesh,ModelSubMesh &mdlMesh,pragma::
 		mesh.AddTriangle(triIndexVertexOffset +tris.at(i),triIndexVertexOffset +tris.at(i +1),triIndexVertexOffset +tris.at(i +2),shaderIdx);
 }
 
-cycles::PMesh cycles::Scene::AddModel(
-	Model &mdl,const std::string &meshName,BaseEntity *optEnt,uint32_t skinId,pragma::CAnimatedComponent *optAnimC,
-	const std::function<bool(ModelMesh&)> &optMeshFilter,const std::function<bool(ModelSubMesh&)> &optSubMeshFilter
+cycles::PMesh cycles::Scene::AddMeshList(
+	Model &mdl,const std::vector<std::shared_ptr<ModelMesh>> &meshList,const std::string &meshName,BaseEntity *optEnt,uint32_t skinId,
+	pragma::CModelComponent *optMdlC,pragma::CAnimatedComponent *optAnimC,
+	const std::function<bool(ModelMesh&)> &optMeshFilter,
+	const std::function<bool(ModelSubMesh&)> &optSubMeshFilter
 )
 {
-	std::vector<std::shared_ptr<ModelMesh>> lodMeshes {};
-	std::vector<uint32_t> bodyGroups {};
-	bodyGroups.resize(mdl.GetBodyGroupCount());
-	mdl.GetBodyGroupMeshes(bodyGroups,0,lodMeshes);
-
 	std::vector<ModelSubMesh*> targetMeshes {};
 	targetMeshes.reserve(mdl.GetSubMeshCount());
 	uint64_t numVerts = 0ull;
 	uint64_t numTris = 0ull;
 	auto hasAlphas = false;
-	for(auto &lodMesh : lodMeshes)
+	for(auto &mesh : meshList)
 	{
-		if(optMeshFilter != nullptr && optMeshFilter(*lodMesh) == false)
+		if(optMeshFilter != nullptr && optMeshFilter(*mesh) == false)
 			continue;
-		for(auto &subMesh : lodMesh->GetSubMeshes())
+		for(auto &subMesh : mesh->GetSubMeshes())
 		{
 			if(subMesh->GetGeometryType() != ModelSubMesh::GeometryType::Triangles || (optSubMeshFilter != nullptr && optSubMeshFilter(*subMesh) == false))
 				continue;
@@ -1088,10 +1207,25 @@ cycles::PMesh cycles::Scene::AddModel(
 	auto flags = Mesh::Flags::None;
 	if(hasAlphas)
 		flags |= Mesh::Flags::HasAlphas;
+	if(mdl.GetVertexAnimations().empty() == false) // TODO: Not the best way to determine if the entity uses wrinkles
+		flags |= Mesh::Flags::HasWrinkles;
 	auto mesh = Mesh::Create(*this,meshName,numVerts,numTris,flags);
 	for(auto *subMesh : targetMeshes)
-		AddMesh(mdl,*mesh,*subMesh,optAnimC,optEnt,skinId);
+		AddMesh(mdl,*mesh,*subMesh,optMdlC,optAnimC,optEnt,skinId);
 	return mesh;
+}
+
+cycles::PMesh cycles::Scene::AddModel(
+	Model &mdl,const std::string &meshName,BaseEntity *optEnt,uint32_t skinId,
+	pragma::CModelComponent *optMdlC,pragma::CAnimatedComponent *optAnimC,
+	const std::function<bool(ModelMesh&)> &optMeshFilter,const std::function<bool(ModelSubMesh&)> &optSubMeshFilter
+)
+{
+	std::vector<std::shared_ptr<ModelMesh>> lodMeshes {};
+	std::vector<uint32_t> bodyGroups {};
+	bodyGroups.resize(mdl.GetBodyGroupCount());
+	mdl.GetBodyGroupMeshes(bodyGroups,0,lodMeshes);
+	return AddMeshList(mdl,lodMeshes,meshName,optEnt,skinId,optMdlC,optAnimC,optMeshFilter,optSubMeshFilter);
 }
 
 void cycles::Scene::AddSkybox(const std::string &texture)
@@ -1102,8 +1236,9 @@ void cycles::Scene::AddSkybox(const std::string &texture)
 
 	auto skyTex = (m_sky.empty() == false) ? m_sky : texture;
 
-	std::string absPath;
-	if(FileManager::FindAbsolutePath("materials/" +skyTex,absPath) == false)
+	// Note: m_sky can be absolute or relative path
+	std::string absPath = skyTex;
+	if(FileManager::ExistsSystem(absPath) == false && FileManager::FindAbsolutePath("materials/" +skyTex,absPath) == false)
 		return;
 
 	// Setup the skybox as a background shader
@@ -1151,7 +1286,8 @@ cycles::PObject cycles::Scene::AddEntity(
 		return;
 	}
 #endif
-	auto mdl = ent.GetModel();
+	auto *mdlC = static_cast<pragma::CModelComponent*>(ent.GetModelComponent().get());
+	auto mdl = mdlC ? mdlC->GetModel() : nullptr;
 	if(mdl == nullptr)
 		return nullptr;
 
@@ -1164,7 +1300,7 @@ cycles::PObject cycles::Scene::AddEntity(
 	auto skyC = ent.GetComponent<CSkyboxComponent>();
 	if(skyC.valid())
 	{
-		AddModel(*mdl,name,&ent,ent.GetSkin(),animC.get(),meshFilter,[&targetMeshes,&subMeshFilter](ModelSubMesh &mesh) -> bool {
+		AddModel(*mdl,name,&ent,ent.GetSkin(),mdlC,animC.get(),meshFilter,[&targetMeshes,&subMeshFilter](ModelSubMesh &mesh) -> bool {
 			if(subMeshFilter && subMeshFilter(mesh) == false)
 				return false;
 			targetMeshes->push_back(&mesh);
@@ -1173,13 +1309,13 @@ cycles::PObject cycles::Scene::AddEntity(
 		std::optional<std::string> skyboxTexture {};
 		for(auto &mesh : *targetMeshes)
 		{
-			auto *mat = mdl->GetMaterial(mesh->GetSkinTextureIndex());
+			auto *mat = mdlC->GetRenderMaterial(mesh->GetSkinTextureIndex());
 			if(mat == nullptr || (ustring::compare(mat->GetShaderIdentifier(),"skybox",false) == false && ustring::compare(mat->GetShaderIdentifier(),"skybox_equirect",false) == false))
 				continue;
 			auto *diffuseMap = mat->GetTextureInfo("skybox");
 			auto tex = diffuseMap ? diffuseMap->texture : nullptr;
 			auto vkTex = tex ? std::static_pointer_cast<Texture>(tex)->GetVkTexture() : nullptr;
-			if(vkTex == nullptr || vkTex->GetImage()->IsCubemap() == false)
+			if(vkTex == nullptr || vkTex->GetImage().IsCubemap() == false)
 				continue;
 			PreparedTextureOutputFlags flags;
 			auto diffuseTexPath = prepare_texture(m_scene,diffuseMap,PreparedTextureInputFlags::CanBeEnvMap,&flags);
@@ -1192,12 +1328,19 @@ cycles::PObject cycles::Scene::AddEntity(
 		return nullptr;
 	}
 
-	auto mesh = AddModel(*mdl,name,&ent,ent.GetSkin(),animC.get(),meshFilter,[&targetMeshes,&subMeshFilter](ModelSubMesh &mesh) -> bool {
+	auto fFilterMesh = [&targetMeshes,&subMeshFilter](ModelSubMesh &mesh) -> bool {
 		if(subMeshFilter && subMeshFilter(mesh) == false)
 			return false;
 		targetMeshes->push_back(&mesh);
 		return true;
-	});
+	};
+
+	auto renderC = ent.GetComponent<pragma::CRenderComponent>();
+	PMesh mesh = nullptr;
+	if(renderC.valid())
+		mesh = AddMeshList(*mdl,renderC->GetLODMeshes(),name,&ent,ent.GetSkin(),mdlC,animC.get(),meshFilter,fFilterMesh);
+	else
+		mesh = AddModel(*mdl,name,&ent,ent.GetSkin(),mdlC,animC.get(),meshFilter,fFilterMesh);
 	if(mesh == nullptr)
 		return nullptr;
 
@@ -1423,53 +1566,55 @@ void cycles::Scene::SetupRenderSettings(
 	film.cryptomatte_depth = 3;
 	film.cryptomatte_passes = ccl::CRYPT_NONE;
 
-	// Session
-	session.params.background = true;
-	session.params.progressive_refine = false;
-	session.params.progressive = false;
-	session.params.experimental = false;
-	//session.params.samples = 50;
-	//session.params.tile_size = {64,64};
-
-	switch(m_deviceType)
-	{
-	case DeviceType::GPU:
-		session.params.tile_size = {256,256};
-		break;
-	default:
-		session.params.tile_size = {16,16};
-		break;
-	}
-
-	session.params.tile_order = ccl::TileOrder::TILE_HILBERT_SPIRAL;
 	session.params.pixel_size = 1;
 	session.params.threads = 0;
 	session.params.use_profiling = false;
 	session.params.shadingsystem = ccl::ShadingSystem::SHADINGSYSTEM_SVM;
 
 	ccl::vector<ccl::Pass> passes;
+	auto displayPass = ccl::PassType::PASS_DIFFUSE_COLOR;
 	switch(renderMode)
 	{
-	case cycles::Scene::RenderMode::SceneNormals:
 	case cycles::Scene::RenderMode::SceneAlbedo:
-		ccl::Pass::add(ccl::PassType::PASS_DIFFUSE_COLOR,passes);
+		// Note: PASS_DIFFUSE_COLOR would probably make more sense but does not seem to work
+		// (just creates a black output).
+		ccl::Pass::add(ccl::PassType::PASS_COMBINED,passes);
+		ccl::Pass::add(ccl::PassType::PASS_DEPTH,passes);
+		displayPass = ccl::PassType::PASS_COMBINED;
+		break;
+	case cycles::Scene::RenderMode::SceneNormals:
+		ccl::Pass::add(ccl::PassType::PASS_COMBINED,passes);
+		ccl::Pass::add(ccl::PassType::PASS_DEPTH,passes);
+		displayPass = ccl::PassType::PASS_COMBINED;
 		break;
 	case cycles::Scene::RenderMode::RenderImage:
 		ccl::Pass::add(ccl::PassType::PASS_COMBINED,passes);
 		ccl::Pass::add(ccl::PassType::PASS_DEPTH,passes);
+		displayPass = ccl::PassType::PASS_COMBINED;
 		break;
 	case cycles::Scene::RenderMode::BakeAmbientOcclusion:
 		ccl::Pass::add(ccl::PassType::PASS_AO,passes);
+		ccl::Pass::add(ccl::PassType::PASS_DEPTH,passes);
+		displayPass = ccl::PassType::PASS_AO;
 		break;
 	case cycles::Scene::RenderMode::BakeDiffuseLighting:
 		ccl::Pass::add(ccl::PassType::PASS_DIFFUSE_DIRECT,passes);
 		ccl::Pass::add(ccl::PassType::PASS_DIFFUSE_INDIRECT,passes);
+		ccl::Pass::add(ccl::PassType::PASS_DEPTH,passes);
+		displayPass = ccl::PassType::PASS_COMBINED; // TODO: Is this correct?
 		break;
 	}
 	bufferParams.passes = passes;
 
+	if(m_motionBlurStrength > 0.f)
+	{
+		// ccl::Pass::add(ccl::PassType::PASS_MOTION,passes);
+		scene.integrator->motion_blur = true;
+	}
+
 	film.pass_alpha_threshold = 0.5;
 	film.tag_passes_update(&scene, passes);
+	film.display_pass = displayPass;
 	film.tag_update(&scene);
 	scene.integrator->tag_update(&scene);
 
@@ -1598,8 +1743,13 @@ void cycles::Scene::InitializeAlbedoPass(bool reloadShaders)
 				continue;
 			auto albedoShader = Shader::Create<ShaderAlbedo>(*this,mesh.GetName() +"_albedo");
 			albedoShader->SetUVHandlers(shader->GetUVHandlers());
-			albedoShader->SetTransparent(*albedoShader,shader->HasFlag(Shader::Flags::Transparent));
+			albedoShader->SetAlphaMode(shader->GetAlphaMode(),shader->GetAlphaCutoff());
 			albedoShader->GetAlbedoSet().SetAlbedoMap(*albedoMap);
+
+			auto *spriteSheetModule = dynamic_cast<ShaderModuleSpriteSheet*>(shader.get());
+			if(spriteSheetModule && spriteSheetModule->GetSpriteSheetData().has_value())
+				albedoShader->SetSpriteSheetData(*spriteSheetModule->GetSpriteSheetData());
+
 			if(albedoModule->GetAlbedoSet2().GetAlbedoMap().has_value())
 			{
 				albedoShader->GetAlbedoSet2().SetAlbedoMap(*albedoModule->GetAlbedoSet2().GetAlbedoMap());
@@ -1665,7 +1815,7 @@ void cycles::Scene::InitializeNormalPass(bool reloadShaders)
 
 			auto normalShader = Shader::Create<ShaderNormal>(*this,mesh.GetName() +"_normal");
 			normalShader->SetUVHandlers(shader->GetUVHandlers());
-			normalShader->SetTransparent(*normalShader,shader->HasFlag(Shader::Flags::Transparent));
+			normalShader->SetAlphaMode(shader->GetAlphaMode(),shader->GetAlphaCutoff());
 			if(albedoMap.has_value())
 			{
 				normalShader->GetAlbedoSet().SetAlbedoMap(*albedoMap);
@@ -1674,6 +1824,9 @@ void cycles::Scene::InitializeNormalPass(bool reloadShaders)
 					normalShader->GetAlbedoSet2().SetAlbedoMap(*normalModule->GetAlbedoSet2().GetAlbedoMap());
 					normalShader->SetUseVertexAlphasForBlending(normalModule->ShouldUseVertexAlphasForBlending());
 				}
+				auto *spriteSheetModule = dynamic_cast<ShaderModuleSpriteSheet*>(shader.get());
+				if(spriteSheetModule && spriteSheetModule->GetSpriteSheetData().has_value())
+					normalShader->SetSpriteSheetData(*spriteSheetModule->GetSpriteSheetData());
 			}
 			if(normalMap.has_value())
 			{
@@ -1690,6 +1843,12 @@ void cycles::Scene::InitializeNormalPass(bool reloadShaders)
 			mesh->shader[i] += numShaders;
 		mesh->tag_update(&m_scene,false);
 	}
+}
+
+static void update_cancel(cycles::SceneWorker &worker,ccl::Session &session)
+{
+	if(worker.IsCancelled())
+		session.progress.set_cancel("Cancelled by application.");
 }
 
 util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> cycles::Scene::Finalize()
@@ -1725,13 +1884,19 @@ util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> cycles::Scene::Finalize()
 		for(;;)
 		{
 			worker.UpdateProgress(baseProgress +m_session->progress.get_progress() *progressMultiplier);
+			update_cancel(worker,*m_session);
 			if(m_session->progress.get_cancel())
 			{
+				Con::cwar<<"WARNING: Cycles rendering has been cancelled: "<<m_session->progress.get_cancel_message()<<Con::endl;
 				worker.Cancel(m_session->progress.get_cancel_message());
 				break;
 			}
 			if(m_session->progress.get_error())
 			{
+				std::string status;
+				std::string subStatus;
+				m_session->progress.get_status(status,subStatus);
+				Con::cwar<<"WARNING: Cycles rendering has failed at status '"<<status<<"' ("<<subStatus<<") with error: "<<m_session->progress.get_error_message()<<Con::endl;
 				worker.SetStatus(util::JobStatus::Failed,m_session->progress.get_error_message());
 				break;
 			}
@@ -1747,9 +1912,9 @@ util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> cycles::Scene::Finalize()
 
 	if(m_renderMode == RenderMode::RenderImage)
 	{
-		m_session->start();
-
 		worker.AddThread([this,&worker,fRenderThread]() {
+			m_session->start();
+
 			// Render image with lighting
 			auto denoise = umath::is_flag_set(m_stateFlags,StateFlags::DenoiseResult);
 			auto progressMultiplier = denoise ? 0.95f : 1.f;
@@ -1768,8 +1933,8 @@ util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> cycles::Scene::Finalize()
 
 				InitializeAlbedoPass(true);
 
-				m_session->start();
 				worker.AddThread([this,&worker,fRenderThread]() {
+					m_session->start();
 					fRenderThread(0.95f,0.025f,[this,&worker,fRenderThread]() -> RenderProcessResult {
 						m_session->wait();
 						m_albedoImageBuffer = FinalizeCyclesScene();
@@ -1780,8 +1945,8 @@ util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> cycles::Scene::Finalize()
 
 						InitializeNormalPass(true);
 
-						m_session->start();
 						worker.AddThread([this,&worker,fRenderThread]() {
+							m_session->start();
 							fRenderThread(0.975f,0.025f,[this,&worker,fRenderThread]() -> RenderProcessResult {
 								m_session->wait();
 								m_normalImageBuffer = FinalizeCyclesScene();
@@ -1825,9 +1990,8 @@ util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> cycles::Scene::Finalize()
 			InitializeAlbedoPass(false);
 		else
 			InitializeNormalPass(false);
-		m_session->start();
-
 		worker.AddThread([this,&worker,fRenderThread]() {
+			m_session->start();
 			fRenderThread(0.f,1.f,[this,&worker,fRenderThread]() -> RenderProcessResult {
 				m_session->wait();
 				m_resultImageBuffer = FinalizeCyclesScene();
@@ -2091,7 +2255,9 @@ float cycles::Scene::GetLightIntensityFactor() const {return m_lightIntensityFac
 void cycles::Scene::SetSky(const std::string &skyPath) {m_sky = skyPath;}
 void cycles::Scene::SetSkyAngles(const EulerAngles &angSky) {m_skyAngles = angSky;}
 void cycles::Scene::SetSkyStrength(float strength) {m_skyStrength = strength;}
+void cycles::Scene::SetEmissionStrength(float strength) {m_emissionStrength = strength;}
 void cycles::Scene::SetMaxTransparencyBounces(uint32_t maxBounces) {m_maxTransparencyBounces = maxBounces;}
+void cycles::Scene::SetMotionBlurStrength(float strength) {m_motionBlurStrength = strength;}
 
 ccl::Session *cycles::Scene::GetCCLSession() {return m_session.get();}
 

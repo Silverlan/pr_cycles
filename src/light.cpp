@@ -4,6 +4,8 @@
 #include <render/light.h>
 #include <render/scene.h>
 #include <render/nodes.h>
+#include <pragma/math/c_util_math.hpp>
+#include <pragma/entities/environment/lights/env_light.h>
 #include <mathutil/umath_lighting.hpp>
 
 using namespace pragma::modules;
@@ -80,7 +82,6 @@ void cycles::Light::SetSizeV(float sizeV) {m_sizeV = sizeV;}
 
 void cycles::Light::DoFinalize()
 {
-	float watt = m_intensity;
 	PShader shader = nullptr;
 	switch(m_type)
 	{
@@ -108,8 +109,6 @@ void cycles::Light::DoFinalize()
 		auto &rot = GetRotation();
 		auto forward = uquat::forward(rot);
 		m_light.dir = cycles::Scene::ToCyclesNormal(forward);
-		static auto intensity = 7.5f;
-		watt /= intensity;
 		break;
 	}
 	case Type::Area:
@@ -149,12 +148,8 @@ void cycles::Light::DoFinalize()
 		m_light.shader = **cclShader;
 	}
 
-	if(m_type != Type::Directional)
-	{
-		watt = ulighting::lumens_to_watts(m_intensity,ulighting::get_luminous_efficacy(ulighting::LightSourceType::LEDLamp));
-		static auto mulFactor = 30.f;
-		watt *= mulFactor; // Arbitrary, but results in a closer match
-	}
+	auto lightType = (m_type == Type::Spot) ? LightType::Spot : (m_type == Type::Directional) ? LightType::Directional : LightType::Point;
+	auto watt = pragma::math::light_intensity_to_watts(m_intensity,lightType);
 
 	// Multiple importance sampling. It's disabled by default for some reason, but it's usually best to keep it on.
 	m_light.use_mis = true;

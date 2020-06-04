@@ -2,12 +2,14 @@
 #include "pr_cycles/mesh.hpp"
 #include "pr_cycles/object.hpp"
 #include "pr_cycles/shader.hpp"
+namespace pragma::asset {class WorldData; class EntityData;};
 #include <pragma/c_engine.h>
 #include <pragma/rendering/c_rendermode.h>
 #include <pragma/entities/environment/effects/c_env_particle_system.h>
 #include <pragma/entities/environment/c_env_camera.h>
 #include <pragma/rendering/shaders/particles/c_shader_particle.hpp>
 #include <pragma/game/c_game.h>
+#include <datasystem_vector.h>
 
 extern DLLCENGINE CEngine *c_engine;
 extern DLLCLIENT CGame *c_game;
@@ -39,41 +41,6 @@ static Mat3 get_rotation_matrix(Vector4 q)
 	);
 }
 
-static Vector2 get_animated_texture_uv(const Vector2 &UV,float tStart,const pragma::CParticleSystemComponent::AnimationData &animData,float curTime)
-{
-	if(animData.frames == 0)
-		return UV;
-	float frame = animData.offset;
-	float w = 1.0 /animData.columns;
-	float h = 1.0 /animData.rows;
-	if(animData.fps > 0)
-	{
-		float t = umath::max(curTime -tStart,0.f);
-		float scale = float(animData.frames) /float(animData.fps);
-		float r = t /scale;
-		r = floor((t -floor(r) *scale) /scale *animData.frames);
-		frame += r;
-	}
-	else
-	{
-		float t = tStart;
-		float scale = t;
-		float r = floor(scale *animData.frames);
-		frame += r;
-	}
-	++frame;
-	Vector2 texUV;
-	texUV.x = UV.x /animData.columns +w *(frame -1);
-	texUV.y = (UV.y /animData.rows) +h *(floor((frame -1) /animData.columns));
-	return texUV;
-}
-static Vector2 get_particle_uv(const Vector2 &uv,float tStart,const pragma::CParticleSystemComponent::AnimationData &animData,float curTime,pragma::ShaderParticleBase::RenderFlags flags)
-{
-	if(umath::is_flag_set(flags,pragma::ShaderParticleBase::RenderFlags::Animated) == false)
-		return uv;
-	return get_animated_texture_uv(uv,tStart,animData,curTime);
-}
-
 static Vector3 get_corner_particle_vertex_position(
 	const pragma::CParticleSystemComponent::ParticleData &pt,const Vector3 &camPos,
 	pragma::CParticleSystemComponent::OrientationType orientation,const Vector2 &vertPos,
@@ -81,7 +48,7 @@ static Vector3 get_corner_particle_vertex_position(
 )
 {
 	Vector3 particleCenterWs {pt.position.x,pt.position.y,pt.position.z};
-	Vector2 vsize {get_particle_extent(pt.position.w),get_particle_extent(pt.length)};
+	Vector2 vsize {get_particle_extent(pt.radius),get_particle_extent(pt.length)};
 	Vector3 squareVert {vertPos.x,vertPos.y,0.0};
 
 	Vector3 right {};
@@ -120,8 +87,11 @@ void cycles::Scene::AddParticleSystem(pragma::CParticleSystemComponent &ptc,cons
 	auto *mat = ptc.GetMaterial();
 	if(mat == nullptr)
 		return;
-
-	auto *pShader = static_cast<pragma::ShaderParticle*>(c_engine->GetShader("particle").get());
+	auto &renderers = ptc.GetRenderers();
+	if(renderers.empty())
+		return;
+	auto &renderer = *renderers.front();
+	auto *pShader = dynamic_cast<pragma::ShaderParticle2DBase*>(renderer.GetShader());
 	if(pShader == nullptr)
 		return;
 
@@ -135,47 +105,97 @@ void cycles::Scene::AddParticleSystem(pragma::CParticleSystemComponent &ptc,cons
 	);
 	auto renderFlags = pShader->GetRenderFlags(ptc);
 
-	constexpr std::array<Vector2,6> vertices = {
-		Vector2{0.5f,-0.5f},
-		Vector2{-0.5f,-0.5f},
-		Vector2{-0.5f,0.5f},
-		Vector2{0.5f,0.5f},
-		Vector2{0.5f,-0.5f},
-		Vector2{-0.5f,0.5f}
-	};
-
 	ShaderInfo shaderInfo {};
 	shaderInfo.particleSystem = &ptc;
 	std::string meshName = "particleMesh" +std::to_string(ptc.GetEntity().GetLocalIndex());
-	auto *animData = ptc.GetAnimationData();
+	auto *spriteSheetAnim = ptc.GetSpriteSheetAnimation();
 	auto curTime = c_game->CurTime();
 	auto &particles = ptc.GetRenderParticleData();
-	auto &animStartBuffer = ptc.GetRenderParticleAnimationStartData();
+	auto &animData = ptc.GetParticleAnimationData();
 	auto numParticles = ptc.GetRenderParticleCount();
 	for(auto i=decltype(numParticles){0u};i<numParticles;++i)
 	{
 		auto &pt = particles.at(i);
+		auto ptIdx = ptc.TranslateBufferIndex(i);
 		auto ptMeshName = meshName +"_" +std::to_string(i);
-		constexpr uint32_t numVerts = vertices.size();
-		constexpr uint32_t numTris = 2;
+		constexpr uint32_t numVerts = pragma::ShaderParticle2DBase::VERTEX_COUNT;
+		uint32_t numTris = pragma::ShaderParticle2DBase::TRIANGLE_COUNT *2;
 		auto mesh = Mesh::Create(*this,ptMeshName,numVerts,numTris);
-		auto pos = Vector3{pt.position.x,pt.position.y,pt.position.z};
-		for(auto &v : vertices)
+		auto pos = ptc.GetParticlePosition(ptIdx);
+		for(auto vertIdx=decltype(numVerts){0u};vertIdx<numVerts;++vertIdx)
 		{
-			auto uv = v +Vector2{0.5f,0.5f};
-			if(animData && i < animStartBuffer.size())
-				uv = get_animated_texture_uv(uv,animStartBuffer.at(i),*animData,curTime);
-			auto vertPos = pos +get_corner_particle_vertex_position(
-				pt,camPos,orientationType,v,
-				camUpWs,camRightWs,
-				ptNearZ,ptFarZ
-			);
-			mesh->AddVertex(vertPos,uvec::RIGHT,uvec::FORWARD,uv);
+			auto vertPos = pShader->CalcVertexPosition(ptc,ptc.TranslateBufferIndex(i),vertIdx,camPos,camUpWs,camRightWs,nearZ,farZ);
+			auto uv = pragma::ShaderParticle2DBase::GetVertexUV(vertIdx);
+			mesh->AddVertex(vertPos,-uvec::RIGHT,uvec::FORWARD,uv);
 		}
+		static_assert(pragma::ShaderParticle2DBase::TRIANGLE_COUNT == 2 && pragma::ShaderParticle2DBase::VERTEX_COUNT == 6);
 		mesh->AddTriangle(0,1,2,0);
 		mesh->AddTriangle(3,4,5,0);
+
+		// We need back-faces to make sure particles with light emission also light up what's behind them
+		mesh->AddTriangle(0,2,1,0);
+		mesh->AddTriangle(3,5,4,0);
+
 		shaderInfo.particle = &pt;
+
 		auto shader = CreateShader(*mat,ptMeshName,shaderInfo);
+		if(shader == nullptr)
+			continue;
+		auto *shaderModAlbedo = dynamic_cast<ShaderModuleAlbedo*>(shader.get());
+		auto *shaderModEmission = dynamic_cast<ShaderModuleEmission*>(shader.get());
+		auto *shaderModSpriteSheet = dynamic_cast<ShaderModuleSpriteSheet*>(shader.get());
+		if(shaderModAlbedo)
+		{
+			if(shaderModSpriteSheet)
+			{
+				auto &ptData = *ptc.GetParticle(ptIdx);
+				auto sequence = ptData.GetSequence();
+				if(spriteSheetAnim && i < animData.size() && sequence < spriteSheetAnim->sequences.size())
+				{
+					auto &ptAnimData = animData.at(i);
+					auto &seq = spriteSheetAnim->sequences.at(sequence);
+					auto &frame0 = seq.frames.at(seq.GetLocalFrameIndex(ptAnimData.frameIndex0));
+					auto &frame1 = seq.frames.at(seq.GetLocalFrameIndex(ptAnimData.frameIndex1));
+
+					shaderModSpriteSheet->SetSpriteSheetData(
+						frame0.uvStart,frame0.uvEnd,
+						*shaderModAlbedo->GetAlbedoSet().GetAlbedoMap(),frame1.uvStart,frame1.uvEnd,
+						ptAnimData.interpFactor
+					);
+				}
+			}
+			if(shaderModEmission)
+			{
+				if(ptc.IsBloomEnabled() == false)
+					shaderModEmission->SetEmissionFactor({1.f,1.f,1.f}); // Clear emission
+				else
+				{
+					auto &albedoMap = shaderModAlbedo->GetAlbedoSet().GetAlbedoMap();
+					if(albedoMap.has_value())
+					{
+						shaderModEmission->SetEmissionMap(*albedoMap);
+						/*auto valEmissionFactor = mat->GetDataBlock()->GetValue("emission_factor");
+						if(valEmissionFactor && typeid(*valEmissionFactor) == typeid(ds::Vector))
+						{
+							auto &emissionFactor = static_cast<ds::Vector&>(*valEmissionFactor).GetValue();
+							shaderModEmission->SetEmissionFactor(emissionFactor *m_emissionStrength);
+						}*/
+
+						auto &bloomColor = ptc.GetBloomColorFactor();
+						auto emissionFactor = shaderModEmission->GetEmissionFactor();
+						if(uvec::length_sqr(emissionFactor) != 0.f)
+							emissionFactor *= Vector3{bloomColor};
+						else
+							emissionFactor = Vector3{bloomColor};
+						shaderModEmission->SetEmissionFactor(emissionFactor);
+					}
+				}
+			}
+			auto ptColor = pt.GetColor().ToVector4();
+			auto colorFactor = shaderModAlbedo->GetAlbedoSet().GetColorFactor();
+			colorFactor *= ptColor;
+			shaderModAlbedo->GetAlbedoSet().SetColorFactor(colorFactor);
+		}
 		mesh->AddSubMeshShader(*shader);
 
 		Object::Create(*this,*mesh);

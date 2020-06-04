@@ -36,10 +36,18 @@ void cycles::Object::DoFinalize()
 {
 	m_mesh->Finalize();
 	m_object.tfm = Scene::ToCyclesTransform(GetPose());
+
+#ifdef ENABLE_MOTION_BLUR_TEST
+	m_motionPose.SetOrigin(Vector3{100.f,100.f,100.f});
+	m_object.motion.push_back_slow(Scene::ToCyclesTransform(GetMotionPose()));
+#endif
 }
 
 const cycles::Mesh &cycles::Object::GetMesh() const {return const_cast<Object*>(this)->GetMesh();}
 cycles::Mesh &cycles::Object::GetMesh() {return *m_mesh;}
+
+const pragma::physics::Transform &cycles::Object::GetMotionPose() const {return m_motionPose;}
+void cycles::Object::SetMotionPose(const pragma::physics::Transform &pose) {m_motionPose = pose;}
 
 ccl::Object *cycles::Object::operator->() {return &m_object;}
 ccl::Object *cycles::Object::operator*() {return &m_object;}

@@ -8,8 +8,9 @@ namespace ccl
 {
 	class PrincipledBsdfNode; class NormalMapNode; class ToonBsdfNode; class GlassBsdfNode; class MixClosureNode; class TransparentBsdfNode; class MixNode;
 	class SeparateXYZNode; class CombineXYZNode; class SeparateRGBNode; class CombineRGBNode; class BackgroundNode; class TextureCoordinateNode; class MappingNode;
-	class EnvironmentTextureNode; class ImageTextureNode; class ColorNode; class MathNode; class AttributeNode;
+	class EnvironmentTextureNode; class ImageTextureNode; class ColorNode; class MathNode; class AttributeNode; class LightPathNode; class DiffuseBsdfNode;
 	enum AttributeStandard : int32_t;
+	enum NodeMathType : int32_t;
 };
 namespace pragma::modules::cycles {struct NumberSocket;};
 pragma::modules::cycles::NumberSocket operator+(float value,const pragma::modules::cycles::NumberSocket &socket);
@@ -69,6 +70,7 @@ namespace pragma::modules::cycles
 		NumberSocket operator-(const NumberSocket &value) const;
 		NumberSocket operator*(const NumberSocket &value) const;
 		NumberSocket operator/(const NumberSocket &value) const;
+		NumberSocket operator-() const;
 
 		NumberSocket pow(const NumberSocket &exponent) const;
 		NumberSocket sqrt() const;
@@ -105,6 +107,7 @@ namespace pragma::modules::cycles
 
 		void SetValue1(float value);
 		void SetValue2(float value);
+		void SetType(ccl::NodeMathType type);
 	private:
 		ccl::MathNode *m_node = nullptr;
 	};
@@ -314,6 +317,25 @@ namespace pragma::modules::cycles
 	private:
 		ccl::AttributeNode *m_node = nullptr;
 	};
+	struct LightPathNode
+		: public Node
+	{
+		LightPathNode(CCLShader &shader,const std::string &nodeName,ccl::LightPathNode &node);
+		NumberSocket outIsCameraRay;
+		NumberSocket outIsShadowRay;
+		NumberSocket outIsDiffuseRay;
+		NumberSocket outIsGlossyRay;
+		NumberSocket outIsSingularRay;
+		NumberSocket outIsReflectionRay;
+		NumberSocket outIsTransmissionRay;
+		NumberSocket outIsVolumeScatterRay;
+		NumberSocket outRayLength;
+		NumberSocket outRayDepth;
+		NumberSocket outDiffuseDepth;
+		NumberSocket outGlossyDepth;
+		NumberSocket outTransparentDepth;
+		NumberSocket outTransmissionDepth;
+	};
 	struct MixNode
 		: public Node
 	{
@@ -371,6 +393,26 @@ namespace pragma::modules::cycles
 		void SetSurfaceMixWeight(float weight);
 	private:
 		ccl::TransparentBsdfNode *m_node = nullptr;
+	};
+	struct DiffuseBsdfNode
+		: public Node
+	{
+		DiffuseBsdfNode(CCLShader &shader,const std::string &nodeName,ccl::DiffuseBsdfNode &node);
+		Socket inColor;
+		Socket inNormal;
+		NumberSocket inSurfaceMixWeight;
+		NumberSocket inRoughness;
+
+		Socket outBsdf;
+
+		operator const Socket&() const;
+
+		void SetColor(const Vector3 &color);
+		void SetNormal(const Vector3 &normal);
+		void SetSurfaceMixWeight(float weight);
+		void SetRoughness(float roughness);
+	private:
+		ccl::DiffuseBsdfNode *m_node = nullptr;
 	};
 	struct NormalMapNode
 		: public Node

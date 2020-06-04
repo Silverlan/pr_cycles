@@ -98,6 +98,7 @@ cycles::NumberSocket cycles::NumberSocket::operator/(const NumberSocket &value) 
 	}
 	return shader->AddMathNode(*this,value,ccl::NodeMathType::NODE_MATH_DIVIDE);
 }
+cycles::NumberSocket cycles::NumberSocket::operator-() const {return *this *-1.f;}
 cycles::NumberSocket cycles::NumberSocket::pow(const NumberSocket &exponent) const
 {
 	auto *shader = m_shader ? m_shader : exponent.m_shader;
@@ -149,6 +150,7 @@ cycles::NumberSocket cycles::NumberSocket::dot(
 
 void cycles::MathNode::SetValue1(float value) {m_node->value1 = value;}
 void cycles::MathNode::SetValue2(float value) {m_node->value2 = value;}
+void cycles::MathNode::SetType(ccl::NodeMathType type) {m_node->type = type;}
 cycles::MathNode::operator const cycles::NumberSocket&() const {return outValue;}
 cycles::NumberSocket operator+(float value,const cycles::NumberSocket &socket) {return socket +value;}
 cycles::NumberSocket operator-(float value,const cycles::NumberSocket &socket)
@@ -262,16 +264,16 @@ void cycles::MappingNode::SetType(Type type)
 	switch(type)
 	{
 	case Type::Point:
-		m_node->tex_mapping.type = ccl::TextureMapping::Type::POINT;
+		m_node->type = ccl::NodeMappingType::NODE_MAPPING_TYPE_POINT;
 		break;
 	case Type::Texture:
-		m_node->tex_mapping.type = ccl::TextureMapping::Type::TEXTURE;
+		m_node->type = ccl::NodeMappingType::NODE_MAPPING_TYPE_TEXTURE;
 		break;
 	case Type::Vector:
-		m_node->tex_mapping.type = ccl::TextureMapping::Type::VECTOR;
+		m_node->type = ccl::NodeMappingType::NODE_MAPPING_TYPE_VECTOR;
 		break;
 	case Type::Normal:
-		m_node->tex_mapping.type = ccl::TextureMapping::Type::NORMAL;
+		m_node->type = ccl::NodeMappingType::NODE_MAPPING_TYPE_NORMAL;
 		break;
 	}
 }
@@ -279,7 +281,7 @@ void cycles::MappingNode::SetRotation(const EulerAngles &ang)
 {
 	auto cclAngles = ang;
 	cclAngles.p -= 90.f;
-	m_node->tex_mapping.rotation = {
+	m_node->rotation = {
 		static_cast<float>(umath::deg_to_rad(-cclAngles.p)),
 		static_cast<float>(umath::deg_to_rad(cclAngles.r)),
 		static_cast<float>(umath::deg_to_rad(-cclAngles.y))
@@ -302,7 +304,6 @@ cycles::ColorNode::operator const cycles::Socket&() const {return outColor;}
 
 void cycles::ColorNode::SetColor(const Vector3 &color) {m_node->value = {color.r,color.g,color.b};}
 
-::
 cycles::AttributeNode::AttributeNode(CCLShader &shader,const std::string &nodeName,ccl::AttributeNode &node)
 	: Node{shader},outColor{shader,nodeName,"color"},outVector{shader,nodeName,"vector"},outFactor{shader,nodeName,"fac"},
 	m_node{&node}
@@ -311,6 +312,13 @@ void cycles::AttributeNode::SetAttribute(ccl::AttributeStandard attrType)
 {
 	m_node->attribute = ccl::Attribute::standard_name(attrType);
 }
+
+cycles::LightPathNode::LightPathNode(CCLShader &shader,const std::string &nodeName,ccl::LightPathNode &node)
+	: Node{shader},outIsCameraRay{Socket{shader,nodeName,"is_camera_ray"}},outIsShadowRay{Socket{shader,nodeName,"is_shadow_ray"}},outIsDiffuseRay{Socket{shader,nodeName,"is_diffuse_ray"}},
+	outIsGlossyRay{Socket{shader,nodeName,"is_glossy_ray"}},outIsSingularRay{Socket{shader,nodeName,"is_singular_ray"}},outIsReflectionRay{Socket{shader,nodeName,"is_reflection_ray"}},outIsTransmissionRay{Socket{shader,nodeName,"is_transmission_ray"}},
+	outIsVolumeScatterRay{Socket{shader,nodeName,"is_volume_scatter_ray"}},outRayLength{Socket{shader,nodeName,"ray_length"}},outRayDepth{Socket{shader,nodeName,"ray_depth"}},outDiffuseDepth{Socket{shader,nodeName,"diffuse_depth"}},
+	outGlossyDepth{Socket{shader,nodeName,"glossy_depth"}},outTransparentDepth{Socket{shader,nodeName,"transparent_depth"}},outTransmissionDepth{Socket{shader,nodeName,"transmission_depth"}}
+{}
 
 cycles::MixNode::MixNode(CCLShader &shader,const std::string &nodeName,ccl::MixNode &node)
 	: Node{shader},inFac{Socket{shader,nodeName,"fac",false}},inColor1{shader,nodeName,"color1",false},inColor2{shader,nodeName,"color2",false},outColor{shader,nodeName,"color"},
@@ -393,6 +401,18 @@ cycles::TransparentBsdfNode::operator const cycles::Socket&() const {return outB
 
 void cycles::TransparentBsdfNode::SetColor(const Vector3 &color) {m_node->color = {color.r,color.g,color.b};}
 void cycles::TransparentBsdfNode::SetSurfaceMixWeight(float weight) {m_node->surface_mix_weight = weight;}
+
+cycles::DiffuseBsdfNode::DiffuseBsdfNode(CCLShader &shader,const std::string &nodeName,ccl::DiffuseBsdfNode &node)
+	: Node{shader},inColor{shader,nodeName,"color",false},inNormal{shader,nodeName,"normal",false},inSurfaceMixWeight{Socket{shader,nodeName,"surface_mix_weight",false}},
+	inRoughness{Socket{shader,nodeName,"roughness",false}},outBsdf{shader,nodeName,"bsdf"}
+{}
+
+cycles::DiffuseBsdfNode::operator const cycles::Socket&() const {return outBsdf;}
+
+void cycles::DiffuseBsdfNode::SetColor(const Vector3 &color) {m_node->color = {color.r,color.g,color.b};}
+void cycles::DiffuseBsdfNode::SetNormal(const Vector3 &normal) {m_node->normal = {normal.r,normal.g,normal.b};}
+void cycles::DiffuseBsdfNode::SetSurfaceMixWeight(float weight) {m_node->surface_mix_weight = weight;}
+void cycles::DiffuseBsdfNode::SetRoughness(float roughness) {m_node->roughness = roughness;}
 
 cycles::NormalMapNode::NormalMapNode(CCLShader &shader,const std::string &nodeName,ccl::NormalMapNode &normalMapNode)
 	: Node{shader},inStrength{Socket{shader,nodeName,"strength",false}},inColor{shader,nodeName,"color",false},outNormal{shader,nodeName,"normal"},

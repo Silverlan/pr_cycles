@@ -41,6 +41,7 @@ namespace pragma
 	class CLightMapComponent;
 	class CParticleSystemComponent;
 	class CSkyCameraComponent;
+	class CModelComponent;
 	namespace physics {class Transform; class ScaledTransform;};
 };
 namespace util::bsp {struct LightMapInfo;};
@@ -123,6 +124,7 @@ namespace pragma::modules::cycles
 
 			Count
 		};
+
 		struct CreateInfo
 		{
 			std::optional<uint32_t> samples = {};
@@ -158,7 +160,14 @@ namespace pragma::modules::cycles
 		void AddParticleSystem(pragma::CParticleSystemComponent &ptc,const Vector3 &camPos,const Mat4 &vp,float nearZ,float farZ);
 		void AddSkybox(const std::string &texture);
 		PMesh AddModel(
-			Model &mdl,const std::string &meshName,BaseEntity *optEnt=nullptr,uint32_t skinId=0,CAnimatedComponent *optAnimC=nullptr,
+			Model &mdl,const std::string &meshName,BaseEntity *optEnt=nullptr,uint32_t skinId=0,
+			CModelComponent *optMdlC=nullptr,CAnimatedComponent *optAnimC=nullptr,
+			const std::function<bool(ModelMesh&)> &optMeshFilter=nullptr,
+			const std::function<bool(ModelSubMesh&)> &optSubMeshFilter=nullptr
+		);
+		PMesh AddMeshList(
+			Model &mdl,const std::vector<std::shared_ptr<ModelMesh>> &meshList,const std::string &meshName,BaseEntity *optEnt=nullptr,uint32_t skinId=0,
+			CModelComponent *optMdlC=nullptr,CAnimatedComponent *optAnimC=nullptr,
 			const std::function<bool(ModelMesh&)> &optMeshFilter=nullptr,
 			const std::function<bool(ModelSubMesh&)> &optSubMeshFilter=nullptr
 		);
@@ -184,7 +193,9 @@ namespace pragma::modules::cycles
 		void SetSky(const std::string &skyPath);
 		void SetSkyAngles(const EulerAngles &angSky);
 		void SetSkyStrength(float strength);
+		void SetEmissionStrength(float strength);
 		void SetMaxTransparencyBounces(uint32_t maxBounces);
+		void SetMotionBlurStrength(float strength);
 
 		util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> Finalize();
 
@@ -211,11 +222,13 @@ namespace pragma::modules::cycles
 		void InitializeNormalPass(bool reloadShaders);
 		void ApplyPostProcessing(uimg::ImageBuffer &imgBuffer,cycles::Scene::RenderMode renderMode);
 		void DenoiseHDRImageArea(uimg::ImageBuffer &imgBuffer,uint32_t imgWidth,uint32_t imgHeight,uint32_t x,uint32_t y,uint32_t w,uint32_t h) const;
-		void AddMesh(Model &mdl,Mesh &mesh,ModelSubMesh &mdlMesh,pragma::CAnimatedComponent *optAnimC=nullptr,BaseEntity *optEnt=nullptr,uint32_t skinId=0);
+		void AddMesh(Model &mdl,Mesh &mesh,ModelSubMesh &mdlMesh,pragma::CModelComponent *optMdlC=nullptr,pragma::CAnimatedComponent *optAnimC=nullptr,BaseEntity *optEnt=nullptr,uint32_t skinId=0);
 		void AddRoughnessMapImageTextureNode(ShaderModuleRoughness &shader,Material &mat,float defaultRoughness) const;
 		PShader CreateShader(Material &mat,const std::string &meshName,const ShaderInfo &shaderInfo={});
 		PShader CreateShader(Mesh &mesh,Model &mdl,ModelSubMesh &subMesh,BaseEntity *optEnt=nullptr,uint32_t skinId=0);
 		Material *GetMaterial(Model &mdl,ModelSubMesh &subMesh,uint32_t skinId) const;
+		Material *GetMaterial(pragma::CModelComponent &mdlC,ModelSubMesh &subMesh,uint32_t skinId) const;
+		Material *GetMaterial(BaseEntity &ent,ModelSubMesh &subMesh,uint32_t skinId) const;
 		bool Denoise(
 			const DenoiseInfo &denoise,uimg::ImageBuffer &imgBuffer,
 			uimg::ImageBuffer *optImgBufferAlbedo=nullptr,
@@ -240,7 +253,9 @@ namespace pragma::modules::cycles
 		EulerAngles m_skyAngles = {};
 		std::string m_sky = "";
 		float m_skyStrength = 1.f;
+		float m_emissionStrength = 1.f;
 		float m_lightIntensityFactor = 1.f;
+		float m_motionBlurStrength = 0.f;
 		uint32_t m_maxTransparencyBounces = 64;
 		DeviceType m_deviceType = DeviceType::GPU;
 		std::vector<PShader> m_shaders = {};

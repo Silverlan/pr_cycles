@@ -25,6 +25,9 @@ namespace pragma::modules::cycles
 		const Mesh &GetMesh() const;
 		Mesh &GetMesh();
 
+		const physics::Transform &GetMotionPose() const;
+		void SetMotionPose(const physics::Transform &pose);
+
 		ccl::Object *operator->();
 		ccl::Object *operator*();
 	private:
@@ -32,6 +35,9 @@ namespace pragma::modules::cycles
 		ccl::Object &m_object;
 		uint32_t m_id = 0;
 		PMesh m_mesh = nullptr;
+
+		// TODO
+		physics::Transform m_motionPose = {};
 	};
 };
 

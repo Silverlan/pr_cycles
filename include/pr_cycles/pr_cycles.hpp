@@ -9,6 +9,8 @@
 #define PRAGMA_IMPORT
 #endif
 
+// #define ENABLE_MOTION_BLUR_TEST
+
 #include <render/session.h>
 #include <render/scene.h>
 

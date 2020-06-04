@@ -25,7 +25,8 @@ namespace pragma::modules::cycles
 		enum class Flags : uint8_t
 		{
 			None = 0u,
-			HasAlphas = 1u
+			HasAlphas = 1u,
+			HasWrinkles = HasAlphas<<1u
 		};
 		static constexpr ccl::AttributeStandard ALPHA_ATTRIBUTE_TYPE = ccl::AttributeStandard::ATTR_STD_POINTINESS;
 
@@ -36,6 +37,7 @@ namespace pragma::modules::cycles
 		const ccl::float4 *GetTangents() const;
 		const float *GetTangentSigns() const;
 		const float *GetAlphas() const;
+		const float *GetWrinkleFactors() const;
 		const ccl::float2 *GetUVs() const;
 		const ccl::float2 *GetLightmapUVs() const;
 		const std::vector<PShader> &GetSubMeshShaders() const;
@@ -46,9 +48,11 @@ namespace pragma::modules::cycles
 		uint32_t GetVertexOffset() const;
 		std::string GetName() const;
 		bool HasAlphas() const;
+		bool HasWrinkles() const;
 
 		bool AddVertex(const Vector3 &pos,const Vector3 &n,const Vector3 &t,const Vector2 &uv);
 		bool AddAlpha(float alpha);
+		bool AddWrinkleFactor(float wrinkle);
 		bool AddTriangle(uint32_t idx0,uint32_t idx1,uint32_t idx2,uint32_t shaderIndex);
 		uint32_t AddSubMeshShader(Shader &shader);
 		ccl::Mesh *operator->();

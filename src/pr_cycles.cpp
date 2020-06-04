@@ -12,6 +12,7 @@
 #include <render/background.h>
 #include <render/svm.h>
 
+namespace pragma::asset {class WorldData; class EntityData;};
 #include <pragma/lua/luaapi.h>
 #include <prosper_context.hpp>
 #include <pragma/c_engine.h>
@@ -37,9 +38,17 @@
 #include <pragma/rendering/renderers/rasterization_renderer.hpp>
 #include <pragma/rendering/occlusion_culling/occlusion_culling_handler_bsp.hpp>
 #include <pragma/lua/classes/ldef_entity.h>
+
+#undef __SCENE_H__
+#include <pragma/rendering/scene/scene.h>
+
 #include <luainterface.hpp>
 #include <pragma/lua/lua_entity_component.hpp>
 #include <pragma/lua/lua_call.hpp>
+
+// Already defined b
+#undef __UTIL_STRING_H__
+#include <sharedutils/util_string.h>
 
 #include "pr_cycles/scene.hpp"
 #include "pr_cycles/shader.hpp"
@@ -113,26 +122,35 @@ static void setup_light_sources(cycles::Scene &scene,const std::function<bool(Ba
 	}
 }
 
-static cycles::PScene setup_scene(cycles::Scene::RenderMode renderMode,uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,bool denoise)
+static cycles::PScene setup_scene(cycles::Scene::RenderMode renderMode,uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,bool denoise,cycles::Scene::DeviceType deviceType=cycles::Scene::DeviceType::CPU)
 {
 	cycles::Scene::CreateInfo createInfo {};
 	createInfo.denoise = denoise;
 	createInfo.hdrOutput = hdrOutput;
 	createInfo.samples = sampleCount;
+	createInfo.deviceType = deviceType;
 	auto scene = cycles::Scene::Create(renderMode,createInfo);
 	if(scene == nullptr)
 		return nullptr;
+#ifdef ENABLE_MOTION_BLUR_TEST
+	scene->SetMotionBlurStrength(1.f);
+#endif
 	auto &cam = scene->GetCamera();
 	cam.SetResolution(width,height);
 	return scene;
 }
 
 static void initialize_cycles_scene_from_game_scene(
-	cycles::Scene &scene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,bool cullObjectsOutsidePvs,
+	Scene &gameScene,cycles::Scene &scene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,bool cullObjectsOutsidePvs,
 	const std::function<bool(BaseEntity&)> &entFilter=nullptr,const std::function<bool(BaseEntity&)> &lightFilter=nullptr
 )
 {
-	setup_light_sources(scene,lightFilter);
+	auto entSceneFilter = [&gameScene](BaseEntity &ent) -> bool {
+		return static_cast<CBaseEntity&>(ent).IsInScene(gameScene);
+	};
+	setup_light_sources(scene,[&entSceneFilter,&lightFilter](BaseEntity &ent) -> bool {
+		return entSceneFilter(ent) && (lightFilter == nullptr || lightFilter(ent));
+	});
 	auto &cam = scene.GetCamera();
 	cam.SetPos(camPos);
 	cam.SetRotation(camRot);
@@ -156,11 +174,11 @@ static void initialize_cycles_scene_from_game_scene(
 		}
 	}
 
-
 	// All entities
 	EntityIterator entIt {*c_game};
 	entIt.AttachFilter<TEntityIteratorFilterComponent<pragma::CRenderComponent>>();
 	entIt.AttachFilter<TEntityIteratorFilterComponent<pragma::CModelComponent>>();
+	entIt.AttachFilter<EntityIteratorFilterUser>(entSceneFilter);
 	for(auto *ent : entIt)
 	{
 		auto renderC = ent->GetComponent<pragma::CRenderComponent>();
@@ -207,6 +225,7 @@ static void initialize_cycles_scene_from_game_scene(
 	// Particle Systems
 	EntityIterator entItPt {*c_game};
 	entItPt.AttachFilter<TEntityIteratorFilterComponent<pragma::CParticleSystemComponent>>();
+	entItPt.AttachFilter<EntityIteratorFilterUser>(entSceneFilter);
 	for(auto *ent : entItPt)
 	{
 		auto ptc = ent->GetComponent<pragma::CParticleSystemComponent>();
@@ -216,6 +235,7 @@ static void initialize_cycles_scene_from_game_scene(
 	// 3D Sky
 	EntityIterator entIt3dSky {*c_game};
 	entIt3dSky.AttachFilter<TEntityIteratorFilterComponent<pragma::CSkyCameraComponent>>();
+	entIt3dSky.AttachFilter<EntityIteratorFilterUser>(entSceneFilter);
 	for(auto *ent : entIt3dSky)
 	{
 		auto skyc = ent->GetComponent<pragma::CSkyCameraComponent>();
@@ -224,12 +244,12 @@ static void initialize_cycles_scene_from_game_scene(
 }
 
 static void initialize_from_game_scene(
-	lua_State *l,cycles::Scene &scene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,
+	lua_State *l,Scene &gameScene,cycles::Scene &scene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,
 	float nearZ,float farZ,float fov,bool cullObjectsOutsidePvs,luabind::object *optEntFilter,luabind::object *optLightFilter
 )
 {
 	std::function<bool(BaseEntity&)> entFilter = nullptr;
-	Lua::CheckFunction(l,9);
+	Lua::CheckFunction(l,10);
 	entFilter = [l,optEntFilter](BaseEntity &ent) -> bool {
 		if(optEntFilter == nullptr)
 			return true;
@@ -249,7 +269,7 @@ static void initialize_from_game_scene(
 	};
 
 	std::function<bool(BaseEntity&)> lightFilter = nullptr;
-	Lua::CheckFunction(l,10);
+	Lua::CheckFunction(l,11);
 	lightFilter = [l,optLightFilter](BaseEntity &ent) -> bool {
 		if(optLightFilter == nullptr)
 			return true;
@@ -268,7 +288,7 @@ static void initialize_from_game_scene(
 		return false;
 	};
 
-	initialize_cycles_scene_from_game_scene(scene,camPos,camRot,vp,nearZ,farZ,fov,cullObjectsOutsidePvs,entFilter,lightFilter);
+	initialize_cycles_scene_from_game_scene(gameScene,scene,camPos,camRot,vp,nearZ,farZ,fov,cullObjectsOutsidePvs,entFilter,lightFilter);
 }
 
 extern "C"
@@ -284,7 +304,7 @@ extern "C"
 		auto scene = setup_scene(cycles::Scene::RenderMode::RenderImage,width,height,sampleCount,hdrOutput,denoise);
 		if(scene == nullptr)
 			return;
-		initialize_cycles_scene_from_game_scene(*scene,camPos,camRot,vp,nearZ,farZ,fov,cullObjectsOutsidePvs,entFilter);
+		initialize_cycles_scene_from_game_scene(*c_game->GetScene(),*scene,camPos,camRot,vp,nearZ,farZ,fov,cullObjectsOutsidePvs,entFilter);
 		if(skyOverride.empty() == false)
 			scene->SetSky(skyOverride);
 		scene->SetSkyAngles(skyAngles);
@@ -292,11 +312,12 @@ extern "C"
 		outJob = scene->Finalize();
 	}
 	PRAGMA_EXPORT void pr_cycles_bake_ao(
-		Model &mdl,uint32_t materialIndex,uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,bool denoise,util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> &outJob
+		Model &mdl,uint32_t materialIndex,uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,bool denoise,const std::string &deviceType,util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> &outJob
 	)
 	{
 		outJob = {};
-		auto scene = setup_scene(cycles::Scene::RenderMode::BakeAmbientOcclusion,width,height,sampleCount,hdrOutput,denoise);
+		auto eDeviceType = ustring::compare(deviceType,"gpu",false) ? cycles::Scene::DeviceType::GPU : cycles::Scene::DeviceType::CPU;
+		auto scene = setup_scene(cycles::Scene::RenderMode::BakeAmbientOcclusion,width,height,sampleCount,hdrOutput,denoise,eDeviceType);
 		if(scene == nullptr)
 			return;
 		scene->SetAOBakeTarget(mdl,materialIndex);
@@ -312,7 +333,10 @@ extern "C"
 		auto scene = setup_scene(cycles::Scene::RenderMode::BakeDiffuseLighting,width,height,sampleCount,hdrOutput,denoise);
 		if(scene == nullptr)
 			return;
-		setup_light_sources(*scene);
+		auto &gameScene = *c_game->GetScene();
+		setup_light_sources(*scene,[&gameScene](BaseEntity &ent) -> bool {
+			return static_cast<CBaseEntity&>(ent).IsInScene(gameScene);
+		});
 		scene->SetLightmapBakeTarget(entTarget);
 		if(skyOverride.empty() == false)
 			scene->SetSky(skyOverride);
@@ -330,10 +354,106 @@ extern "C"
 				auto scene = cycles::Scene::Create(renderMode,createInfo);
 				if(scene == nullptr)
 					return 0;
+#ifdef ENABLE_MOTION_BLUR_TEST
+				scene->SetMotionBlurStrength(1.f);
+#endif
 				Lua::Push<cycles::PScene>(l,scene);
+				return 1;
+			})},
+			{"bake_ambient_occlusion",static_cast<int32_t(*)(lua_State*)>([](lua_State *l) -> int32_t {
+				auto &mdl = Lua::Check<Model>(l,1);
+				auto materialIndex = Lua::CheckInt(l,2);
+
+				uint32_t width = 512;
+				uint32_t height = 512;
+				uint32_t sampleCount = 20;
+				auto deviceType = cycles::Scene::DeviceType::CPU;
+				if(Lua::IsSet(l,3))
+					width = Lua::CheckInt(l,3);
+				if(Lua::IsSet(l,4))
+					height = Lua::CheckInt(l,4);
+				if(Lua::IsSet(l,5))
+					sampleCount = Lua::CheckInt(l,5);
+				if(Lua::IsSet(l,6))
+					deviceType = static_cast<cycles::Scene::DeviceType>(Lua::CheckInt(l,6));
+				auto hdrOutput = false;
+				auto denoise = true;
+				auto scene = setup_scene(cycles::Scene::RenderMode::BakeAmbientOcclusion,width,height,sampleCount,hdrOutput,denoise,deviceType);
+				if(scene == nullptr)
+					return 0;
+				scene->SetAOBakeTarget(mdl,materialIndex);
+				auto job = scene->Finalize();
+				Lua::Push(l,job);
 				return 1;
 			})}
 		});
+
+		auto defCamera = luabind::class_<cycles::Camera>("Camera");
+		defCamera.add_static_constant("TYPE_PERSPECTIVE",umath::to_integral(cycles::Camera::CameraType::Perspective));
+		defCamera.add_static_constant("TYPE_ORTHOGRAPHIC",umath::to_integral(cycles::Camera::CameraType::Orthographic));
+		defCamera.add_static_constant("TYPE_PANORAMA",umath::to_integral(cycles::Camera::CameraType::Panorama));
+
+		defCamera.add_static_constant("PANORAMA_TYPE_EQUIRECTANGULAR",umath::to_integral(cycles::Camera::PanoramaType::Equirectangular));
+		defCamera.add_static_constant("PANORAMA_TYPE_FISHEYE_EQUIDISTANT",umath::to_integral(cycles::Camera::PanoramaType::FisheyeEquidistant));
+		defCamera.add_static_constant("PANORAMA_TYPE_FISHEYE_EQUISOLID",umath::to_integral(cycles::Camera::PanoramaType::FisheyeEquisolid));
+		defCamera.add_static_constant("PANORAMA_TYPE_MIRRORBALL",umath::to_integral(cycles::Camera::PanoramaType::Mirrorball));
+		defCamera.def("SetResolution",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Camera>&,uint32_t,uint32_t)>([](lua_State *l,util::WeakHandle<cycles::Camera> &cam,uint32_t width,uint32_t height) {
+			pragma::Lua::check_component(l,cam);
+			cam->SetResolution(width,height);
+		}));
+		defCamera.def("SetFarZ",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Camera>&,float)>([](lua_State *l,util::WeakHandle<cycles::Camera> &cam,float farZ) {
+			pragma::Lua::check_component(l,cam);
+			cam->SetFarZ(farZ);
+		}));
+		defCamera.def("SetNearZ",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Camera>&,float)>([](lua_State *l,util::WeakHandle<cycles::Camera> &cam,float nearZ) {
+			pragma::Lua::check_component(l,cam);
+			cam->SetNearZ(nearZ);
+		}));
+		defCamera.def("SetFOV",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Camera>&,float)>([](lua_State *l,util::WeakHandle<cycles::Camera> &cam,float fov) {
+			pragma::Lua::check_component(l,cam);
+			cam->SetFOV(umath::deg_to_rad(fov));
+		}));
+		defCamera.def("SetCameraType",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Camera>&,uint32_t)>([](lua_State *l,util::WeakHandle<cycles::Camera> &cam,uint32_t camType) {
+			pragma::Lua::check_component(l,cam);
+			cam->SetCameraType(static_cast<cycles::Camera::CameraType>(camType));
+		}));
+		defCamera.def("SetPanoramaType",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Camera>&,uint32_t)>([](lua_State *l,util::WeakHandle<cycles::Camera> &cam,uint32_t panoramaType) {
+			pragma::Lua::check_component(l,cam);
+			cam->SetPanoramaType(static_cast<cycles::Camera::PanoramaType>(panoramaType));
+		}));
+		defCamera.def("SetFocalDistance",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Camera>&,float)>([](lua_State *l,util::WeakHandle<cycles::Camera> &cam,float focalDistance) {
+			pragma::Lua::check_component(l,cam);
+			cam->SetFocalDistance(focalDistance);
+		}));
+		defCamera.def("SetApertureSize",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Camera>&,float)>([](lua_State *l,util::WeakHandle<cycles::Camera> &cam,float size) {
+			pragma::Lua::check_component(l,cam);
+			cam->SetApertureSize(size);
+		}));
+		defCamera.def("SetApertureSizeFromFStop",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Camera>&,float,umath::Millimeter)>([](lua_State *l,util::WeakHandle<cycles::Camera> &cam,float fstop,umath::Millimeter focalLength) {
+			pragma::Lua::check_component(l,cam);
+			cam->SetApertureSizeFromFStop(fstop,focalLength);
+		}));
+		defCamera.def("SetFOVFromFocalLength",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Camera>&,umath::Millimeter,umath::Millimeter)>([](lua_State *l,util::WeakHandle<cycles::Camera> &cam,umath::Millimeter focalLength,umath::Millimeter sensorSize) {
+			pragma::Lua::check_component(l,cam);
+			cam->SetFOVFromFocalLength(focalLength,sensorSize);
+		}));
+		defCamera.def("SetBokehRatio",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Camera>&,float)>([](lua_State *l,util::WeakHandle<cycles::Camera> &cam,float ratio) {
+			pragma::Lua::check_component(l,cam);
+			cam->SetBokehRatio(ratio);
+		}));
+		defCamera.def("SetBladeCount",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Camera>&,uint32_t)>([](lua_State *l,util::WeakHandle<cycles::Camera> &cam,uint32_t numBlades) {
+			pragma::Lua::check_component(l,cam);
+			cam->SetBladeCount(numBlades);
+		}));
+		defCamera.def("SetBladesRotation",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Camera>&,float)>([](lua_State *l,util::WeakHandle<cycles::Camera> &cam,float rotation) {
+			pragma::Lua::check_component(l,cam);
+			cam->SetBladesRotation(rotation);
+		}));
+		defCamera.def("SetDepthOfFieldEnabled",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Camera>&,bool)>([](lua_State *l,util::WeakHandle<cycles::Camera> &cam,bool enabled) {
+			pragma::Lua::check_component(l,cam);
+			cam->SetDepthOfFieldEnabled(enabled);
+		}));
+		modCycles[defCamera];
 
 		auto defScene = luabind::class_<cycles::Scene>("Scene");
 		defScene.add_static_constant("RENDER_MODE_COMBINED",umath::to_integral(cycles::Scene::RenderMode::RenderImage));
@@ -345,14 +465,14 @@ extern "C"
 
 		defScene.add_static_constant("DEVICE_TYPE_CPU",umath::to_integral(cycles::Scene::DeviceType::CPU));
 		defScene.add_static_constant("DEVICE_TYPE_GPU",umath::to_integral(cycles::Scene::DeviceType::GPU));
-		defScene.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,cycles::Scene&,const Vector3&,const Quat&,const Mat4&,float,float,float,bool,luabind::object,luabind::object)>([](lua_State *l,cycles::Scene &scene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,bool cullObjectsOutsidePvs,luabind::object entFilter,luabind::object lightFilter) {
-			initialize_from_game_scene(l,scene,camPos,camRot,vp,nearZ,farZ,fov,cullObjectsOutsidePvs,&entFilter,&lightFilter);
+		defScene.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,cycles::Scene&,Scene&,const Vector3&,const Quat&,const Mat4&,float,float,float,bool,luabind::object,luabind::object)>([](lua_State *l,cycles::Scene &scene,Scene &gameScene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,bool cullObjectsOutsidePvs,luabind::object entFilter,luabind::object lightFilter) {
+			initialize_from_game_scene(l,gameScene,scene,camPos,camRot,vp,nearZ,farZ,fov,cullObjectsOutsidePvs,&entFilter,&lightFilter);
 		}));
-		defScene.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,cycles::Scene&,const Vector3&,const Quat&,const Mat4&,float,float,float,bool,luabind::object)>([](lua_State *l,cycles::Scene &scene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,bool cullObjectsOutsidePvs,luabind::object entFilter) {
-			initialize_from_game_scene(l,scene,camPos,camRot,vp,nearZ,farZ,fov,cullObjectsOutsidePvs,&entFilter,nullptr);
+		defScene.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,cycles::Scene&,Scene&,const Vector3&,const Quat&,const Mat4&,float,float,float,bool,luabind::object)>([](lua_State *l,cycles::Scene &scene,Scene &gameScene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,bool cullObjectsOutsidePvs,luabind::object entFilter) {
+			initialize_from_game_scene(l,gameScene,scene,camPos,camRot,vp,nearZ,farZ,fov,cullObjectsOutsidePvs,&entFilter,nullptr);
 		}));
-		defScene.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,cycles::Scene&,const Vector3&,const Quat&,const Mat4&,float,float,float,bool)>([](lua_State *l,cycles::Scene &scene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,bool cullObjectsOutsidePvs) {
-			initialize_from_game_scene(l,scene,camPos,camRot,vp,nearZ,farZ,fov,cullObjectsOutsidePvs,nullptr,nullptr);
+		defScene.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,cycles::Scene&,Scene&,const Vector3&,const Quat&,const Mat4&,float,float,float,bool)>([](lua_State *l,cycles::Scene &scene,Scene &gameScene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,bool cullObjectsOutsidePvs) {
+			initialize_from_game_scene(l,gameScene,scene,camPos,camRot,vp,nearZ,farZ,fov,cullObjectsOutsidePvs,nullptr,nullptr);
 		}));
 		defScene.def("SetSky",static_cast<void(*)(lua_State*,cycles::Scene&,const std::string&)>([](lua_State *l,cycles::Scene &scene,const std::string &skyPath) {
 			scene.SetSky(skyPath);
@@ -362,6 +482,9 @@ extern "C"
 		}));
 		defScene.def("SetSkyStrength",static_cast<void(*)(lua_State*,cycles::Scene&,float)>([](lua_State *l,cycles::Scene &scene,float skyStrength) {
 			scene.SetSkyStrength(skyStrength);
+		}));
+		defScene.def("SetEmissionStrength",static_cast<void(*)(lua_State*,cycles::Scene&,float)>([](lua_State *l,cycles::Scene &scene,float emissionStrength) {
+			scene.SetEmissionStrength(emissionStrength);
 		}));
 		defScene.def("SetMaxTransparencyBounces",static_cast<void(*)(lua_State*,cycles::Scene&,uint32_t)>([](lua_State *l,cycles::Scene &scene,uint32_t maxSamples) {
 			scene.SetMaxTransparencyBounces(maxSamples);
@@ -377,6 +500,9 @@ extern "C"
 		}));
 		defScene.def("SetResolution",static_cast<void(*)(lua_State*,cycles::Scene&,uint32_t,uint32_t)>([](lua_State *l,cycles::Scene &scene,uint32_t width,uint32_t height) {
 			scene.GetCamera().SetResolution(width,height);
+		}));
+		defScene.def("GetCamera",static_cast<void(*)(lua_State*,cycles::Scene&)>([](lua_State *l,cycles::Scene &scene) {
+			Lua::Push(l,scene.GetCamera().GetHandle());
 		}));
 
 		auto defSceneCreateInfo = luabind::class_<cycles::Scene::CreateInfo>("CreateInfo");

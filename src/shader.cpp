@@ -18,6 +18,25 @@
 using namespace pragma::modules;
 
 #pragma optimize("",off)
+static cycles::NumberSocket get_channel_socket(cycles::CCLShader &shader,const cycles::Socket &colorNode,cycles::Channel channel)
+{
+	// We only need one channel value, so we'll just grab the red channel
+	auto nodeMetalnessRGB = shader.AddSeparateRGBNode(colorNode);
+	switch(channel)
+	{
+	case cycles::Channel::Red:
+		return nodeMetalnessRGB.outR;
+	case cycles::Channel::Green:
+		return nodeMetalnessRGB.outG;
+	case cycles::Channel::Blue:
+		return nodeMetalnessRGB.outB;
+	default:
+		throw std::logic_error{"Invalid channel " +std::to_string(umath::to_integral(channel))};
+	}
+}
+
+///////////////////
+
 cycles::Shader::Shader(Scene &scene,const std::string &name)
 	: SceneObject{scene},m_scene{scene},m_name{name}
 {}
@@ -33,6 +52,13 @@ const std::string &cycles::Shader::GetMeshName() const {return m_meshName;}
 void cycles::Shader::SetMeshName(const std::string &meshName) {m_meshName = meshName;}
 bool cycles::Shader::HasFlag(Flags flags) const {return umath::is_flag_set(m_flags,flags);}
 void cycles::Shader::SetFlags(Flags flags,bool enabled) {umath::set_flag(m_flags,flags,enabled);}
+void cycles::Shader::SetAlphaMode(AlphaMode alphaMode,float alphaCutoff)
+{
+	m_alphaMode = alphaMode;
+	m_alphaCutoff = alphaCutoff;
+}
+AlphaMode cycles::Shader::GetAlphaMode() const {return m_alphaMode;}
+float cycles::Shader::GetAlphaCutoff() const {return m_alphaCutoff;}
 void cycles::Shader::SetUVHandler(TextureType type,const std::shared_ptr<UVHandler> &uvHandler) {m_uvHandlers.at(umath::to_integral(type)) = uvHandler;}
 const std::shared_ptr<cycles::UVHandler> &cycles::Shader::GetUVHandler(TextureType type) const {return m_uvHandlers.at(umath::to_integral(type));}
 void cycles::Shader::SetUVHandlers(const std::array<std::shared_ptr<UVHandler>,umath::to_integral(TextureType::Count)> &handlers) {m_uvHandlers = handlers;}
@@ -419,6 +445,13 @@ cycles::NormalMapNode cycles::CCLShader::AddNormalMapNode()
 	return {*this,name,nodeNormalMap};
 }
 
+cycles::LightPathNode cycles::CCLShader::AddLightPathNode()
+{
+	auto name = GetCurrentInternalNodeName();
+	auto &lightPathNode = *static_cast<ccl::LightPathNode*>(**AddNode("light_path",name));
+	return {*this,name,lightPathNode};
+}
+
 cycles::MixClosureNode cycles::CCLShader::AddMixClosureNode()
 {
 	auto name = GetCurrentInternalNodeName();
@@ -466,6 +499,7 @@ cycles::NumberSocket cycles::CCLShader::AddVertexAlphaNode()
 	static_assert(Mesh::ALPHA_ATTRIBUTE_TYPE == ccl::AttributeStandard::ATTR_STD_POINTINESS);
 	return AddGeometryNode().outPointiness;
 }
+cycles::NumberSocket cycles::CCLShader::AddWrinkleFactorNode() {return AddVertexAlphaNode();}
 
 cycles::EmissionNode cycles::CCLShader::AddEmissionNode()
 {
@@ -474,16 +508,22 @@ cycles::EmissionNode cycles::CCLShader::AddEmissionNode()
 	return {*this,name};
 }
 
-cycles::MixNode cycles::CCLShader::AddMixNode(const Socket &socketColor1,const Socket &socketColor2,MixNode::Type type,const std::optional<const NumberSocket> &fac)
+cycles::MixNode cycles::CCLShader::AddMixNode(MixNode::Type type)
 {
 	auto name = GetCurrentInternalNodeName();
 	auto &cclNode = *static_cast<ccl::MixNode*>(**AddNode("mix",name));
 	MixNode nodeMix {*this,name,cclNode};
+	nodeMix.SetType(type);
+	return nodeMix;
+}
+
+cycles::MixNode cycles::CCLShader::AddMixNode(const Socket &socketColor1,const Socket &socketColor2,MixNode::Type type,const std::optional<const NumberSocket> &fac)
+{
+	auto nodeMix = AddMixNode(type);
 	if(fac.has_value() == false)
 		nodeMix.SetFactor(0.5f);
 	else
 		Link(*fac,nodeMix.inFac);
-	nodeMix.SetType(type);
 	Link(socketColor1,nodeMix.inColor1);
 	Link(socketColor2,nodeMix.inColor2);
 	return nodeMix;
@@ -517,26 +557,77 @@ cycles::TransparentBsdfNode cycles::CCLShader::AddTransparentBSDFNode()
 	return {*this,name,nodeTransparentBsdf};
 }
 
-cycles::MixClosureNode cycles::CCLShader::AddTransparencyClosure(const Socket &colorSocket,const NumberSocket &alphaSocket)
+cycles::DiffuseBsdfNode cycles::CCLShader::AddDiffuseBSDFNode()
+{
+	auto name = GetCurrentInternalNodeName();
+	auto &nodeDiffuseBsdf = *static_cast<ccl::DiffuseBsdfNode*>(**AddNode("diffuse_bsdf",name));
+	return {*this,name,nodeDiffuseBsdf};
+}
+
+cycles::MixClosureNode cycles::CCLShader::AddTransparencyClosure(const Socket &colorSocket,const NumberSocket &alphaSocket,AlphaMode alphaMode,float alphaCutoff)
 {
 	auto nodeTransparentBsdf = AddTransparentBSDFNode();
-	nodeTransparentBsdf.SetColor(Vector3{1.f,1.f,1.f}); // Fully transparent
+	nodeTransparentBsdf.SetColor(Vector3{1.f,1.f,1.f});
 
+	auto alpha = ApplyAlphaMode(alphaSocket,alphaMode,alphaCutoff);
 	auto nodeMixTransparency = AddMixClosureNode();
-	Link(alphaSocket,nodeMixTransparency.inFac); // Alpha transparency
+	Link(alpha,nodeMixTransparency.inFac); // Alpha transparency
 	Link(nodeTransparentBsdf.outBsdf,nodeMixTransparency.inClosure1);
 	Link(colorSocket,nodeMixTransparency.inClosure2);
 	return nodeMixTransparency;
 }
 
+cycles::NumberSocket cycles::CCLShader::ApplyAlphaMode(const NumberSocket &alphaSocket,AlphaMode alphaMode,float alphaCutoff)
+{
+	auto alpha = alphaSocket;
+	switch(alphaMode)
+	{
+	case AlphaMode::Opaque:
+		alpha = 1.f;
+		break;
+	case AlphaMode::Mask:
+		alpha = 1.f -AddMathNode(alpha,alphaCutoff,ccl::NodeMathType::NODE_MATH_LESS_THAN); // Greater or equal
+		break;
+	}
+	return alpha;
+}
+
 cycles::Shader &cycles::CCLShader::GetShader() const {return m_shader;}
 
-const std::optional<cycles::Socket> &cycles::CCLShader::GetUVSocket(Shader::TextureType type) const {return m_uvSockets.at(umath::to_integral(type));}
+std::optional<cycles::Socket> cycles::CCLShader::GetUVSocket(Shader::TextureType type,ShaderModuleSpriteSheet *shaderModSpriteSheet,SpriteSheetFrame frame)
+{
+	auto uvSocket = m_uvSockets.at(umath::to_integral(type));
+	if(shaderModSpriteSheet == nullptr || shaderModSpriteSheet->GetSpriteSheetData().has_value() == false)
+		return uvSocket;
+	if(uvSocket.has_value() == false)
+		uvSocket = AddTextureCoordinateNode().outUv;
+	auto &spriteSheetData = *shaderModSpriteSheet->GetSpriteSheetData();
+	auto separateUv = AddSeparateXYZNode(*uvSocket);
+	switch(frame)
+	{
+	case SpriteSheetFrame::First:
+	{
+		auto uv0Start = Scene::ToCyclesUV(spriteSheetData.uv0.first);
+		auto uv0End = Scene::ToCyclesUV(spriteSheetData.uv0.second);
+		umath::swap(uv0Start.y,uv0End.y);
+		auto x = uv0Start.x +separateUv.outX *(uv0End.x -uv0Start.x);
+		auto y = uv0Start.y +separateUv.outY *(uv0End.y -uv0Start.y);
+		return AddCombineXYZNode(x,y);
+	}
+	case SpriteSheetFrame::Second:
+	{
+		auto uv1Start = Scene::ToCyclesUV(spriteSheetData.uv1.first);
+		umath::swap(uv1Start.y,uv1Start.y);
+		auto uv1End = Scene::ToCyclesUV(spriteSheetData.uv1.second);
+		auto x = uv1Start.x +separateUv.outX *(uv1End.x -uv1Start.x);
+		auto y = uv1Start.y +separateUv.outY *(uv1End.y -uv1Start.y);
+		return AddCombineXYZNode(x,y);
+	}
+	}
+	return {};
+}
 
 ////////////////
-
-void cycles::ShaderPBR::SetWrinkleStretchMap(const std::string &wrinkleStretchMap) {m_wrinkleStretchMap = wrinkleStretchMap;}
-void cycles::ShaderPBR::SetWrinkleCompressMap(const std::string &wrinkleCompressMap) {m_wrinkleCompressMap = wrinkleCompressMap;}
 
 void cycles::ShaderPBR::SetMetallic(float metallic) {m_metallic = metallic;}
 void cycles::ShaderPBR::SetSpecular(float specular) {m_specular = specular;}
@@ -558,26 +649,61 @@ void cycles::ShaderPBR::SetSubsurfaceRadius(const Vector3 &radius) {m_subsurface
 
 ////////////////
 
+void cycles::ShaderModuleSpriteSheet::SetSpriteSheetData(
+	const Vector2 &uv0Min,const Vector2 &uv0Max,
+	const std::string &albedoMap2,const Vector2 &uv1Min,const Vector2 &uv1Max,
+	float interpFactor
+)
+{
+	auto spriteSheetData = SpriteSheetData{};
+	spriteSheetData.uv0 = {uv0Min,uv0Max};
+	spriteSheetData.uv1 = {uv1Min,uv1Max};
+	spriteSheetData.albedoMap2 = albedoMap2;
+	spriteSheetData.interpFactor = interpFactor;
+	SetSpriteSheetData(spriteSheetData);
+}
+void cycles::ShaderModuleSpriteSheet::SetSpriteSheetData(const SpriteSheetData &spriteSheetData) {m_spriteSheetData = spriteSheetData;}
+const std::optional<cycles::ShaderModuleSpriteSheet::SpriteSheetData> &cycles::ShaderModuleSpriteSheet::GetSpriteSheetData() const {return m_spriteSheetData;}
+
+////////////////
+
 void cycles::ShaderAlbedoSet::SetAlbedoMap(const std::string &albedoMap) {m_albedoMap = albedoMap;}
 const std::optional<std::string> &cycles::ShaderAlbedoSet::GetAlbedoMap() const {return m_albedoMap;}
+void cycles::ShaderAlbedoSet::SetColorFactor(const Vector4 &colorFactor) {m_colorFactor = colorFactor;}
+const Vector4 &cycles::ShaderAlbedoSet::GetColorFactor() const {return m_colorFactor;}
 const std::optional<cycles::ImageTextureNode> &cycles::ShaderAlbedoSet::GetAlbedoNode() const {return m_albedoNode;}
-std::optional<cycles::ImageTextureNode> cycles::ShaderAlbedoSet::AddAlbedoMap(CCLShader &shader)
+std::optional<cycles::ImageTextureNode> cycles::ShaderAlbedoSet::AddAlbedoMap(ShaderModuleAlbedo &albedoModule,CCLShader &shader)
 {
 	if(m_albedoNode.has_value())
 		return m_albedoNode;
 	if(m_albedoMap.has_value() == false)
 		return {};
-	auto nodeAlbedo = shader.AddColorImageTextureNode(*m_albedoMap,shader.GetUVSocket(Shader::TextureType::Albedo));
+	auto *modSpriteSheet = dynamic_cast<ShaderModuleSpriteSheet*>(&albedoModule);
+	auto uvSocket = shader.GetUVSocket(Shader::TextureType::Albedo,modSpriteSheet);
+	auto nodeAlbedo = shader.AddColorImageTextureNode(*m_albedoMap,uvSocket);
+	if(modSpriteSheet && modSpriteSheet->GetSpriteSheetData().has_value())
+	{
+		auto &spriteSheetData = *modSpriteSheet->GetSpriteSheetData();
+		auto uvSocket2 = shader.GetUVSocket(Shader::TextureType::Albedo,modSpriteSheet,SpriteSheetFrame::Second);
+		auto nodeAlbedo2 = shader.AddColorImageTextureNode(spriteSheetData.albedoMap2,uvSocket2);
+		nodeAlbedo.outColor = shader.AddMixNode(nodeAlbedo.outColor,nodeAlbedo2.outColor,pragma::modules::cycles::MixNode::Type::Mix,spriteSheetData.interpFactor);
+		nodeAlbedo.outAlpha = nodeAlbedo.outAlpha.lerp(nodeAlbedo2.outAlpha,spriteSheetData.interpFactor);
+	}
+	if(m_colorFactor != Vector4{1.f,1.f,1.f,1.f})
+	{
+		auto rgb = shader.AddSeparateRGBNode(nodeAlbedo.outColor);
+		rgb.outR = rgb.outR *m_colorFactor.r;
+		rgb.outG = rgb.outG *m_colorFactor.g;
+		rgb.outB = rgb.outB *m_colorFactor.b;
+		nodeAlbedo.outColor = shader.AddCombineRGBNode(rgb.outR,rgb.outG,rgb.outB);
+		nodeAlbedo.outAlpha = nodeAlbedo.outAlpha *m_colorFactor.a;
+	}
 	m_albedoNode = nodeAlbedo;
 	return nodeAlbedo;
 }
 
 ////////////////
 
-void cycles::ShaderModuleAlbedo::SetTransparent(Shader &shader,bool transparent)
-{
-	shader.SetFlags(Shader::Flags::Transparent,transparent);
-}
 void cycles::ShaderModuleAlbedo::SetEmissionFromAlbedoAlpha(Shader &shader,bool b)
 {
 	shader.SetFlags(Shader::Flags::EmissionFromAlbedoAlpha,b);
@@ -600,7 +726,7 @@ bool cycles::ShaderModuleAlbedo::SetupAlbedoNodes(CCLShader &shader,Socket &outC
 	outAlpha = albedoNode->outAlpha;
 	if(ShouldUseVertexAlphasForBlending())
 	{
-		auto albedoNode2 = m_albedoSet2.AddAlbedoMap(shader);
+		auto albedoNode2 = m_albedoSet2.AddAlbedoMap(*this,shader);
 		if(albedoNode2.has_value())
 		{
 			auto alpha = shader.AddVertexAlphaNode();
@@ -612,8 +738,32 @@ bool cycles::ShaderModuleAlbedo::SetupAlbedoNodes(CCLShader &shader,Socket &outC
 			outAlpha = alphaMix;
 		}
 	}
+	// Wrinkle maps
+	if(m_wrinkleCompressMap.has_value() && m_wrinkleStretchMap.has_value())
+	{
+		// Vertex alphas and wrinkle maps can not be used both at the same time
+		assert(!ShouldUseVertexAlphasForBlending());
+
+		auto nodeWrinkleCompress = shader.AddColorImageTextureNode(*m_wrinkleCompressMap,shader.GetUVSocket(Shader::TextureType::Albedo));
+		auto nodeWrinkleStretch = shader.AddColorImageTextureNode(*m_wrinkleStretchMap,shader.GetUVSocket(Shader::TextureType::Albedo));
+		auto wrinkleValue = shader.AddWrinkleFactorNode();
+		auto compressFactor = -wrinkleValue;
+		compressFactor = compressFactor.clamp(0.f,1.f);
+		auto stretchFactor = wrinkleValue.clamp(0.f,1.f);
+		auto baseFactor = 1.f -compressFactor -stretchFactor;
+
+		auto baseRgb = shader.AddSeparateRGBNode(outColor);
+		auto compressRgb = shader.AddSeparateRGBNode(nodeWrinkleCompress);
+		auto stretchRgb = shader.AddSeparateRGBNode(nodeWrinkleStretch);
+		auto r = baseRgb.outR *baseFactor +compressRgb.outR *compressFactor +stretchRgb.outR *stretchFactor;
+		auto g = baseRgb.outG *baseFactor +compressRgb.outG *compressFactor +stretchRgb.outG *stretchFactor;
+		auto b = baseRgb.outB *baseFactor +compressRgb.outB *compressFactor +stretchRgb.outB *stretchFactor;
+		outColor = shader.AddCombineRGBNode(r,g,b).outColor;
+	}
 	return true;
 }
+void cycles::ShaderModuleAlbedo::SetWrinkleStretchMap(const std::string &wrinkleStretchMap) {m_wrinkleStretchMap = wrinkleStretchMap;}
+void cycles::ShaderModuleAlbedo::SetWrinkleCompressMap(const std::string &wrinkleCompressMap) {m_wrinkleCompressMap = wrinkleCompressMap;}
 void cycles::ShaderModuleAlbedo::LinkAlbedo(const Socket &color,const NumberSocket &alpha,bool useAlphaIfFlagSet)
 {
 	Socket albedoColor;
@@ -621,9 +771,14 @@ void cycles::ShaderModuleAlbedo::LinkAlbedo(const Socket &color,const NumberSock
 	auto &shader = color.GetShader();
 	if(SetupAlbedoNodes(shader,albedoColor,albedoAlpha) == false)
 		return;
+	InitializeAlbedoColor(albedoColor);
 	shader.Link(albedoColor,color);
-	if(useAlphaIfFlagSet && shader.GetShader().HasFlag(Shader::Flags::Transparent))
+	if(useAlphaIfFlagSet && shader.GetShader().GetAlphaMode() != AlphaMode::Opaque)
+	{
+		albedoAlpha = shader.ApplyAlphaMode(albedoAlpha,shader.GetShader().GetAlphaMode(),shader.GetShader().GetAlphaCutoff());
+		InitializeAlbedoAlpha(albedoAlpha);
 		shader.Link(albedoAlpha,alpha);
+	}
 }
 void cycles::ShaderModuleAlbedo::LinkAlbedoToBSDF(const Socket &bsdf)
 {
@@ -632,14 +787,20 @@ void cycles::ShaderModuleAlbedo::LinkAlbedoToBSDF(const Socket &bsdf)
 	auto &shader = bsdf.GetShader();
 	if(SetupAlbedoNodes(shader,albedoColor,albedoAlpha) == false)
 		return;
-	if(shader.GetShader().HasFlag(Shader::Flags::Transparent))
+	InitializeAlbedoColor(albedoColor);
+	auto alphaMode = shader.GetShader().GetAlphaMode();
+	if(alphaMode != AlphaMode::Opaque)
 	{
-		auto nodeTransparentBsdf = shader.AddTransparencyClosure(albedoColor,albedoAlpha);
+		InitializeAlbedoAlpha(albedoAlpha);
+		auto nodeTransparentBsdf = shader.AddTransparencyClosure(albedoColor,albedoAlpha,alphaMode,shader.GetShader().GetAlphaCutoff());
 		shader.Link(nodeTransparentBsdf,bsdf);
 	}
 	else
 		shader.Link(albedoColor,bsdf);
 }
+
+void cycles::ShaderModuleAlbedo::InitializeAlbedoColor(Socket &inOutColor) {}
+void cycles::ShaderModuleAlbedo::InitializeAlbedoAlpha(NumberSocket &inOutAlpha) {}
 
 ////////////////
 
@@ -651,7 +812,7 @@ bool cycles::ShaderGlass::InitializeCCLShader(CCLShader &cclShader)
 	nodeBsdf.SetDistribution(GlassBSDFNode::Distribution::Beckmann);
 
 	// Albedo map
-	if(GetAlbedoSet().AddAlbedoMap(cclShader).has_value())
+	if(GetAlbedoSet().AddAlbedoMap(*this,cclShader).has_value())
 		LinkAlbedoToBSDF(nodeBsdf);
 
 	// Normal map
@@ -675,7 +836,7 @@ bool cycles::ShaderGeneric::InitializeCCLShader(CCLShader &cclShader) {return tr
 bool cycles::ShaderAlbedo::InitializeCCLShader(CCLShader &cclShader)
 {
 	// Albedo map
-	if(GetAlbedoSet().AddAlbedoMap(cclShader).has_value())
+	if(GetAlbedoSet().AddAlbedoMap(*this,cclShader).has_value())
 		LinkAlbedoToBSDF(cclShader.GetOutputNode().inSurface);
 	return true;
 }
@@ -709,7 +870,7 @@ bool cycles::ShaderToon::InitializeCCLShader(CCLShader &cclShader)
 	nodeBsdf.SetSmooth(0.f);
 
 	// Albedo map
-	if(GetAlbedoSet().AddAlbedoMap(cclShader).has_value())
+	if(GetAlbedoSet().AddAlbedoMap(*this,cclShader).has_value())
 		LinkAlbedoToBSDF(nodeBsdf);
 
 	// Normal map
@@ -741,26 +902,28 @@ void cycles::ShaderModuleNormal::LinkNormalToBSDF(const Socket &bsdf)
 		return;
 	auto &shader = bsdf.GetShader();
 	auto socketOutput = *m_normalSocket;
-	if(shader.GetShader().HasFlag(Shader::Flags::Transparent))
+	auto alphaMode = shader.GetShader().GetAlphaMode();
+	if(alphaMode != AlphaMode::Opaque)
 	{
-		// Object uses translucency, which means we have to take the alpha of the albedo map into account.
-		// Transparent normals don't make any sense, so we'll just render the normals as fully opaque if the alpha
-		// is >= 0.5
-		auto nodeAlbedo = GetAlbedoSet().AddAlbedoMap(shader);
+		auto nodeAlbedo = GetAlbedoSet().AddAlbedoMap(*this,shader);
 		if(nodeAlbedo.has_value())
 		{
 			auto albedoAlpha = nodeAlbedo->outAlpha;
 			if(ShouldUseVertexAlphasForBlending())
 			{
-				auto nodeAlbedo2 = GetAlbedoSet2().AddAlbedoMap(shader);
+				auto nodeAlbedo2 = GetAlbedoSet2().AddAlbedoMap(*this,shader);
 				if(nodeAlbedo2.has_value())
 				{
 					auto alpha = shader.AddVertexAlphaNode();
 					albedoAlpha = albedoAlpha +(nodeAlbedo2->outAlpha -albedoAlpha) *alpha;
 				}
 			}
-			auto nodeRound = shader.AddMathNode(albedoAlpha,0.f /* unused */,ccl::NodeMathType::NODE_MATH_ROUND);
-			socketOutput = shader.AddTransparencyClosure(socketOutput,nodeRound).outClosure;
+
+			// Object uses translucency, which means we have to take the alpha of the albedo map into account.
+			// Transparent normals don't make any sense, so we'll just always treat it as masked alpha
+			// (with a default cutoff factor of 0.5).
+			auto alphaCutoff = shader.GetShader().GetAlphaCutoff();
+			socketOutput = shader.AddTransparencyClosure(socketOutput,albedoAlpha,AlphaMode::Mask,alphaCutoff).outClosure;
 		}
 	}
 	shader.Link(socketOutput,bsdf);
@@ -775,7 +938,11 @@ void cycles::ShaderModuleNormal::LinkNormal(const Socket &normal)
 ////////////////
 
 void cycles::ShaderModuleMetalness::SetMetalnessFactor(float metalnessFactor) {m_metalnessFactor = metalnessFactor;}
-void cycles::ShaderModuleMetalness::SetMetalnessMap(const std::string &metalnessMap) {m_metalnessMap = metalnessMap;}
+void cycles::ShaderModuleMetalness::SetMetalnessMap(const std::string &metalnessMap,Channel channel)
+{
+	m_metalnessMap = metalnessMap;
+	m_metalnessChannel = channel;
+}
 std::optional<cycles::NumberSocket> cycles::ShaderModuleMetalness::AddMetalnessMap(CCLShader &shader)
 {
 	if(m_metalnessSocket.has_value())
@@ -792,10 +959,7 @@ std::optional<cycles::NumberSocket> cycles::ShaderModuleMetalness::AddMetalnessM
 	}
 	auto nodeMetalness = shader.AddGradientImageTextureNode(*m_metalnessMap,shader.GetUVSocket(Shader::TextureType::Metalness));
 
-	// We only need one channel value, so we'll just grab the red channel
-	auto nodeMetalnessRGB = shader.AddSeparateRGBNode(nodeMetalness.outColor);
-
-	auto socketMetalness = nodeMetalnessRGB.outR;
+	auto socketMetalness = get_channel_socket(shader,nodeMetalness.outColor,m_metalnessChannel);
 	if(m_metalnessFactor.has_value())
 	{
 		// Material has a metalness factor, which we need to multiply with the value from the metalness texture
@@ -815,8 +979,16 @@ void cycles::ShaderModuleMetalness::LinkMetalness(const NumberSocket &metalness)
 ////////////////
 
 void cycles::ShaderModuleRoughness::SetRoughnessFactor(float roughness) {m_roughnessFactor = roughness;}
-void cycles::ShaderModuleRoughness::SetRoughnessMap(const std::string &roughnessMap) {m_roughnessMap = roughnessMap;}
-void cycles::ShaderModuleRoughness::SetSpecularMap(const std::string &specularMap) {m_specularMap = specularMap;}
+void cycles::ShaderModuleRoughness::SetRoughnessMap(const std::string &roughnessMap,Channel channel)
+{
+	m_roughnessMap = roughnessMap;
+	m_roughnessChannel = channel;
+}
+void cycles::ShaderModuleRoughness::SetSpecularMap(const std::string &specularMap,Channel channel)
+{
+	m_specularMap = specularMap;
+	m_roughnessChannel = channel;
+}
 std::optional<cycles::NumberSocket> cycles::ShaderModuleRoughness::AddRoughnessMap(CCLShader &shader)
 {
 	if(m_roughnessSocket.has_value())
@@ -841,12 +1013,9 @@ std::optional<cycles::NumberSocket> cycles::ShaderModuleRoughness::AddRoughnessM
 		isSpecularMap = true;
 	}
 
-	auto nodeImgRoughness = shader.AddGradientImageTextureNode(*m_roughnessMap,shader.GetUVSocket(Shader::TextureType::Roughness));
+	auto nodeImgRoughness = shader.AddGradientImageTextureNode(roughnessMap,shader.GetUVSocket(Shader::TextureType::Roughness));
 
-	// We only need one channel value, so we'll just grab the red channel
-	auto nodeRoughnessRGB = shader.AddSeparateRGBNode(nodeImgRoughness.outColor);
-
-	auto socketRoughness = nodeRoughnessRGB.outR;
+	auto socketRoughness = get_channel_socket(shader,nodeImgRoughness.outColor,m_roughnessChannel);
 	if(isSpecularMap)
 	{
 		// We also have to invert the specular value
@@ -870,26 +1039,43 @@ void cycles::ShaderModuleRoughness::LinkRoughness(const NumberSocket &roughness)
 ////////////////
 
 void cycles::ShaderModuleEmission::SetEmissionMap(const std::string &emissionMap) {m_emissionMap = emissionMap;}
-void cycles::ShaderModuleEmission::SetEmissionFactor(float factor) {m_emissionFactor = factor;}
+void cycles::ShaderModuleEmission::SetEmissionFactor(const Vector3 &factor) {m_emissionFactor = factor;}
+const Vector3 &cycles::ShaderModuleEmission::GetEmissionFactor() const {return m_emissionFactor;}
+void cycles::ShaderModuleEmission::SetEmissionIntensity(float intensity) {m_emissionIntensity = intensity;}
+float cycles::ShaderModuleEmission::GetEmissionIntensity() const {return m_emissionIntensity;}
+const std::optional<std::string> &cycles::ShaderModuleEmission::GetEmissionMap() const {return m_emissionMap;}
+void cycles::ShaderModuleEmission::InitializeEmissionColor(Socket &inOutColor) {}
 std::optional<cycles::Socket> cycles::ShaderModuleEmission::AddEmissionMap(CCLShader &shader)
 {
 	if(m_emissionSocket.has_value())
 		return m_emissionSocket;
-	if(m_emissionMap.has_value() == false)
+	auto emissionFactor = m_emissionFactor *m_emissionIntensity;
+	if(m_emissionMap.has_value() == false || uvec::length_sqr(emissionFactor) == 0.0)
 		return {};
-	auto nodeImgEmission = shader.AddColorImageTextureNode(*m_emissionMap,shader.GetUVSocket(Shader::TextureType::Emission));
+	auto *modSpriteSheet = dynamic_cast<ShaderModuleSpriteSheet*>(this);
+	auto nodeImgEmission = shader.AddColorImageTextureNode(*m_emissionMap,shader.GetUVSocket(Shader::TextureType::Emission,modSpriteSheet));
+	if(modSpriteSheet && modSpriteSheet->GetSpriteSheetData().has_value())
+	{
+		auto &spriteSheetData = *modSpriteSheet->GetSpriteSheetData();
+		auto uvSocket2 = shader.GetUVSocket(Shader::TextureType::Emission,modSpriteSheet,SpriteSheetFrame::Second);
+		auto nodeAlbedo2 = shader.AddColorImageTextureNode(spriteSheetData.albedoMap2,uvSocket2);
+		nodeImgEmission.outColor = shader.AddMixNode(nodeImgEmission.outColor,nodeAlbedo2.outColor,pragma::modules::cycles::MixNode::Type::Mix,spriteSheetData.interpFactor);
+		nodeImgEmission.outAlpha = nodeImgEmission.outAlpha.lerp(nodeAlbedo2.outAlpha,spriteSheetData.interpFactor);
+	}
+	auto emissionColor = nodeImgEmission.outColor;
+	InitializeEmissionColor(emissionColor);
 	if(shader.GetShader().HasFlag(Shader::Flags::EmissionFromAlbedoAlpha))
 	{
 		// Glow intensity
 		auto nodeGlowRGB = shader.AddCombineRGBNode();
 
-		auto glowIntensity = m_emissionFactor;
-		nodeGlowRGB.SetR(glowIntensity);
-		nodeGlowRGB.SetG(glowIntensity);
-		nodeGlowRGB.SetB(glowIntensity);
+		auto glowIntensity = emissionFactor;
+		nodeGlowRGB.SetR(glowIntensity.r);
+		nodeGlowRGB.SetG(glowIntensity.g);
+		nodeGlowRGB.SetB(glowIntensity.b);
 
 		// Multiply glow color with intensity
-		auto nodeMixEmission = shader.AddMixNode(nodeImgEmission,nodeGlowRGB,MixNode::Type::Multiply,1.f);
+		auto nodeMixEmission = shader.AddMixNode(emissionColor,nodeGlowRGB,MixNode::Type::Multiply,1.f);
 
 		// Grab alpha from glow map and create an RGB color from it
 		auto nodeAlphaRGB = shader.AddCombineRGBNode(nodeImgEmission.outAlpha,nodeImgEmission.outAlpha,nodeImgEmission.outAlpha);
@@ -898,17 +1084,14 @@ std::optional<cycles::Socket> cycles::ShaderModuleEmission::AddEmissionMap(CCLSh
 		m_emissionSocket = shader.AddMixNode(nodeMixEmission,nodeAlphaRGB,MixNode::Type::Multiply,1.f);
 		return m_emissionSocket;
 	}
-	if(m_emissionFactor != 1.f)
-	{
-		auto nodeEmissionRgb = shader.AddSeparateRGBNode(nodeImgEmission);
-		auto r = nodeEmissionRgb.outR *m_emissionFactor;
-		auto g = nodeEmissionRgb.outG *m_emissionFactor;
-		auto b = nodeEmissionRgb.outB *m_emissionFactor;
-		m_emissionSocket = shader.AddCombineRGBNode(r,g,b);
-		return m_emissionSocket;
-	}
-	m_emissionSocket = nodeImgEmission;
+	auto nodeEmissionRgb = shader.AddSeparateRGBNode(emissionColor);
+	auto r = nodeEmissionRgb.outR *emissionFactor.r;
+	auto g = nodeEmissionRgb.outG *emissionFactor.g;
+	auto b = nodeEmissionRgb.outB *emissionFactor.b;
+	m_emissionSocket = shader.AddCombineRGBNode(r,g,b);
 	return m_emissionSocket;
+	//m_emissionSocket = emissionColor;
+	//return m_emissionSocket;
 }
 void cycles::ShaderModuleEmission::LinkEmission(const Socket &emission)
 {
@@ -920,6 +1103,67 @@ void cycles::ShaderModuleEmission::LinkEmission(const Socket &emission)
 ////////////////
 
 void cycles::ShaderParticle::SetRenderFlags(uint32_t flags) {m_renderFlags = flags;}
+void cycles::ShaderParticle::SetColor(const Color &color) {m_color = color;}
+const Color &cycles::ShaderParticle::GetColor() const {return m_color;}
+void cycles::ShaderParticle::InitializeAlbedoColor(Socket &inOutColor)
+{
+	auto &shader = inOutColor.GetShader();
+
+	auto mixColor = shader.AddMixNode(MixNode::Type::Multiply);
+	shader.Link(inOutColor,mixColor.inColor1);
+	mixColor.SetColor2(m_color.ToVector3());
+
+	inOutColor = mixColor;
+}
+void cycles::ShaderParticle::InitializeEmissionColor(Socket &inOutColor) {InitializeAlbedoColor(inOutColor);}
+void cycles::ShaderParticle::InitializeAlbedoAlpha(NumberSocket &inOutAlpha)
+{
+	auto &shader = inOutAlpha.GetShader();
+
+	auto mixAlpha = shader.AddMathNode();
+	mixAlpha.SetType(ccl::NodeMathType::NODE_MATH_MULTIPLY);
+	shader.Link(inOutAlpha,mixAlpha.inValue1);
+	mixAlpha.SetValue2(m_color.a /255.f);
+
+	inOutAlpha = mixAlpha.outValue;
+}
+
+bool cycles::ShaderParticle::InitializeCCLShader(CCLShader &cclShader)
+{
+	// Note: We always need the albedo texture information for the translucency.
+	// Whether metalness/roughness/etc. affect baking in any way is unclear (probably not),
+	// but it also doesn't hurt to have them.
+	auto albedoNode = GetAlbedoSet().AddAlbedoMap(*this,cclShader);
+	if(albedoNode.has_value() == false)
+		return false;
+
+	auto transparentBsdf = cclShader.AddTransparentBSDFNode();
+	auto diffuseBsdf = cclShader.AddDiffuseBSDFNode();
+
+	auto mix = cclShader.AddMixClosureNode();
+	cclShader.Link(transparentBsdf,mix.inClosure1);
+	cclShader.Link(diffuseBsdf,mix.inClosure2);
+
+	auto alphaHandled = InitializeTransparency(cclShader,*albedoNode,mix.inFac);
+	LinkAlbedo(diffuseBsdf.inColor,mix.inFac,alphaHandled == util::EventReply::Unhandled);
+
+	if(AddEmissionMap(cclShader).has_value())
+	{
+		auto emissionBsdf = cclShader.AddEmissionNode();
+		emissionBsdf.inStrength = 1.f;
+		LinkEmission(emissionBsdf.inColor);
+
+		auto lightPathNode = cclShader.AddLightPathNode();
+		auto mixEmission = cclShader.AddMixClosureNode();
+		cclShader.Link(emissionBsdf,mixEmission.inClosure1);
+		cclShader.Link(mix.outClosure,mixEmission.inClosure2);
+		cclShader.Link(lightPathNode.outIsCameraRay,mixEmission.inFac);
+		mix = mixEmission;
+	}
+
+	cclShader.Link(mix,cclShader.GetOutputNode().inSurface);
+	return true;
+}
 util::EventReply cycles::ShaderParticle::InitializeTransparency(CCLShader &cclShader,ImageTextureNode &albedoNode,const NumberSocket &alphaSocket) const
 {
 	auto aNode = albedoNode.outAlpha;
@@ -931,7 +1175,7 @@ util::EventReply cycles::ShaderParticle::InitializeTransparency(CCLShader &cclSh
 		auto clampedNode = cclShader.AddMathNode(cclShader.AddMathNode(rgbMaxNode,0.f,ccl::NodeMathType::NODE_MATH_MAXIMUM),1.f,ccl::NodeMathType::NODE_MATH_MINIMUM);
 		aNode = albedoNode.outAlpha *clampedNode;
 	}
-	cclShader.Link(albedoNode.outAlpha,alphaSocket);
+	cclShader.Link(aNode,alphaSocket);
 	return util::EventReply::Handled;
 }
 
@@ -943,7 +1187,7 @@ bool cycles::ShaderPBR::InitializeCCLShader(CCLShader &cclShader)
 	// Note: We always need the albedo texture information for the translucency.
 	// Whether metalness/roughness/etc. affect baking in any way is unclear (probably not),
 	// but it also doesn't hurt to have them.
-	auto albedoNode = GetAlbedoSet().AddAlbedoMap(cclShader);
+	auto albedoNode = GetAlbedoSet().AddAlbedoMap(*this,cclShader);
 	if(albedoNode.has_value() == false)
 		return false;
 
@@ -986,17 +1230,6 @@ bool cycles::ShaderPBR::InitializeCCLShader(CCLShader &cclShader)
 	// Emission map
 	if(AddEmissionMap(cclShader).has_value())
 		LinkEmission(nodeBsdf.inEmission);
-
-	// Wrinkle maps
-	if(m_wrinkleCompressMap.has_value())
-	{
-		// TODO
-	}
-
-	if(m_wrinkleStretchMap.has_value())
-	{
-		// TODO
-	}
 
 	enum class DebugMode : uint8_t
 	{
@@ -1056,7 +1289,6 @@ bool cycles::ShaderPBR::InitializeCCLShader(CCLShader &cclShader)
 		return true;
 	}
 	}
-
 	cclShader.Link(nodeBsdf,cclShader.GetOutputNode().inSurface);
 	return true;
 }

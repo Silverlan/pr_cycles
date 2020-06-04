@@ -3,11 +3,13 @@
 
 #include "scene_object.hpp"
 #include "nodes.hpp"
+#include <alpha_mode.hpp>
 #include <memory>
 #include <string>
 #include <vector>
 #include <optional>
 #include <mathutil/umath.h>
+#include <mathutil/color.h>
 #include <sharedutils/util_event_reply.hpp>
 
 namespace ccl
@@ -18,6 +20,14 @@ namespace ccl
 };
 namespace pragma::modules::cycles
 {
+	enum class Channel : uint8_t
+	{
+		Red = 0,
+		Green,
+		Blue,
+		Alpha
+	};
+
 	class Scene;
 	class Shader;
 	class ShaderNode;
@@ -37,8 +47,7 @@ namespace pragma::modules::cycles
 		enum class Flags : uint8_t
 		{
 			None = 0u,
-			Transparent = 1u,
-			EmissionFromAlbedoAlpha = Transparent<<1u
+			EmissionFromAlbedoAlpha = 1u
 		};
 
 		enum class TextureType : uint8_t
@@ -66,6 +75,10 @@ namespace pragma::modules::cycles
 		void SetUVHandler(TextureType type,const std::shared_ptr<UVHandler> &uvHandler);
 		const std::shared_ptr<UVHandler> &GetUVHandler(TextureType type) const;
 
+		void SetAlphaMode(AlphaMode alphaMode,float alphaCutoff=0.5f);
+		AlphaMode GetAlphaMode() const;
+		float GetAlphaCutoff() const;
+
 		void SetUVHandlers(const std::array<std::shared_ptr<UVHandler>,umath::to_integral(TextureType::Count)> &handlers);
 		const std::array<std::shared_ptr<UVHandler>,umath::to_integral(TextureType::Count)> &GetUVHandlers() const;
 
@@ -79,10 +92,18 @@ namespace pragma::modules::cycles
 		std::string m_name;
 		std::string m_meshName;
 		Flags m_flags = Flags::None;
+		AlphaMode m_alphaMode = AlphaMode::Opaque;
+		float m_alphaCutoff = 0.5f;
 		Scene &m_scene;
 		std::array<std::shared_ptr<UVHandler>,umath::to_integral(TextureType::Count)> m_uvHandlers = {};
 	};
 
+	class ShaderModuleSpriteSheet;
+	enum class SpriteSheetFrame : uint8_t
+	{
+		First = 0,
+		Second
+	};
 	class CCLShader
 		: public std::enable_shared_from_this<CCLShader>
 	{
@@ -120,8 +141,10 @@ namespace pragma::modules::cycles
 		CombineRGBNode AddCombineRGBNode(const std::optional<const NumberSocket> &r={},const std::optional<const NumberSocket> &g={},const std::optional<const NumberSocket> &b={});
 		GeometryNode AddGeometryNode();
 		NormalMapNode AddNormalMapNode();
+		LightPathNode AddLightPathNode();
 		MixClosureNode AddMixClosureNode();
 		MixNode AddMixNode(const Socket &socketColor1,const Socket &socketColor2,MixNode::Type type=MixNode::Type::Mix,const std::optional<const NumberSocket> &fac={});
+		MixNode AddMixNode(MixNode::Type type=MixNode::Type::Mix);
 		BackgroundNode AddBackgroundNode();
 		TextureCoordinateNode AddTextureCoordinateNode();
 		MappingNode AddMappingNode();
@@ -129,15 +152,18 @@ namespace pragma::modules::cycles
 		AttributeNode AddAttributeNode(ccl::AttributeStandard attrType);
 		EmissionNode AddEmissionNode();
 		NumberSocket AddVertexAlphaNode();
+		NumberSocket AddWrinkleFactorNode();
 
 		PrincipledBSDFNode AddPrincipledBSDFNode();
 		ToonBSDFNode AddToonBSDFNode();
 		GlassBSDFNode AddGlassBSDFNode();
 		TransparentBsdfNode AddTransparentBSDFNode();
-		MixClosureNode AddTransparencyClosure(const Socket &colorSocket,const NumberSocket &alphaSocket);
+		DiffuseBsdfNode AddDiffuseBSDFNode();
+		MixClosureNode AddTransparencyClosure(const Socket &colorSocket,const NumberSocket &alphaSocket,AlphaMode alphaMode,float alphaCutoff=0.5f);
+		NumberSocket ApplyAlphaMode(const NumberSocket &alphaSocket,AlphaMode alphaMode,float alphaCutoff=0.5f);
 
 		Shader &GetShader() const;
-		const std::optional<Socket> &GetUVSocket(Shader::TextureType type) const;
+		std::optional<Socket> GetUVSocket(Shader::TextureType type,ShaderModuleSpriteSheet *shaderModSpriteSheet=nullptr,SpriteSheetFrame frame=SpriteSheetFrame::First);
 
 		ccl::Shader *operator->();
 		ccl::Shader *operator*();
@@ -175,18 +201,46 @@ namespace pragma::modules::cycles
 		ccl::ShaderNode &m_shaderNode;
 	};
 
+	class ShaderModuleAlbedo;
 	class ShaderAlbedoSet
 	{
 	public:
 		virtual ~ShaderAlbedoSet()=default;
+
 		void SetAlbedoMap(const std::string &albedoMap);
 		const std::optional<std::string> &GetAlbedoMap() const;
+
+		void SetColorFactor(const Vector4 &colorFactor);
+		const Vector4 &GetColorFactor() const;
+
 		const std::optional<ImageTextureNode> &GetAlbedoNode() const;
 
-		std::optional<ImageTextureNode> AddAlbedoMap(CCLShader &shader);
+		std::optional<ImageTextureNode> AddAlbedoMap(ShaderModuleAlbedo &albedoModule,CCLShader &shader);
 	private:
-		std::optional<std::string> m_albedoMap;
-		std::optional<ImageTextureNode> m_albedoNode = {};
+		std::optional<std::string> m_albedoMap {};
+		std::optional<ImageTextureNode> m_albedoNode {};
+		Vector4 m_colorFactor = {1.f,1.f,1.f,1.f};
+	};
+
+	class ShaderModuleSpriteSheet
+	{
+	public:
+		struct SpriteSheetData
+		{
+			std::pair<Vector2,Vector2> uv0;
+			std::string albedoMap2 {};
+			std::pair<Vector2,Vector2> uv1;
+			float interpFactor = 0.f;
+		};
+		void SetSpriteSheetData(
+			const Vector2 &uv0Min,const Vector2 &uv0Max,
+			const std::string &albedoMap2,const Vector2 &uv1Min,const Vector2 &uv1Max,
+			float interpFactor
+		);
+		void SetSpriteSheetData(const SpriteSheetData &spriteSheetData);
+		const std::optional<SpriteSheetData> &GetSpriteSheetData() const;
+	private:
+		std::optional<SpriteSheetData> m_spriteSheetData {};
 	};
 
 	class ShaderModuleAlbedo
@@ -195,7 +249,6 @@ namespace pragma::modules::cycles
 		virtual ~ShaderModuleAlbedo()=default;
 
 		void SetEmissionFromAlbedoAlpha(Shader &shader,bool b);
-		void SetTransparent(Shader &shader,bool transparent);
 
 		const ShaderAlbedoSet &GetAlbedoSet() const;
 		ShaderAlbedoSet &GetAlbedoSet();
@@ -206,12 +259,20 @@ namespace pragma::modules::cycles
 		void SetUseVertexAlphasForBlending(bool useAlphasForBlending);
 		bool ShouldUseVertexAlphasForBlending() const;
 
+		void SetWrinkleStretchMap(const std::string &wrinkleStretchMap);
+		void SetWrinkleCompressMap(const std::string &wrinkleCompressMap);
+
 		void LinkAlbedo(const Socket &color,const NumberSocket &alpha,bool useAlphaIfFlagSet=true);
 		void LinkAlbedoToBSDF(const Socket &bsdf);
+	protected:
+		virtual void InitializeAlbedoColor(Socket &inOutColor);
+		virtual void InitializeAlbedoAlpha(NumberSocket &inOutAlpha);
 	private:
 		bool SetupAlbedoNodes(CCLShader &shader,Socket &outColor,NumberSocket &outAlpha);
 		ShaderAlbedoSet m_albedoSet = {};
 		ShaderAlbedoSet m_albedoSet2 = {};
+		std::optional<std::string> m_wrinkleStretchMap;
+		std::optional<std::string> m_wrinkleCompressMap;
 		bool m_useVertexAlphasForBlending = false;
 	};
 
@@ -238,13 +299,14 @@ namespace pragma::modules::cycles
 	{
 	public:
 		virtual ~ShaderModuleMetalness()=default;
-		void SetMetalnessMap(const std::string &metalnessMap);
+		void SetMetalnessMap(const std::string &metalnessMap,Channel channel=Channel::Blue);
 		void SetMetalnessFactor(float metalnessFactor);
 
 		std::optional<NumberSocket> AddMetalnessMap(CCLShader &shader);
 		void LinkMetalness(const NumberSocket &metalness);
 	private:
 		std::optional<std::string> m_metalnessMap;
+		Channel m_metalnessChannel = Channel::Blue;
 		std::optional<NumberSocket> m_metalnessSocket = {};
 		std::optional<float> m_metalnessFactor = {};
 	};
@@ -253,8 +315,8 @@ namespace pragma::modules::cycles
 	{
 	public:
 		virtual ~ShaderModuleRoughness()=default;
-		void SetRoughnessMap(const std::string &roughnessMap);
-		void SetSpecularMap(const std::string &specularMap);
+		void SetRoughnessMap(const std::string &roughnessMap,Channel channel=Channel::Green);
+		void SetSpecularMap(const std::string &specularMap,Channel channel=Channel::Green);
 
 		void SetRoughnessFactor(float roughness);
 
@@ -263,6 +325,7 @@ namespace pragma::modules::cycles
 	private:
 		std::optional<std::string> m_roughnessMap;
 		std::optional<std::string> m_specularMap;
+		Channel m_roughnessChannel = Channel::Green;
 
 		std::optional<NumberSocket> m_roughnessSocket = {};
 		std::optional<float> m_roughnessFactor = {};
@@ -273,13 +336,20 @@ namespace pragma::modules::cycles
 	public:
 		virtual ~ShaderModuleEmission()=default;
 		void SetEmissionMap(const std::string &emissionMap);
-		void SetEmissionFactor(float factor);
+		void SetEmissionFactor(const Vector3 &factor);
+		const Vector3 &GetEmissionFactor() const;
+		void SetEmissionIntensity(float intensity);
+		float GetEmissionIntensity() const;
+		const std::optional<std::string> &GetEmissionMap() const;
 
 		std::optional<Socket> AddEmissionMap(CCLShader &shader);
 		void LinkEmission(const Socket &emission);
+	protected:
+		virtual void InitializeEmissionColor(Socket &inOutColor);
 	private:
 		std::optional<std::string> m_emissionMap;
-		float m_emissionFactor = 1.f;
+		Vector3 m_emissionFactor = {0.f,0.f,0.f};
+		float m_emissionIntensity = 1.f;
 
 		std::optional<Socket> m_emissionSocket = {};
 	};
@@ -294,7 +364,8 @@ namespace pragma::modules::cycles
 
 	class ShaderAlbedo
 		: public Shader,
-		public ShaderModuleAlbedo
+		public ShaderModuleAlbedo,
+		public ShaderModuleSpriteSheet
 	{
 	protected:
 		virtual bool InitializeCCLShader(CCLShader &cclShader) override;
@@ -311,7 +382,8 @@ namespace pragma::modules::cycles
 
 	class ShaderNormal
 		: public Shader,
-		public ShaderModuleNormal
+		public ShaderModuleNormal,
+		public ShaderModuleSpriteSheet
 	{
 	protected:
 		virtual bool InitializeCCLShader(CCLShader &cclShader) override;
@@ -320,7 +392,8 @@ namespace pragma::modules::cycles
 
 	class ShaderToon
 		: public Shader,
-		public ShaderModuleNormal
+		public ShaderModuleNormal,
+		public ShaderModuleSpriteSheet
 	{
 	protected:
 		virtual bool InitializeCCLShader(CCLShader &cclShader) override;
@@ -330,7 +403,8 @@ namespace pragma::modules::cycles
 	class ShaderGlass
 		: public Shader,
 		public ShaderModuleNormal,
-		public ShaderModuleRoughness
+		public ShaderModuleRoughness,
+		public ShaderModuleSpriteSheet
 	{
 	protected:
 		virtual bool InitializeCCLShader(CCLShader &cclShader) override;
@@ -342,12 +416,10 @@ namespace pragma::modules::cycles
 		public ShaderModuleNormal,
 		public ShaderModuleRoughness,
 		public ShaderModuleMetalness,
-		public ShaderModuleEmission
+		public ShaderModuleEmission,
+		public ShaderModuleSpriteSheet
 	{
 	public:
-		void SetWrinkleStretchMap(const std::string &wrinkleStretchMap);
-		void SetWrinkleCompressMap(const std::string &wrinkleCompressMap);
-
 		void SetMetallic(float metallic);
 		void SetSpecular(float specular);
 		void SetSpecularTint(float specularTint);
@@ -371,9 +443,6 @@ namespace pragma::modules::cycles
 		virtual util::EventReply InitializeTransparency(CCLShader &cclShader,ImageTextureNode &albedoNode,const NumberSocket &alphaSocket) const;
 		using Shader::Shader;
 	private:
-		std::optional<std::string> m_wrinkleStretchMap;
-		std::optional<std::string> m_wrinkleCompressMap;
-
 		// Default settings (Taken from Blender)
 		float m_metallic = 0.f;
 		float m_specular = 0.5f;
@@ -401,10 +470,17 @@ namespace pragma::modules::cycles
 	public:
 		using ShaderPBR::ShaderPBR;
 		void SetRenderFlags(uint32_t flags);
+		void SetColor(const Color &color);
+		const Color &GetColor() const;
 	protected:
+		virtual bool InitializeCCLShader(CCLShader &cclShader) override;
 		virtual util::EventReply InitializeTransparency(CCLShader &cclShader,ImageTextureNode &albedoNode,const NumberSocket &alphaSocket) const override;
+		virtual void InitializeAlbedoColor(Socket &inOutColor) override;
+		virtual void InitializeAlbedoAlpha(NumberSocket &inOutAlpha) override;
+		virtual void InitializeEmissionColor(Socket &inOutColor) override;
 	private:
 		uint32_t m_renderFlags = 0u;
+		Color m_color = Color::White;
 	};
 
 	struct UVHandler
