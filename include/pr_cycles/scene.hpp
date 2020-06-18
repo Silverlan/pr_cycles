@@ -75,10 +75,11 @@ namespace pragma::modules::cycles
 	public:
 		friend Scene;
 		SceneWorker(Scene &scene);
-		virtual void Cancel(const std::string &resultMsg) override;
+		using util::ParallelWorker<std::shared_ptr<uimg::ImageBuffer>>::Cancel;
 		virtual void Wait() override;
 		virtual std::shared_ptr<uimg::ImageBuffer> GetResult() override;
 	private:
+		virtual void DoCancel(const std::string &resultMsg) override;
 		PScene m_scene = nullptr;
 		template<typename TJob,typename... TARGS>
 			friend util::ParallelJob<typename TJob::RESULT_TYPE> util::create_parallel_job(TARGS&& ...args);
@@ -108,7 +109,8 @@ namespace pragma::modules::cycles
 			BakeNormals,
 			BakeDiffuseLighting,
 			SceneAlbedo,
-			SceneNormals
+			SceneNormals,
+			SceneDepth
 		};
 		enum class StateFlags : uint16_t
 		{
@@ -154,7 +156,7 @@ namespace pragma::modules::cycles
 		~Scene();
 		PObject AddEntity(
 			BaseEntity &ent,std::vector<ModelSubMesh*> *optOutTargetMeshes=nullptr,
-			const std::function<bool(ModelMesh&)> &meshFilter=nullptr,const std::function<bool(ModelSubMesh&)> &subMeshFilter=nullptr,
+			const std::function<bool(ModelMesh&,const Vector3&,const Quat&)> &meshFilter=nullptr,const std::function<bool(ModelSubMesh&,const Vector3&,const Quat&)> &subMeshFilter=nullptr,
 			const std::string &nameSuffix=""
 		);
 		void AddParticleSystem(pragma::CParticleSystemComponent &ptc,const Vector3 &camPos,const Mat4 &vp,float nearZ,float farZ);
@@ -162,14 +164,14 @@ namespace pragma::modules::cycles
 		PMesh AddModel(
 			Model &mdl,const std::string &meshName,BaseEntity *optEnt=nullptr,uint32_t skinId=0,
 			CModelComponent *optMdlC=nullptr,CAnimatedComponent *optAnimC=nullptr,
-			const std::function<bool(ModelMesh&)> &optMeshFilter=nullptr,
-			const std::function<bool(ModelSubMesh&)> &optSubMeshFilter=nullptr
+			const std::function<bool(ModelMesh&,const Vector3&,const Quat&)> &optMeshFilter=nullptr,
+			const std::function<bool(ModelSubMesh&,const Vector3&,const Quat&)> &optSubMeshFilter=nullptr
 		);
 		PMesh AddMeshList(
 			Model &mdl,const std::vector<std::shared_ptr<ModelMesh>> &meshList,const std::string &meshName,BaseEntity *optEnt=nullptr,uint32_t skinId=0,
 			CModelComponent *optMdlC=nullptr,CAnimatedComponent *optAnimC=nullptr,
-			const std::function<bool(ModelMesh&)> &optMeshFilter=nullptr,
-			const std::function<bool(ModelSubMesh&)> &optSubMeshFilter=nullptr
+			const std::function<bool(ModelMesh&,const Vector3&,const Quat&)> &optMeshFilter=nullptr,
+			const std::function<bool(ModelSubMesh&,const Vector3&,const Quat&)> &optSubMeshFilter=nullptr
 		);
 		void Add3DSkybox(pragma::CSkyCameraComponent &skyCam,const Vector3 &camPos);
 		void SetAOBakeTarget(Model &mdl,uint32_t matIndex);

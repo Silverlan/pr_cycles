@@ -133,6 +133,16 @@ cycles::NumberSocket cycles::NumberSocket::lerp(const NumberSocket &to,const Num
 {
 	return *this *(1.f -by) +to *by;
 }
+cycles::NumberSocket cycles::NumberSocket::min(const NumberSocket &other) const
+{
+	auto *shader = m_shader ? m_shader : other.m_shader;
+	return shader->AddMathNode(*this,other,ccl::NodeMathType::NODE_MATH_MINIMUM);
+}
+cycles::NumberSocket cycles::NumberSocket::max(const NumberSocket &other) const
+{
+	auto *shader = m_shader ? m_shader : other.m_shader;
+	return shader->AddMathNode(*this,other,ccl::NodeMathType::NODE_MATH_MAXIMUM);
+}
 cycles::NumberSocket cycles::NumberSocket::len(const std::array<const NumberSocket,2> &v)
 {
 	return (v.at(0) *v.at(0) +v.at(1) *v.at(1)).sqrt();
@@ -213,6 +223,10 @@ cycles::GeometryNode::GeometryNode(CCLShader &shader,const std::string &nodeName
 	outParametric{shader,nodeName,"parametric"},
 	outBackfacing{Socket{shader,nodeName,"backfacing"}},
 	outPointiness{Socket{shader,nodeName,"pointiness"}}
+{}
+
+cycles::CameraDataNode::CameraDataNode(CCLShader &shader,const std::string &nodeName,ccl::CameraNode &node)
+	: Node{shader},outViewVector{shader,nodeName,"view_vector"},outViewZDepth{Socket{shader,nodeName,"view_z_depth"}},outViewDistance{Socket{shader,nodeName,"view_distance"}}
 {}
 
 cycles::ImageTextureNode::ImageTextureNode(CCLShader &shader,const std::string &nodeName)

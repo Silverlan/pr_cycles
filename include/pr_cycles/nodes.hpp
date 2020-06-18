@@ -9,6 +9,7 @@ namespace ccl
 	class PrincipledBsdfNode; class NormalMapNode; class ToonBsdfNode; class GlassBsdfNode; class MixClosureNode; class TransparentBsdfNode; class MixNode;
 	class SeparateXYZNode; class CombineXYZNode; class SeparateRGBNode; class CombineRGBNode; class BackgroundNode; class TextureCoordinateNode; class MappingNode;
 	class EnvironmentTextureNode; class ImageTextureNode; class ColorNode; class MathNode; class AttributeNode; class LightPathNode; class DiffuseBsdfNode;
+	class CameraNode;
 	enum AttributeStandard : int32_t;
 	enum NodeMathType : int32_t;
 };
@@ -76,6 +77,8 @@ namespace pragma::modules::cycles
 		NumberSocket sqrt() const;
 		NumberSocket clamp(const NumberSocket &min,const NumberSocket &max) const;
 		NumberSocket lerp(const NumberSocket &to,const NumberSocket &by) const;
+		NumberSocket min(const NumberSocket &other) const;
+		NumberSocket max(const NumberSocket &other) const;
 
 		static NumberSocket len(const std::array<const NumberSocket,2> &v);
 		static NumberSocket dot(
@@ -189,6 +192,17 @@ namespace pragma::modules::cycles
 		Socket outParametric;
 		NumberSocket outBackfacing;
 		NumberSocket outPointiness;
+	};
+	struct CameraDataNode
+		: public Node
+	{
+		CameraDataNode(CCLShader &shader,const std::string &nodeName,ccl::CameraNode &node);
+
+		Socket outViewVector;
+		NumberSocket outViewZDepth;
+		NumberSocket outViewDistance;
+	private:
+		ccl::CameraNode *m_node = nullptr;
 	};
 	struct ImageTextureNode
 		: public Node

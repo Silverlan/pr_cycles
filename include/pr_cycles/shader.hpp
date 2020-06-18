@@ -47,7 +47,8 @@ namespace pragma::modules::cycles
 		enum class Flags : uint8_t
 		{
 			None = 0u,
-			EmissionFromAlbedoAlpha = 1u
+			EmissionFromAlbedoAlpha = 1u,
+			AdditiveByColor = EmissionFromAlbedoAlpha<<1u
 		};
 
 		enum class TextureType : uint8_t
@@ -72,6 +73,7 @@ namespace pragma::modules::cycles
 		void SetMeshName(const std::string &meshName);
 		bool HasFlag(Flags flags) const;
 		void SetFlags(Flags flags,bool enabled);
+		Flags GetFlags() const;
 		void SetUVHandler(TextureType type,const std::shared_ptr<UVHandler> &uvHandler);
 		const std::shared_ptr<UVHandler> &GetUVHandler(TextureType type) const;
 
@@ -140,6 +142,7 @@ namespace pragma::modules::cycles
 		SeparateRGBNode AddSeparateRGBNode(const Socket &srcSocket);
 		CombineRGBNode AddCombineRGBNode(const std::optional<const NumberSocket> &r={},const std::optional<const NumberSocket> &g={},const std::optional<const NumberSocket> &b={});
 		GeometryNode AddGeometryNode();
+		CameraDataNode AddCameraDataNode();
 		NormalMapNode AddNormalMapNode();
 		LightPathNode AddLightPathNode();
 		MixClosureNode AddMixClosureNode();
@@ -266,7 +269,7 @@ namespace pragma::modules::cycles
 		void LinkAlbedoToBSDF(const Socket &bsdf);
 	protected:
 		virtual void InitializeAlbedoColor(Socket &inOutColor);
-		virtual void InitializeAlbedoAlpha(NumberSocket &inOutAlpha);
+		virtual void InitializeAlbedoAlpha(const Socket &inAlbedoColor,NumberSocket &inOutAlpha);
 	private:
 		bool SetupAlbedoNodes(CCLShader &shader,Socket &outColor,NumberSocket &outAlpha);
 		ShaderAlbedoSet m_albedoSet = {};
@@ -390,6 +393,20 @@ namespace pragma::modules::cycles
 		using Shader::Shader;
 	};
 
+	class ShaderDepth
+		: public Shader,
+		public ShaderModuleAlbedo,
+		public ShaderModuleSpriteSheet
+	{
+	public:
+		void SetFarZ(float farZ);
+	protected:
+		virtual bool InitializeCCLShader(CCLShader &cclShader) override;
+		using Shader::Shader;
+	private:
+		float m_farZ = 1.f;
+	};
+
 	class ShaderToon
 		: public Shader,
 		public ShaderModuleNormal,
@@ -468,18 +485,24 @@ namespace pragma::modules::cycles
 		: public ShaderPBR
 	{
 	public:
+		enum class RenderFlags : uint32_t
+		{
+			None = 0u,
+			AdditiveByColor = 1u
+		};
+
 		using ShaderPBR::ShaderPBR;
-		void SetRenderFlags(uint32_t flags);
+		void SetRenderFlags(RenderFlags flags);
 		void SetColor(const Color &color);
 		const Color &GetColor() const;
 	protected:
 		virtual bool InitializeCCLShader(CCLShader &cclShader) override;
 		virtual util::EventReply InitializeTransparency(CCLShader &cclShader,ImageTextureNode &albedoNode,const NumberSocket &alphaSocket) const override;
 		virtual void InitializeAlbedoColor(Socket &inOutColor) override;
-		virtual void InitializeAlbedoAlpha(NumberSocket &inOutAlpha) override;
+		virtual void InitializeAlbedoAlpha(const Socket &inAlbedoColor,NumberSocket &inOutAlpha) override;
 		virtual void InitializeEmissionColor(Socket &inOutColor) override;
 	private:
-		uint32_t m_renderFlags = 0u;
+		RenderFlags m_renderFlags = RenderFlags::None;
 		Color m_color = Color::White;
 	};
 
@@ -502,6 +525,7 @@ namespace pragma::modules::cycles
 	};
 };
 REGISTER_BASIC_BITWISE_OPERATORS(pragma::modules::cycles::Shader::Flags)
+REGISTER_BASIC_BITWISE_OPERATORS(pragma::modules::cycles::ShaderParticle::RenderFlags)
 
 template<class TShader>
 	std::shared_ptr<TShader> pragma::modules::cycles::Shader::Create(Scene &scene,const std::string &name)

@@ -140,13 +140,51 @@ static cycles::PScene setup_scene(cycles::Scene::RenderMode renderMode,uint32_t 
 	return scene;
 }
 
+enum class SceneFlags : uint8_t
+{
+	None = 0u,
+	CullObjectsOutsidePvs = 1u,
+	CullObjectsOutsideCameraFrustum = CullObjectsOutsidePvs<<1u
+};
+REGISTER_BASIC_BITWISE_OPERATORS(SceneFlags)
+
 static void initialize_cycles_scene_from_game_scene(
-	Scene &gameScene,cycles::Scene &scene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,bool cullObjectsOutsidePvs,
+	Scene &gameScene,cycles::Scene &scene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,float aspectRatio,SceneFlags sceneFlags,
 	const std::function<bool(BaseEntity&)> &entFilter=nullptr,const std::function<bool(BaseEntity&)> &lightFilter=nullptr
 )
 {
-	auto entSceneFilter = [&gameScene](BaseEntity &ent) -> bool {
-		return static_cast<CBaseEntity&>(ent).IsInScene(gameScene);
+	auto enableFrustumCulling = umath::is_flag_set(sceneFlags,SceneFlags::CullObjectsOutsideCameraFrustum);
+	auto cullObjectsOutsidePvs = umath::is_flag_set(sceneFlags,SceneFlags::CullObjectsOutsidePvs);
+	std::vector<Plane> planes {};
+	auto forward = uquat::forward(camRot);
+	auto up = uquat::up(camRot);
+	pragma::BaseEnvCameraComponent::GetFrustumPlanes(planes,nearZ,farZ,fov,aspectRatio,camPos,forward,up);
+
+	auto entSceneFilter = [&gameScene,&camPos,&planes,enableFrustumCulling](BaseEntity &ent) -> bool {
+		if(static_cast<CBaseEntity&>(ent).IsInScene(gameScene) == false)
+			return false;
+		if(enableFrustumCulling == false)
+			return true;
+		auto renderC = ent.GetComponent<pragma::CRenderComponent>();
+		if(renderC.expired())
+			return false;
+		if(renderC->IsExemptFromOcclusionCulling())
+			return true;
+		if(renderC->ShouldDraw(camPos) == false)
+			return false;
+		auto sphere = renderC->GetRenderSphereBounds();
+		pragma::physics::Transform pose;
+		ent.GetPose(pose);
+		auto pos = pose.GetOrigin();
+		if(Intersection::SphereInPlaneMesh(pos +sphere.pos,sphere.radius,planes,true) == INTERSECT_OUTSIDE)
+			return false;
+		Vector3 min;
+		Vector3 max;
+		renderC->GetRenderBounds(&min,&max);
+		min = pose *min;
+		max = pose *max;
+		uvec::to_min_max(min,max);
+		return Intersection::AABBInPlaneMesh(min,max,planes) != INTERSECT_OUTSIDE;
 	};
 	setup_light_sources(scene,[&entSceneFilter,&lightFilter](BaseEntity &ent) -> bool {
 		return entSceneFilter(ent) && (lightFilter == nullptr || lightFilter(ent));
@@ -185,38 +223,58 @@ static void initialize_cycles_scene_from_game_scene(
 		auto renderMode = renderC->GetRenderMode();
 		if((renderMode != RenderMode::World && renderMode != RenderMode::Skybox) || renderC->ShouldDraw(camPos) == false || (entFilter && entFilter(*ent) == false))
 			continue;
-		std::function<bool(ModelMesh&)> meshFilter = nullptr;
-		if(node && renderC->IsExemptFromOcclusionCulling() == false)
+		std::function<bool(ModelMesh&,const Vector3&,const Quat&)> meshFilter = nullptr;
+		if(renderC->IsExemptFromOcclusionCulling() == false)
 		{
-			// Cull everything outside the camera's PVS
-			if(ent->IsWorld())
+			if(enableFrustumCulling)
 			{
-				auto pos = ent->GetPosition();
-				meshFilter = [bspTree,node,pos](ModelMesh &mesh) -> bool {
-					if(node == nullptr)
-						return false;
-					auto clusterIndex = mesh.GetReferenceId();
-					if(clusterIndex == std::numeric_limits<uint32_t>::max())
-					{
-						// Probably not a world mesh
-						return true;
-					}
-					return bspTree->IsClusterVisible(node->cluster,clusterIndex);
+				meshFilter = [&planes](ModelMesh &mesh,const Vector3 &origin,const Quat &rotation) -> bool {
+					Vector3 min,max;
+					mesh.GetBounds(min,max);
+					uvec::rotate(&min,rotation);
+					uvec::rotate(&max,rotation);
+					min += origin;
+					max += origin;
+					return (Intersection::AABBInPlaneMesh(min,max,planes) != INTERSECT_OUTSIDE) ? true : false;
 				};
 			}
-			else
+			if(node)
 			{
-				auto pos = ent->GetPosition();
-				meshFilter = [bspTree,node,pos,&renderC](ModelMesh &mesh) -> bool {
-					if(node == nullptr)
-						return false;
-					Vector3 min;
-					Vector3 max;
-					renderC->GetRenderBounds(&min,&max);
-					min += pos;
-					max += pos;
-					return Intersection::AABBAABB(min,max,node->minVisible,node->maxVisible);
-				};
+				auto curFilter = meshFilter;
+				// Cull everything outside the camera's PVS
+				if(ent->IsWorld())
+				{
+					auto pos = ent->GetPosition();
+					meshFilter = [bspTree,node,pos,curFilter](ModelMesh &mesh,const Vector3 &origin,const Quat &rot) -> bool {
+						if(curFilter && curFilter(mesh,origin,rot) == false)
+							return false;
+						if(node == nullptr)
+							return false;
+						auto clusterIndex = mesh.GetReferenceId();
+						if(clusterIndex == std::numeric_limits<uint32_t>::max())
+						{
+							// Probably not a world mesh
+							return true;
+						}
+						return bspTree->IsClusterVisible(node->cluster,clusterIndex);
+					};
+				}
+				else
+				{
+					auto pos = ent->GetPosition();
+					meshFilter = [bspTree,node,pos,&renderC,curFilter](ModelMesh &mesh,const Vector3 &origin,const Quat &rot) -> bool {
+						if(curFilter && curFilter(mesh,origin,rot) == false)
+							return false;
+						if(node == nullptr)
+							return false;
+						Vector3 min;
+						Vector3 max;
+						renderC->GetRenderBounds(&min,&max);
+						min += pos;
+						max += pos;
+						return Intersection::AABBAABB(min,max,node->minVisible,node->maxVisible);
+					};
+				}
 			}
 		}
 		scene.AddEntity(*ent,nullptr,meshFilter);
@@ -245,7 +303,7 @@ static void initialize_cycles_scene_from_game_scene(
 
 static void initialize_from_game_scene(
 	lua_State *l,Scene &gameScene,cycles::Scene &scene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,
-	float nearZ,float farZ,float fov,bool cullObjectsOutsidePvs,luabind::object *optEntFilter,luabind::object *optLightFilter
+	float nearZ,float farZ,float fov,SceneFlags sceneFlags,luabind::object *optEntFilter,luabind::object *optLightFilter
 )
 {
 	std::function<bool(BaseEntity&)> entFilter = nullptr;
@@ -287,8 +345,8 @@ static void initialize_from_game_scene(
 		}
 		return false;
 	};
-
-	initialize_cycles_scene_from_game_scene(gameScene,scene,camPos,camRot,vp,nearZ,farZ,fov,cullObjectsOutsidePvs,entFilter,lightFilter);
+	auto aspectRatio = gameScene.GetWidth() /static_cast<float>(gameScene.GetHeight());
+	initialize_cycles_scene_from_game_scene(gameScene,scene,camPos,camRot,vp,nearZ,farZ,fov,aspectRatio,sceneFlags,entFilter,lightFilter);
 }
 
 extern "C"
@@ -296,7 +354,7 @@ extern "C"
 	PRAGMA_EXPORT void pr_cycles_render_image(
 		uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,bool denoise,
 		const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,umath::Degree fov,
-		bool cullObjectsOutsidePvs,std::string skyOverride,EulerAngles skyAngles,float skyStrength,
+		SceneFlags sceneFlags,std::string skyOverride,EulerAngles skyAngles,float skyStrength,
 		float maxTransparencyBounces,const std::function<bool(BaseEntity&)> &entFilter,util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> &outJob
 	)
 	{
@@ -304,7 +362,8 @@ extern "C"
 		auto scene = setup_scene(cycles::Scene::RenderMode::RenderImage,width,height,sampleCount,hdrOutput,denoise);
 		if(scene == nullptr)
 			return;
-		initialize_cycles_scene_from_game_scene(*c_game->GetScene(),*scene,camPos,camRot,vp,nearZ,farZ,fov,cullObjectsOutsidePvs,entFilter);
+		auto aspectRatio = width /static_cast<float>(height);
+		initialize_cycles_scene_from_game_scene(*c_game->GetScene(),*scene,camPos,camRot,vp,nearZ,farZ,fov,aspectRatio,sceneFlags,entFilter);
 		if(skyOverride.empty() == false)
 			scene->SetSky(skyOverride);
 		scene->SetSkyAngles(skyAngles);
@@ -462,17 +521,22 @@ extern "C"
 		defScene.add_static_constant("RENDER_MODE_BAKE_DIFFUSE_LIGHTING",umath::to_integral(cycles::Scene::RenderMode::BakeDiffuseLighting));
 		defScene.add_static_constant("RENDER_MODE_ALBEDO",umath::to_integral(cycles::Scene::RenderMode::SceneAlbedo));
 		defScene.add_static_constant("RENDER_MODE_NORMALS",umath::to_integral(cycles::Scene::RenderMode::SceneNormals));
+		defScene.add_static_constant("RENDER_MODE_DEPTH",umath::to_integral(cycles::Scene::RenderMode::SceneDepth));
 
 		defScene.add_static_constant("DEVICE_TYPE_CPU",umath::to_integral(cycles::Scene::DeviceType::CPU));
 		defScene.add_static_constant("DEVICE_TYPE_GPU",umath::to_integral(cycles::Scene::DeviceType::GPU));
-		defScene.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,cycles::Scene&,Scene&,const Vector3&,const Quat&,const Mat4&,float,float,float,bool,luabind::object,luabind::object)>([](lua_State *l,cycles::Scene &scene,Scene &gameScene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,bool cullObjectsOutsidePvs,luabind::object entFilter,luabind::object lightFilter) {
-			initialize_from_game_scene(l,gameScene,scene,camPos,camRot,vp,nearZ,farZ,fov,cullObjectsOutsidePvs,&entFilter,&lightFilter);
+
+		defScene.add_static_constant("SCENE_FLAG_NONE",umath::to_integral(SceneFlags::None));
+		defScene.add_static_constant("SCENE_FLAG_BIT_CULL_OBJECTS_OUTSIDE_CAMERA_FRUSTUM",umath::to_integral(SceneFlags::CullObjectsOutsideCameraFrustum));
+		defScene.add_static_constant("SCENE_FLAG_BIT_CULL_OBJECTS_OUTSIDE_PVS",umath::to_integral(SceneFlags::CullObjectsOutsidePvs));
+		defScene.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,cycles::Scene&,Scene&,const Vector3&,const Quat&,const Mat4&,float,float,float,uint32_t,luabind::object,luabind::object)>([](lua_State *l,cycles::Scene &scene,Scene &gameScene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,uint32_t sceneFlags,luabind::object entFilter,luabind::object lightFilter) {
+			initialize_from_game_scene(l,gameScene,scene,camPos,camRot,vp,nearZ,farZ,fov,static_cast<SceneFlags>(sceneFlags),&entFilter,&lightFilter);
 		}));
-		defScene.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,cycles::Scene&,Scene&,const Vector3&,const Quat&,const Mat4&,float,float,float,bool,luabind::object)>([](lua_State *l,cycles::Scene &scene,Scene &gameScene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,bool cullObjectsOutsidePvs,luabind::object entFilter) {
-			initialize_from_game_scene(l,gameScene,scene,camPos,camRot,vp,nearZ,farZ,fov,cullObjectsOutsidePvs,&entFilter,nullptr);
+		defScene.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,cycles::Scene&,Scene&,const Vector3&,const Quat&,const Mat4&,float,float,float,uint32_t,luabind::object)>([](lua_State *l,cycles::Scene &scene,Scene &gameScene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,uint32_t sceneFlags,luabind::object entFilter) {
+			initialize_from_game_scene(l,gameScene,scene,camPos,camRot,vp,nearZ,farZ,fov,static_cast<SceneFlags>(sceneFlags),&entFilter,nullptr);
 		}));
-		defScene.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,cycles::Scene&,Scene&,const Vector3&,const Quat&,const Mat4&,float,float,float,bool)>([](lua_State *l,cycles::Scene &scene,Scene &gameScene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,bool cullObjectsOutsidePvs) {
-			initialize_from_game_scene(l,gameScene,scene,camPos,camRot,vp,nearZ,farZ,fov,cullObjectsOutsidePvs,nullptr,nullptr);
+		defScene.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,cycles::Scene&,Scene&,const Vector3&,const Quat&,const Mat4&,float,float,float,uint32_t)>([](lua_State *l,cycles::Scene &scene,Scene &gameScene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,uint32_t sceneFlags) {
+			initialize_from_game_scene(l,gameScene,scene,camPos,camRot,vp,nearZ,farZ,fov,static_cast<SceneFlags>(sceneFlags),nullptr,nullptr);
 		}));
 		defScene.def("SetSky",static_cast<void(*)(lua_State*,cycles::Scene&,const std::string&)>([](lua_State *l,cycles::Scene &scene,const std::string &skyPath) {
 			scene.SetSky(skyPath);

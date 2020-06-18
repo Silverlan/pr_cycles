@@ -52,6 +52,7 @@ const std::string &cycles::Shader::GetMeshName() const {return m_meshName;}
 void cycles::Shader::SetMeshName(const std::string &meshName) {m_meshName = meshName;}
 bool cycles::Shader::HasFlag(Flags flags) const {return umath::is_flag_set(m_flags,flags);}
 void cycles::Shader::SetFlags(Flags flags,bool enabled) {umath::set_flag(m_flags,flags,enabled);}
+cycles::Shader::Flags cycles::Shader::GetFlags() const {return m_flags;}
 void cycles::Shader::SetAlphaMode(AlphaMode alphaMode,float alphaCutoff)
 {
 	m_alphaMode = alphaMode;
@@ -437,6 +438,12 @@ cycles::GeometryNode cycles::CCLShader::AddGeometryNode()
 	auto &nodeGeometry = *static_cast<ccl::GeometryNode*>(**AddNode("geometry",name));
 	return {*this,name};
 }
+cycles::CameraDataNode cycles::CCLShader::AddCameraDataNode()
+{
+	auto name = GetCurrentInternalNodeName();
+	auto &nodeCamera = *static_cast<ccl::CameraNode*>(**AddNode("camera_info",name));
+	return {*this,name,nodeCamera};
+}
 
 cycles::NormalMapNode cycles::CCLShader::AddNormalMapNode()
 {
@@ -776,7 +783,7 @@ void cycles::ShaderModuleAlbedo::LinkAlbedo(const Socket &color,const NumberSock
 	if(useAlphaIfFlagSet && shader.GetShader().GetAlphaMode() != AlphaMode::Opaque)
 	{
 		albedoAlpha = shader.ApplyAlphaMode(albedoAlpha,shader.GetShader().GetAlphaMode(),shader.GetShader().GetAlphaCutoff());
-		InitializeAlbedoAlpha(albedoAlpha);
+		InitializeAlbedoAlpha(albedoColor,albedoAlpha);
 		shader.Link(albedoAlpha,alpha);
 	}
 }
@@ -791,7 +798,7 @@ void cycles::ShaderModuleAlbedo::LinkAlbedoToBSDF(const Socket &bsdf)
 	auto alphaMode = shader.GetShader().GetAlphaMode();
 	if(alphaMode != AlphaMode::Opaque)
 	{
-		InitializeAlbedoAlpha(albedoAlpha);
+		InitializeAlbedoAlpha(albedoColor,albedoAlpha);
 		auto nodeTransparentBsdf = shader.AddTransparencyClosure(albedoColor,albedoAlpha,alphaMode,shader.GetShader().GetAlphaCutoff());
 		shader.Link(nodeTransparentBsdf,bsdf);
 	}
@@ -800,7 +807,15 @@ void cycles::ShaderModuleAlbedo::LinkAlbedoToBSDF(const Socket &bsdf)
 }
 
 void cycles::ShaderModuleAlbedo::InitializeAlbedoColor(Socket &inOutColor) {}
-void cycles::ShaderModuleAlbedo::InitializeAlbedoAlpha(NumberSocket &inOutAlpha) {}
+void cycles::ShaderModuleAlbedo::InitializeAlbedoAlpha(const Socket &inAlbedoColor,NumberSocket &inOutAlpha)
+{
+	auto &shader = inAlbedoColor.GetShader();
+	if(umath::is_flag_set(shader.GetShader().GetFlags(),Shader::Flags::AdditiveByColor))
+	{
+		auto rgb = shader.AddSeparateRGBNode(inAlbedoColor);
+		inOutAlpha = rgb.outR.max(rgb.outG.max(rgb.outB));
+	}
+}
 
 ////////////////
 
@@ -860,6 +875,20 @@ bool cycles::ShaderNormal::InitializeCCLShader(CCLShader &cclShader)
 		LinkNormalToBSDF(cclShader.GetOutputNode().inSurface);
 	return true;
 }
+
+////////////////
+
+bool cycles::ShaderDepth::InitializeCCLShader(CCLShader &cclShader)
+{
+	auto camNode = cclShader.AddCameraDataNode();
+	auto d = camNode.outViewZDepth; // Subtracting near plane apparently not required?
+	d = d /m_farZ;
+	auto rgb = cclShader.AddCombineRGBNode(d,d,d);
+	// TODO: Take transparency of albedo map into account?
+	cclShader.Link(rgb,cclShader.GetOutputNode().inSurface);
+	return true;
+}
+void cycles::ShaderDepth::SetFarZ(float farZ) {m_farZ = farZ;}
 
 ////////////////
 
@@ -1102,7 +1131,7 @@ void cycles::ShaderModuleEmission::LinkEmission(const Socket &emission)
 
 ////////////////
 
-void cycles::ShaderParticle::SetRenderFlags(uint32_t flags) {m_renderFlags = flags;}
+void cycles::ShaderParticle::SetRenderFlags(RenderFlags flags) {m_renderFlags = flags;}
 void cycles::ShaderParticle::SetColor(const Color &color) {m_color = color;}
 const Color &cycles::ShaderParticle::GetColor() const {return m_color;}
 void cycles::ShaderParticle::InitializeAlbedoColor(Socket &inOutColor)
@@ -1116,10 +1145,10 @@ void cycles::ShaderParticle::InitializeAlbedoColor(Socket &inOutColor)
 	inOutColor = mixColor;
 }
 void cycles::ShaderParticle::InitializeEmissionColor(Socket &inOutColor) {InitializeAlbedoColor(inOutColor);}
-void cycles::ShaderParticle::InitializeAlbedoAlpha(NumberSocket &inOutAlpha)
+void cycles::ShaderParticle::InitializeAlbedoAlpha(const Socket &inAlbedoColor,NumberSocket &inOutAlpha)
 {
+	ShaderPBR::InitializeAlbedoAlpha(inAlbedoColor,inOutAlpha);
 	auto &shader = inOutAlpha.GetShader();
-
 	auto mixAlpha = shader.AddMathNode();
 	mixAlpha.SetType(ccl::NodeMathType::NODE_MATH_MULTIPLY);
 	shader.Link(inOutAlpha,mixAlpha.inValue1);
@@ -1166,8 +1195,10 @@ bool cycles::ShaderParticle::InitializeCCLShader(CCLShader &cclShader)
 }
 util::EventReply cycles::ShaderParticle::InitializeTransparency(CCLShader &cclShader,ImageTextureNode &albedoNode,const NumberSocket &alphaSocket) const
 {
+	// TODO: Remove this code! It's obsolete.
+#if 0
 	auto aNode = albedoNode.outAlpha;
-	if(umath::is_flag_set(static_cast<pragma::ShaderParticleBase::RenderFlags>(m_renderFlags),pragma::ShaderParticleBase::RenderFlags::BlackToAlpha))
+	if(umath::is_flag_set(m_renderFlags,RenderFlags::AdditiveByColor))
 	{
 		auto rgbNode = cclShader.AddSeparateRGBNode(albedoNode.outColor);
 		auto rgMaxNode = cclShader.AddMathNode(rgbNode.outR,rgbNode.outG,ccl::NodeMathType::NODE_MATH_MAXIMUM);
@@ -1177,6 +1208,8 @@ util::EventReply cycles::ShaderParticle::InitializeTransparency(CCLShader &cclSh
 	}
 	cclShader.Link(aNode,alphaSocket);
 	return util::EventReply::Handled;
+#endif
+	return util::EventReply::Unhandled;
 }
 
 ////////////////

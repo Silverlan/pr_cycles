@@ -34,6 +34,8 @@ void cycles::Camera::SetFarZ(float farZ) {m_camera.farclip = Scene::ToCyclesLeng
 void cycles::Camera::SetNearZ(float nearZ) {m_camera.nearclip = Scene::ToCyclesLength(nearZ);}
 void cycles::Camera::SetFOV(umath::Radian fov) {m_camera.fov = fov;}
 float cycles::Camera::GetAspectRatio() const {return static_cast<float>(m_camera.width) /static_cast<float>(m_camera.height);}
+float cycles::Camera::GetNearZ() const {return m_camera.nearclip;}
+float cycles::Camera::GetFarZ() const {return m_camera.farclip;}
 void cycles::Camera::SetCameraType(CameraType type)
 {
 	switch(type)

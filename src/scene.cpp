@@ -78,9 +78,9 @@ extern DLLCLIENT CGame *c_game;
 cycles::SceneWorker::SceneWorker(Scene &scene)
 	: util::ParallelWorker<std::shared_ptr<uimg::ImageBuffer>>{},m_scene{scene.shared_from_this()}
 {}
-void cycles::SceneWorker::Cancel(const std::string &resultMsg)
+void cycles::SceneWorker::DoCancel(const std::string &resultMsg)
 {
-	util::ParallelWorker<std::shared_ptr<uimg::ImageBuffer>>::Cancel(resultMsg);
+	util::ParallelWorker<std::shared_ptr<uimg::ImageBuffer>>::DoCancel(resultMsg);
 	m_scene->OnParallelWorkerCancelled();
 }
 void cycles::SceneWorker::Wait()
@@ -122,6 +122,7 @@ bool cycles::Scene::IsRenderSceneMode(RenderMode renderMode)
 	case RenderMode::RenderImage:
 	case RenderMode::SceneAlbedo:
 	case RenderMode::SceneNormals:
+	case RenderMode::SceneDepth:
 		return true;
 	}
 	return false;
@@ -787,6 +788,20 @@ cycles::PShader cycles::Scene::CreateShader(Material &mat,const std::string &mes
 			shader->SetNormalMap(*normalTexPath);
 		resShader = shader;
 	}
+	else if(m_renderMode == RenderMode::SceneDepth)
+	{
+		auto shader = cycles::Shader::Create<ShaderDepth>(*this,meshName +"_shader");
+		shader->SetMeshName(meshName);
+		static_cast<ShaderDepth&>(*shader).SetFarZ(GetCamera().GetFarZ());
+		shader->GetAlbedoSet().SetAlbedoMap(*diffuseTexPath);
+		if(albedo2TexPath.has_value())
+		{
+			shader->GetAlbedoSet2().SetAlbedoMap(*albedo2TexPath);
+			shader->SetUseVertexAlphasForBlending(true);
+		}
+		shader->SetAlphaMode(mat.GetAlphaMode(),mat.GetAlphaCutoff());
+		resShader = shader;
+	}
 	else
 	{
 		if(shaderType == ShaderType::Toon)
@@ -840,7 +855,12 @@ cycles::PShader cycles::Scene::CreateShader(Material &mat,const std::string &mes
 
 				auto *pShader = static_cast<pragma::ShaderParticle*>(c_engine->GetShader("particle").get());
 				if(pShader)
-					static_cast<ShaderParticle*>(shader.get())->SetRenderFlags(umath::to_integral(pShader->GetRenderFlags(**shaderInfo.particleSystem)));
+				{
+					auto renderFlags = ShaderParticle::RenderFlags::None;
+					auto ptcFlags = pShader->GetRenderFlags(**shaderInfo.particleSystem);
+					if((*shaderInfo.particleSystem)->GetEffectiveAlphaMode() == pragma::ParticleAlphaMode::AdditiveByColor)
+						renderFlags |= ShaderParticle::RenderFlags::AdditiveByColor;
+				}
 			}
 			else
 				shader = cycles::Shader::Create<ShaderPBR>(*this,meshName +"_shader");
@@ -1030,7 +1050,7 @@ void cycles::Scene::SetAOBakeTarget(Model &mdl,uint32_t matIndex)
 	uint32_t numVertsEnv = 0;
 	uint32_t numTrisEnv = 0;
 
-	AddModel(mdl,"ao_mesh",nullptr,0 /* skin */,nullptr,nullptr,nullptr,[matIndex,&materialMeshes,&envMeshes,&numVerts,&numTris,&numVertsEnv,&numTrisEnv,&mdl](ModelSubMesh &mesh) -> bool {
+	AddModel(mdl,"ao_mesh",nullptr,0 /* skin */,nullptr,nullptr,nullptr,[matIndex,&materialMeshes,&envMeshes,&numVerts,&numTris,&numVertsEnv,&numTrisEnv,&mdl](ModelSubMesh &mesh,const Vector3 &origin,const Quat &rot) -> bool {
 		auto texIdx = mdl.GetMaterialIndex(mesh);
 		if(texIdx.has_value() && *texIdx == matIndex)
 		{
@@ -1175,10 +1195,17 @@ void cycles::Scene::AddMesh(Model &mdl,Mesh &mesh,ModelSubMesh &mdlMesh,pragma::
 cycles::PMesh cycles::Scene::AddMeshList(
 	Model &mdl,const std::vector<std::shared_ptr<ModelMesh>> &meshList,const std::string &meshName,BaseEntity *optEnt,uint32_t skinId,
 	pragma::CModelComponent *optMdlC,pragma::CAnimatedComponent *optAnimC,
-	const std::function<bool(ModelMesh&)> &optMeshFilter,
-	const std::function<bool(ModelSubMesh&)> &optSubMeshFilter
+	const std::function<bool(ModelMesh&,const Vector3&,const Quat&)> &optMeshFilter,
+	const std::function<bool(ModelSubMesh&,const Vector3&,const Quat&)> &optSubMeshFilter
 )
 {
+	Vector3 origin {};
+	auto rot = uquat::identity();
+	if(optEnt)
+	{
+		origin = optEnt->GetPosition();
+		rot = optEnt->GetRotation();
+	}
 	std::vector<ModelSubMesh*> targetMeshes {};
 	targetMeshes.reserve(mdl.GetSubMeshCount());
 	uint64_t numVerts = 0ull;
@@ -1186,11 +1213,11 @@ cycles::PMesh cycles::Scene::AddMeshList(
 	auto hasAlphas = false;
 	for(auto &mesh : meshList)
 	{
-		if(optMeshFilter != nullptr && optMeshFilter(*mesh) == false)
+		if(optMeshFilter != nullptr && optMeshFilter(*mesh,origin,rot) == false)
 			continue;
 		for(auto &subMesh : mesh->GetSubMeshes())
 		{
-			if(subMesh->GetGeometryType() != ModelSubMesh::GeometryType::Triangles || (optSubMeshFilter != nullptr && optSubMeshFilter(*subMesh) == false))
+			if(subMesh->GetGeometryType() != ModelSubMesh::GeometryType::Triangles || (optSubMeshFilter != nullptr && optSubMeshFilter(*subMesh,origin,rot) == false))
 				continue;
 			targetMeshes.push_back(subMesh.get());
 			numVerts += subMesh->GetVertexCount();
@@ -1218,7 +1245,7 @@ cycles::PMesh cycles::Scene::AddMeshList(
 cycles::PMesh cycles::Scene::AddModel(
 	Model &mdl,const std::string &meshName,BaseEntity *optEnt,uint32_t skinId,
 	pragma::CModelComponent *optMdlC,pragma::CAnimatedComponent *optAnimC,
-	const std::function<bool(ModelMesh&)> &optMeshFilter,const std::function<bool(ModelSubMesh&)> &optSubMeshFilter
+	const std::function<bool(ModelMesh&,const Vector3&,const Quat&)> &optMeshFilter,const std::function<bool(ModelSubMesh&,const Vector3&,const Quat&)> &optSubMeshFilter
 )
 {
 	std::vector<std::shared_ptr<ModelMesh>> lodMeshes {};
@@ -1233,6 +1260,17 @@ void cycles::Scene::AddSkybox(const std::string &texture)
 	if(umath::is_flag_set(m_stateFlags,StateFlags::SkyInitialized))
 		return;
 	umath::set_flag(m_stateFlags,StateFlags::SkyInitialized);
+	if(m_renderMode == RenderMode::SceneDepth)
+	{
+		auto shader = cycles::Shader::Create<ShaderGeneric>(*this,"background");
+		auto cclShader = shader->GenerateCCLShader(*m_scene.default_background);
+		auto nodeBg = cclShader->AddBackgroundNode();
+		nodeBg.SetStrength(1'000.f);
+		auto col = cclShader->AddCombineRGBNode(1.f,1.f,1.f);
+		cclShader->Link(col,nodeBg.inColor);
+		cclShader->Link(nodeBg,cclShader->GetOutputNode().inSurface);
+		return;
+	}
 
 	auto skyTex = (m_sky.empty() == false) ? m_sky : texture;
 
@@ -1275,7 +1313,7 @@ void cycles::Scene::AddSkybox(const std::string &texture)
 
 cycles::PObject cycles::Scene::AddEntity(
 	BaseEntity &ent,std::vector<ModelSubMesh*> *optOutTargetMeshes,
-	const std::function<bool(ModelMesh&)> &meshFilter,const std::function<bool(ModelSubMesh&)> &subMeshFilter,
+	const std::function<bool(ModelMesh&,const Vector3&,const Quat&)> &meshFilter,const std::function<bool(ModelSubMesh&,const Vector3&,const Quat&)> &subMeshFilter,
 	const std::string &nameSuffix
 )
 {
@@ -1300,8 +1338,8 @@ cycles::PObject cycles::Scene::AddEntity(
 	auto skyC = ent.GetComponent<CSkyboxComponent>();
 	if(skyC.valid())
 	{
-		AddModel(*mdl,name,&ent,ent.GetSkin(),mdlC,animC.get(),meshFilter,[&targetMeshes,&subMeshFilter](ModelSubMesh &mesh) -> bool {
-			if(subMeshFilter && subMeshFilter(mesh) == false)
+		AddModel(*mdl,name,&ent,ent.GetSkin(),mdlC,animC.get(),meshFilter,[&targetMeshes,&subMeshFilter](ModelSubMesh &mesh,const Vector3 &origin,const Quat &rot) -> bool {
+			if(subMeshFilter && subMeshFilter(mesh,origin,rot) == false)
 				return false;
 			targetMeshes->push_back(&mesh);
 			return false;
@@ -1328,8 +1366,8 @@ cycles::PObject cycles::Scene::AddEntity(
 		return nullptr;
 	}
 
-	auto fFilterMesh = [&targetMeshes,&subMeshFilter](ModelSubMesh &mesh) -> bool {
-		if(subMeshFilter && subMeshFilter(mesh) == false)
+	auto fFilterMesh = [&targetMeshes,&subMeshFilter](ModelSubMesh &mesh,const Vector3 &origin,const Quat &rot) -> bool {
+		if(subMeshFilter && subMeshFilter(mesh,origin,rot) == false)
 			return false;
 		targetMeshes->push_back(&mesh);
 		return true;
@@ -1584,6 +1622,11 @@ void cycles::Scene::SetupRenderSettings(
 		break;
 	case cycles::Scene::RenderMode::SceneNormals:
 		ccl::Pass::add(ccl::PassType::PASS_COMBINED,passes);
+		ccl::Pass::add(ccl::PassType::PASS_DEPTH,passes);
+		displayPass = ccl::PassType::PASS_COMBINED;
+		break;
+	case cycles::Scene::RenderMode::SceneDepth:
+		ccl::Pass::add(ccl::PassType::PASS_COMBINED,passes); // TODO: Why do we need this?
 		ccl::Pass::add(ccl::PassType::PASS_DEPTH,passes);
 		displayPass = ccl::PassType::PASS_COMBINED;
 		break;
@@ -1984,12 +2027,13 @@ util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> cycles::Scene::Finalize()
 		});
 		return job;
 	}
-	else if(m_renderMode == RenderMode::SceneAlbedo || m_renderMode == RenderMode::SceneNormals)
+	else if(m_renderMode == RenderMode::SceneAlbedo || m_renderMode == RenderMode::SceneNormals || m_renderMode == RenderMode::SceneDepth)
 	{
-		if(m_renderMode == RenderMode::SceneAlbedo)
-			InitializeAlbedoPass(false);
-		else
+		if(m_renderMode == RenderMode::SceneNormals)
 			InitializeNormalPass(false);
+		else
+			InitializeAlbedoPass(false);
+			
 		worker.AddThread([this,&worker,fRenderThread]() {
 			m_session->start();
 			fRenderThread(0.f,1.f,[this,&worker,fRenderThread]() -> RenderProcessResult {

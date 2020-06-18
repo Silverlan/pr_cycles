@@ -94,6 +94,7 @@ void cycles::Scene::AddParticleSystem(pragma::CParticleSystemComponent &ptc,cons
 	auto *pShader = dynamic_cast<pragma::ShaderParticle2DBase*>(renderer.GetShader());
 	if(pShader == nullptr)
 		return;
+	auto alphaMode = ptc.GetEffectiveAlphaMode();
 
 	Vector3 camUpWs;
 	Vector3 camRightWs;
@@ -141,6 +142,8 @@ void cycles::Scene::AddParticleSystem(pragma::CParticleSystemComponent &ptc,cons
 		auto shader = CreateShader(*mat,ptMeshName,shaderInfo);
 		if(shader == nullptr)
 			continue;
+		shader->SetFlags(Shader::Flags::AdditiveByColor,alphaMode == ParticleAlphaMode::AdditiveByColor);
+		shader->SetAlphaMode(AlphaMode::Blend);
 		auto *shaderModAlbedo = dynamic_cast<ShaderModuleAlbedo*>(shader.get());
 		auto *shaderModEmission = dynamic_cast<ShaderModuleEmission*>(shader.get());
 		auto *shaderModSpriteSheet = dynamic_cast<ShaderModuleSpriteSheet*>(shader.get());

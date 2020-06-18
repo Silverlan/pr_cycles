@@ -52,6 +52,8 @@ namespace pragma::modules::cycles
 		void SetBladesRotation(float rotation);
 
 		float GetAspectRatio() const;
+		float GetNearZ() const;
+		float GetFarZ() const;
 		virtual void DoFinalize() override;
 
 		ccl::Camera *operator->();
