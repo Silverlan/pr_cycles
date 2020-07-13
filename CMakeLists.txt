@@ -15,6 +15,7 @@ link_external_library(glfw)
 link_external_library(iglfw)
 link_external_library(wgui)
 link_external_library(util_image)
+link_external_library(util_raytracing)
 link_external_library(client)
 link_external_library(cengine)
 link_external_library(glslang)
@@ -73,6 +74,8 @@ target_link_libraries(pr_cycles
 	opengl32
 	glu32
 )
+
+add_dependencies(${PROJ_NAME} util_raytracing)
 
 if(WIN32)
 	set(DEPENDENCY_CYCLES_UTIL_LIBRARY ${DEPENDENCY_CYCLES_LIBRARY_LOCATION}/cycles_util.lib CACHE PATH "Path to library." FORCE)

@@ -1,8 +1,16 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+* License, v. 2.0. If a copy of the MPL was not distributed with this
+* file, You can obtain one at http://mozilla.org/MPL/2.0/.
+*
+* Copyright (c) 2020 Florian Weischer
+*/
+
 #include <render/mesh.h>
 #include "pr_cycles/scene.hpp"
-#include "pr_cycles/mesh.hpp"
-#include "pr_cycles/object.hpp"
-#include "pr_cycles/shader.hpp"
+#include "util_raytracing/scene.hpp"
+#include "util_raytracing/mesh.hpp"
+#include "util_raytracing/object.hpp"
+#include "util_raytracing/shader.hpp"
 #include <sharedutils/functioncallback.h>
 #include <pragma/rendering/c_rendermode.h>
 #include <pragma/rendering/scene/scene.h>
@@ -32,16 +40,23 @@ void cycles::Scene::Add3DSkybox(pragma::CSkyCameraComponent &skyCam,const Vector
 		if(obj == nullptr)
 			continue;
 		auto entPos = obj->GetPos();
+		entPos -= posSkyCam;
+		entPos *= scale;
+		obj->SetPos(entPos);
+		obj->SetScale(Vector3{scale,scale,scale});
+#if 0
+		auto entPos = obj->GetPos();
 		obj->SetPos({});
 		auto &mesh = obj->GetMesh();
 		// Move vertices so they are relative to camera
 		for(auto i=decltype(mesh->verts.size()){0u};i<mesh->verts.size();++i)
 		{
-			auto v = entPos +Scene::ToPragmaPosition(mesh->verts[i]);
+			auto v = entPos +raytracing::Scene::ToPragmaPosition(mesh->verts[i]);
 			v -= posSkyCam;
 			v *= scale;
-			mesh->verts[i] = Scene::ToCyclesPosition(v);
+			mesh->verts[i] = raytracing::Scene::ToCyclesPosition(v);
 		}
+#endif
 	}
 }
 #pragma optimize("",on)

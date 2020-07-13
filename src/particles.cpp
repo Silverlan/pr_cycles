@@ -1,7 +1,14 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+* License, v. 2.0. If a copy of the MPL was not distributed with this
+* file, You can obtain one at http://mozilla.org/MPL/2.0/.
+*
+* Copyright (c) 2020 Florian Weischer
+*/
+
 #include "pr_cycles/scene.hpp"
-#include "pr_cycles/mesh.hpp"
-#include "pr_cycles/object.hpp"
-#include "pr_cycles/shader.hpp"
+#include "util_raytracing/mesh.hpp"
+#include "util_raytracing/object.hpp"
+#include "util_raytracing/shader.hpp"
 namespace pragma::asset {class WorldData; class EntityData;};
 #include <pragma/c_engine.h>
 #include <pragma/rendering/c_rendermode.h>
@@ -104,7 +111,7 @@ void cycles::Scene::AddParticleSystem(pragma::CParticleSystemComponent &ptc,cons
 		vp,ptc,orientationType,camUpWs,camRightWs,
 		ptNearZ,ptFarZ,mat,nearZ,farZ
 	);
-	auto renderFlags = pShader->GetRenderFlags(ptc);
+	auto renderFlags = pShader->GetRenderFlags(ptc,pragma::ParticleRenderFlags::None);
 
 	ShaderInfo shaderInfo {};
 	shaderInfo.particleSystem = &ptc;
@@ -121,7 +128,7 @@ void cycles::Scene::AddParticleSystem(pragma::CParticleSystemComponent &ptc,cons
 		auto ptMeshName = meshName +"_" +std::to_string(i);
 		constexpr uint32_t numVerts = pragma::ShaderParticle2DBase::VERTEX_COUNT;
 		uint32_t numTris = pragma::ShaderParticle2DBase::TRIANGLE_COUNT *2;
-		auto mesh = Mesh::Create(*this,ptMeshName,numVerts,numTris);
+		auto mesh = raytracing::Mesh::Create(*m_rtScene,ptMeshName,numVerts,numTris);
 		auto pos = ptc.GetParticlePosition(ptIdx);
 		for(auto vertIdx=decltype(numVerts){0u};vertIdx<numVerts;++vertIdx)
 		{
@@ -142,11 +149,11 @@ void cycles::Scene::AddParticleSystem(pragma::CParticleSystemComponent &ptc,cons
 		auto shader = CreateShader(*mat,ptMeshName,shaderInfo);
 		if(shader == nullptr)
 			continue;
-		shader->SetFlags(Shader::Flags::AdditiveByColor,alphaMode == ParticleAlphaMode::AdditiveByColor);
+		shader->SetFlags(raytracing::Shader::Flags::AdditiveByColor,alphaMode == ParticleAlphaMode::AdditiveByColor);
 		shader->SetAlphaMode(AlphaMode::Blend);
-		auto *shaderModAlbedo = dynamic_cast<ShaderModuleAlbedo*>(shader.get());
-		auto *shaderModEmission = dynamic_cast<ShaderModuleEmission*>(shader.get());
-		auto *shaderModSpriteSheet = dynamic_cast<ShaderModuleSpriteSheet*>(shader.get());
+		auto *shaderModAlbedo = dynamic_cast<raytracing::ShaderModuleAlbedo*>(shader.get());
+		auto *shaderModEmission = dynamic_cast<raytracing::ShaderModuleEmission*>(shader.get());
+		auto *shaderModSpriteSheet = dynamic_cast<raytracing::ShaderModuleSpriteSheet*>(shader.get());
 		if(shaderModAlbedo)
 		{
 			if(shaderModSpriteSheet)
@@ -201,7 +208,7 @@ void cycles::Scene::AddParticleSystem(pragma::CParticleSystemComponent &ptc,cons
 		}
 		mesh->AddSubMeshShader(*shader);
 
-		Object::Create(*this,*mesh);
+		raytracing::Object::Create(*m_rtScene,*mesh);
 	}
 }
 #pragma optimize("",on)
