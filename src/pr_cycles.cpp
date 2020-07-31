@@ -480,6 +480,22 @@ extern "C"
 		defCamera.add_static_constant("PANORAMA_TYPE_FISHEYE_EQUIDISTANT",umath::to_integral(raytracing::Camera::PanoramaType::FisheyeEquidistant));
 		defCamera.add_static_constant("PANORAMA_TYPE_FISHEYE_EQUISOLID",umath::to_integral(raytracing::Camera::PanoramaType::FisheyeEquisolid));
 		defCamera.add_static_constant("PANORAMA_TYPE_MIRRORBALL",umath::to_integral(raytracing::Camera::PanoramaType::Mirrorball));
+		defCamera.def("SetInterocularDistance",static_cast<void(*)(lua_State*,util::WeakHandle<raytracing::Camera>&,float)>([](lua_State *l,util::WeakHandle<raytracing::Camera> &cam,float interocularDistance) {
+			pragma::Lua::check_component(l,cam);
+			cam->SetInterocularDistance(interocularDistance);
+		}));
+		defCamera.def("SetEquirectangularHorizontalRange",static_cast<void(*)(lua_State*,util::WeakHandle<raytracing::Camera>&,float)>([](lua_State *l,util::WeakHandle<raytracing::Camera> &cam,float range) {
+			pragma::Lua::check_component(l,cam);
+			cam->SetEquirectangularHorizontalRange(range);
+		}));
+		defCamera.def("SetEquirectangularVerticalRange",static_cast<void(*)(lua_State*,util::WeakHandle<raytracing::Camera>&,float)>([](lua_State *l,util::WeakHandle<raytracing::Camera> &cam,float range) {
+			pragma::Lua::check_component(l,cam);
+			cam->SetEquirectangularVerticalRange(range);
+		}));
+		defCamera.def("SetStereoscopic",static_cast<void(*)(lua_State*,util::WeakHandle<raytracing::Camera>&,bool)>([](lua_State *l,util::WeakHandle<raytracing::Camera> &cam,bool stereoscopic) {
+			pragma::Lua::check_component(l,cam);
+			cam->SetStereoscopic(stereoscopic);
+		}));
 		defCamera.def("SetResolution",static_cast<void(*)(lua_State*,util::WeakHandle<raytracing::Camera>&,uint32_t,uint32_t)>([](lua_State *l,util::WeakHandle<raytracing::Camera> &cam,uint32_t width,uint32_t height) {
 			pragma::Lua::check_component(l,cam);
 			cam->SetResolution(width,height);
