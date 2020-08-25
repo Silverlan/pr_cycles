@@ -53,6 +53,7 @@
 #include <cmaterialmanager.h>
 #include <datasystem_color.h>
 #include <datasystem_vector.h>
+#include "pr_cycles/subdivision.hpp"
 
 // ccl happens to have the same include guard name as sharedutils, so we have to undef it here
 #undef __UTIL_STRING_H__
@@ -360,7 +361,7 @@ Material *cycles::Scene::GetMaterial(pragma::CModelComponent &mdlC,ModelSubMesh 
 	return texIdx.has_value() ? mdlC.GetRenderMaterial(*texIdx) : nullptr;
 }
 
-raytracing::PShader cycles::Scene::CreateShader(Material &mat,const std::string &meshName,const ShaderInfo &shaderInfo)
+raytracing::PShader cycles::Scene::CreateShader(Material &mat,const std::string &meshName,const ShaderInfo &shaderInfo) const
 {
 	// Make sure all textures have finished loading
 	static_cast<CMaterialManager&>(client->GetMaterialManager()).GetTextureManager().WaitForTextures();
@@ -382,13 +383,6 @@ raytracing::PShader cycles::Scene::CreateShader(Material &mat,const std::string 
 		if(albedo2Map)
 			albedo2TexPath = prepare_texture(***m_rtScene,albedo2Map,PreparedTextureInputFlags::None);
 	}
-
-	enum class ShaderType : uint8_t
-	{
-		Disney = 0u,
-		Toon
-	};
-	static auto shaderType = ShaderType::Disney;
 
 	// TODO: Only allow toon shader when baking diffuse lighting
 	const std::string bsdfName = "bsdf_scene";
@@ -480,7 +474,21 @@ raytracing::PShader cycles::Scene::CreateShader(Material &mat,const std::string 
 	}
 	else
 	{
-		if(shaderType == ShaderType::Toon)
+		std::string cyclesShader = "pbr";
+		auto &dataBlock = mat.GetDataBlock();
+		auto cyclesBlock = dataBlock->GetBlock("cycles");
+		std::shared_ptr<ds::Block> cyclesShaderPropBlock = nullptr;
+		if(cyclesBlock)
+		{
+			cyclesShader = cyclesBlock->GetString("shader","pbr");
+			cyclesShaderPropBlock = cyclesBlock->GetBlock("shader_properties");
+		}
+		std::optional<float> ior {};
+		float f;
+		if(dataBlock->GetFloat("ior",&f))
+			ior = f;
+
+		if(ustring::compare(cyclesShader,"toon",false))
 		{
 			auto shader = raytracing::Shader::Create<raytracing::ShaderToon>(*m_rtScene,meshName +"_shader");
 			fApplyColorFactor(shader->GetAlbedoSet());
@@ -491,13 +499,42 @@ raytracing::PShader cycles::Scene::CreateShader(Material &mat,const std::string 
 				shader->GetAlbedoSet2().SetAlbedoMap(*albedo2TexPath);
 				shader->SetUseVertexAlphasForBlending(true);
 			}
-			shader->SetAlphaMode(mat.GetAlphaMode(),mat.GetAlphaCutoff());
+			
 			auto normalTexPath = prepare_texture(***m_rtScene,mat.GetNormalMap(),PreparedTextureInputFlags::None);
 			if(normalTexPath.has_value())
 				shader->SetNormalMap(*normalTexPath);
+
+			if(cyclesShaderPropBlock)
+			{
+				auto *shaderToon = static_cast<raytracing::ShaderToon*>(shader.get());
+				float value;
+				if(cyclesShaderPropBlock->GetFloat("diffuse_size",&value))
+					shaderToon->SetDiffuseSize(value);
+				if(cyclesShaderPropBlock->GetFloat("diffuse_smooth",&value))
+					shaderToon->SetDiffuseSmooth(value);
+				if(cyclesShaderPropBlock->GetFloat("specular_size",&value))
+					shaderToon->SetSpecularSize(value);
+				if(cyclesShaderPropBlock->GetFloat("specular_smooth",&value))
+					shaderToon->SetSpecularSmooth(value);
+
+				auto &dvSpecFactor = cyclesShaderPropBlock->GetValue("specular_color");
+				if(dvSpecFactor != nullptr && typeid(*dvSpecFactor) == typeid(ds::Color))
+				{
+					auto &color = static_cast<ds::Color&>(*dvSpecFactor).GetValue();
+					shader->SetSpecularColor(color.ToVector3());
+				}
+
+				auto &dvShadeColor = cyclesShaderPropBlock->GetValue("shade_color");
+				if(dvShadeColor != nullptr && typeid(*dvShadeColor) == typeid(ds::Color))
+				{
+					auto &color = static_cast<ds::Color&>(*dvShadeColor).GetValue();
+					shader->SetShadeColor(color.ToVector3());
+				}
+			}
+
 			resShader = shader;
 		}
-		else if(ustring::compare(mat.GetShaderIdentifier(),"glass",false))
+		else if(ustring::compare(cyclesShader,"glass",false))
 		{
 			auto shader = raytracing::Shader::Create<raytracing::ShaderGlass>(*m_rtScene,meshName +"_shader");
 			fApplyColorFactor(shader->GetAlbedoSet());
@@ -514,6 +551,9 @@ raytracing::PShader cycles::Scene::CreateShader(Material &mat,const std::string 
 
 			// Roughness map
 			AddRoughnessMapImageTextureNode(*shader,mat,0.5f);
+
+			if(ior.has_value())
+				shader->SetIOR(*ior);
 
 			resShader = shader;
 		}
@@ -551,39 +591,42 @@ raytracing::PShader cycles::Scene::CreateShader(Material &mat,const std::string 
 				if(dataSSS->GetFloat("factor",&subsurface))
 					shader->SetSubsurface(subsurface);
 
-				auto &dvSubsurfaceColor = dataSSS->GetValue("color");
-				if(dvSubsurfaceColor != nullptr && typeid(*dvSubsurfaceColor) == typeid(ds::Color))
+				auto &dvSubsurfaceColor = dataSSS->GetValue("color_factor");
+				if(dvSubsurfaceColor != nullptr && typeid(*dvSubsurfaceColor) == typeid(ds::Vector))
 				{
-					auto &color = static_cast<ds::Color&>(*dvSubsurfaceColor).GetValue();
-					shader->SetSubsurfaceColor(color.ToVector3());
+					auto &color = static_cast<ds::Vector&>(*dvSubsurfaceColor).GetValue();
+					shader->SetSubsurfaceColorFactor(color);
 				}
 
-				const std::unordered_map<SurfaceMaterial::PBRInfo::SubsurfaceMethod,ccl::ClosureType> bssrdfToCclType = {
-					{SurfaceMaterial::PBRInfo::SubsurfaceMethod::Cubic,ccl::ClosureType::CLOSURE_BSSRDF_CUBIC_ID},
-				{SurfaceMaterial::PBRInfo::SubsurfaceMethod::Gaussian,ccl::ClosureType::CLOSURE_BSSRDF_GAUSSIAN_ID},
-				{SurfaceMaterial::PBRInfo::SubsurfaceMethod::Principled,ccl::ClosureType::CLOSURE_BSDF_BSSRDF_PRINCIPLED_ID},
-				{SurfaceMaterial::PBRInfo::SubsurfaceMethod::Burley,ccl::ClosureType::CLOSURE_BSSRDF_BURLEY_ID},
-				{SurfaceMaterial::PBRInfo::SubsurfaceMethod::RandomWalk,ccl::ClosureType::CLOSURE_BSSRDF_RANDOM_WALK_ID},
-				{SurfaceMaterial::PBRInfo::SubsurfaceMethod::PrincipledRandomWalk,ccl::ClosureType::CLOSURE_BSSRDF_PRINCIPLED_RANDOM_WALK_ID}
+				const std::unordered_map<std::string,raytracing::PrincipledBSDFNode::SubsurfaceMethod> bssrdfToCclType = {
+					{"cubic",raytracing::PrincipledBSDFNode::SubsurfaceMethod::Cubic},
+					{"gaussian",raytracing::PrincipledBSDFNode::SubsurfaceMethod::Gaussian},
+					{"principled",raytracing::PrincipledBSDFNode::SubsurfaceMethod::Principled},
+					{"burley",raytracing::PrincipledBSDFNode::SubsurfaceMethod::Burley},
+					{"random_walk",raytracing::PrincipledBSDFNode::SubsurfaceMethod::RandomWalk},
+					{"principled_random_walk",raytracing::PrincipledBSDFNode::SubsurfaceMethod::PrincipledRandomWalk}
 				};
 
-				int32_t subsurfaceMethod;
-				if(dataSSS->GetInt("method",&subsurfaceMethod))
+				std::string subsurfaceMethod;
+				if(dataSSS->GetString("method",&subsurfaceMethod))
 				{
-					auto it = bssrdfToCclType.find(static_cast<SurfaceMaterial::PBRInfo::SubsurfaceMethod>(subsurfaceMethod));
+					auto it = bssrdfToCclType.find(subsurfaceMethod);
 					if(it != bssrdfToCclType.end())
-						subsurfaceMethod = it->second;
+						shader->SetSubsurfaceMethod(it->second);
 				}
 
-				auto &dvSubsurfaceRadius = dataSSS->GetValue("radius");
-				if(dvSubsurfaceRadius != nullptr && typeid(*dvSubsurfaceRadius) == typeid(ds::Vector))
-					shader->SetSubsurfaceRadius(static_cast<ds::Vector&>(*dvSubsurfaceRadius).GetValue());
+				auto &dvSubsurfaceRadius = dataSSS->GetValue("scatter_color");
+				if(dvSubsurfaceRadius != nullptr && typeid(*dvSubsurfaceRadius) == typeid(ds::Color))
+					shader->SetSubsurfaceRadius(static_cast<ds::Color&>(*dvSubsurfaceRadius).GetValue().ToVector3());
 			}
 			//
 
 			// Note: We always need the albedo texture information for the translucency.
 			// Whether metalness/roughness/etc. affect baking in any way is unclear (probably not),
 			// but it also doesn't hurt to have them.
+
+			if(ior.has_value())
+				shader->SetIOR(*ior);
 
 			// Albedo map
 			shader->GetAlbedoSet().SetAlbedoMap(*diffuseTexPath);
@@ -592,7 +635,6 @@ raytracing::PShader cycles::Scene::CreateShader(Material &mat,const std::string 
 				shader->GetAlbedoSet2().SetAlbedoMap(*albedo2TexPath);
 				shader->SetUseVertexAlphasForBlending(true);
 			}
-			shader->SetAlphaMode(mat.GetAlphaMode(),mat.GetAlphaCutoff());
 			if(mat.GetAlphaMode() != AlphaMode::Opaque && data->GetBool("black_to_alpha"))
 				shader->SetFlags(raytracing::Shader::Flags::AdditiveByColor,true);
 
@@ -666,6 +708,14 @@ raytracing::PShader cycles::Scene::CreateShader(Material &mat,const std::string 
 				shader->SetWrinkleCompressMap(*wrinkleCompressMap);
 			resShader = shader;
 		}
+		if(resShader)
+		{
+			resShader->SetAlphaMode(mat.GetAlphaMode(),mat.GetAlphaCutoff());
+			auto &dataBlock = mat.GetDataBlock();
+			float alphaFactor;
+			if(dataBlock->GetFloat("alpha_factor",&alphaFactor))
+				resShader->SetAlphaFactor(alphaFactor);
+		}
 	}
 	if(resShader && shaderInfo.entity.has_value() && shaderInfo.subMesh.has_value())
 	{
@@ -704,7 +754,7 @@ raytracing::PShader cycles::Scene::CreateShader(Material &mat,const std::string 
 	}
 	return resShader;
 }
-raytracing::PShader cycles::Scene::CreateShader(raytracing::Mesh &mesh,Model &mdl,ModelSubMesh &subMesh,BaseEntity *optEnt,uint32_t skinId)
+raytracing::PShader cycles::Scene::CreateShader(const std::string &meshName,Model &mdl,ModelSubMesh &subMesh,BaseEntity *optEnt,uint32_t skinId) const
 {
 	// Make sure all textures have finished loading
 	static_cast<CMaterialManager&>(client->GetMaterialManager()).GetTextureManager().WaitForTextures();
@@ -716,38 +766,29 @@ raytracing::PShader cycles::Scene::CreateShader(raytracing::Mesh &mesh,Model &md
 	if(optEnt)
 		shaderInfo.entity = optEnt;
 	shaderInfo.subMesh = &subMesh;
-	return CreateShader(*mat,mesh.GetName(),shaderInfo);
+	return CreateShader(*mat,meshName,shaderInfo);
 }
 
 void cycles::Scene::SetAOBakeTarget(Model &mdl,uint32_t matIndex)
 {
-	std::vector<ModelSubMesh*> materialMeshes;
-	std::vector<ModelSubMesh*> envMeshes;
-	uint32_t numVerts = 0;
-	uint32_t numTris = 0;
-	uint32_t numVertsEnv = 0;
-	uint32_t numTrisEnv = 0;
-
-	AddModel(mdl,"ao_mesh",nullptr,0 /* skin */,nullptr,nullptr,nullptr,[matIndex,&materialMeshes,&envMeshes,&numVerts,&numTris,&numVertsEnv,&numTrisEnv,&mdl](ModelSubMesh &mesh,const Vector3 &origin,const Quat &rot) -> bool {
+	std::vector<std::shared_ptr<MeshData>> materialMeshes;
+	std::vector<std::shared_ptr<MeshData>> envMeshes;
+	AddModel(mdl,"ao_mesh",nullptr,0 /* skin */,nullptr,nullptr,nullptr,[this,matIndex,&materialMeshes,&envMeshes,&mdl](ModelSubMesh &mesh,const Vector3 &origin,const Quat &rot) -> bool {
+		auto meshData = CalcMeshData(mdl,mesh,false,false);
+		meshData->shader = CreateShader(GetUniqueName(),mdl,mesh);
 		auto texIdx = mdl.GetMaterialIndex(mesh);
 		if(texIdx.has_value() && *texIdx == matIndex)
 		{
-			materialMeshes.push_back(&mesh);
-			numVerts += mesh.GetVertexCount();
-			numTris += mesh.GetTriangleCount();
+			materialMeshes.push_back(meshData);
 			return false;
 		}
-		numVertsEnv += mesh.GetVertexCount();
-		numTrisEnv += mesh.GetTriangleCount();
-		envMeshes.push_back(&mesh);
+		envMeshes.push_back(meshData);
 		return false;
 	});
 
 	// We'll create a separate mesh from all model meshes which use the specified material.
 	// This way we can map the uv coordinates to the ao output texture more easily.
-	auto mesh = raytracing::Mesh::Create(*m_rtScene,"ao_target",numVerts,numTris);
-	for(auto &matMesh : materialMeshes)
-		AddMesh(mdl,*mesh,*matMesh);
+	auto mesh = BuildMesh("ao_target",materialMeshes);
 	auto o = raytracing::Object::Create(*m_rtScene,*mesh);
 	m_rtScene->SetAOBakeTarget(*o);
 
@@ -759,9 +800,7 @@ void cycles::Scene::SetAOBakeTarget(Model &mdl,uint32_t matIndex)
 	// To distinguish them from the actual ao-meshes, they're stored in a separate mesh/object here.
 	// The actual ao bake target (see code above) has to be the first mesh added to the scene, otherwise the ao result may be incorrect.
 	// The reason for this is currently unknown.
-	auto meshEnv = raytracing::Mesh::Create(*m_rtScene,"ao_mesh",numVertsEnv,numTrisEnv);
-	for(auto *subMesh : envMeshes)
-		AddMesh(mdl,*meshEnv,*subMesh);
+	auto meshEnv = BuildMesh("ao_mesh",envMeshes);
 	raytracing::Object::Create(*m_rtScene,*meshEnv);
 }
 
@@ -807,20 +846,32 @@ void cycles::Scene::SetLightmapBakeTarget(BaseEntity &ent)
 	m_rtScene->SetAOBakeTarget(*o);
 }
 
-void cycles::Scene::AddMesh(Model &mdl,raytracing::Mesh &mesh,ModelSubMesh &mdlMesh,pragma::CModelComponent *optMdlC,pragma::CAnimatedComponent *optAnimC,BaseEntity *optEnt,uint32_t skinId)
+std::shared_ptr<cycles::Scene::MeshData> cycles::Scene::CalcMeshData(Model &mdl,ModelSubMesh &mdlMesh,bool includeAlphas,bool includeWrinkles,pragma::CModelComponent *optMdlC,pragma::CAnimatedComponent *optAnimC)
 {
-	auto shader = CreateShader(mesh,mdl,mdlMesh,optEnt,skinId);
-	if(shader == nullptr)
-		return;
-	auto *mat = optMdlC ? GetMaterial(*optMdlC,mdlMesh,skinId) : GetMaterial(mdl,mdlMesh,skinId);
-	auto shaderIdx = mesh.AddSubMeshShader(*shader);
-	auto triIndexVertexOffset = mesh.GetVertexOffset();
-	auto &verts = mdlMesh.GetVertices();
-	auto &alphas = mdlMesh.GetAlphas();
-	auto hasAlphas = mesh.HasAlphas();
-	for(auto vertIdx=decltype(verts.size()){0u};vertIdx<verts.size();++vertIdx)
+	auto meshData = std::make_shared<MeshData>();
+	auto &meshVerts = mdlMesh.GetVertices();
+	auto &meshAlphas = mdlMesh.GetAlphas();
+
+	std::vector<Vertex> transformedVerts {};
+	transformedVerts.reserve(meshVerts.size());
+	
+	std::optional<std::vector<float>> alphas {};
+	if(includeAlphas)
 	{
-		auto &v = verts.at(vertIdx);
+		alphas = std::vector<float>{};
+		alphas->reserve(meshVerts.size());
+	}
+
+	std::optional<std::vector<float>> wrinkles {};
+	if(includeWrinkles)
+	{
+		wrinkles = std::vector<float>{};
+		wrinkles->reserve(meshVerts.size());
+	}
+
+	for(auto vertIdx=decltype(meshVerts.size()){0u};vertIdx<meshVerts.size();++vertIdx)
+	{
+		auto &v = meshVerts.at(vertIdx);
 		if(m_rtScene->IsRenderSceneMode(m_rtScene->GetRenderMode()))
 		{
 			// TODO: Do we really need the tangent?
@@ -833,39 +884,179 @@ void cycles::Scene::AddMesh(Model &mdl,raytracing::Mesh &mesh,ModelSubMesh &mdlM
 				auto vpos = *transformMat *Vector4{v.position.x,v.position.y,v.position.z,1.f};
 				auto vn = *transformMat *Vector4{v.normal.x,v.normal.y,v.normal.z,0.f};
 				auto vt = *transformMat *Vector4{v.tangent.x,v.tangent.y,v.tangent.z,0.f};
-				Vector3 pos {vpos.x,vpos.y,vpos.z};
+
+				transformedVerts.push_back({});
+				auto &vTransformed = transformedVerts.back();
+
+				auto &pos = vTransformed.position;
+				pos = {vpos.x,vpos.y,vpos.z};
 				pos /= vpos.w;
 
-				Vector3 n {vn.x,vn.y,vn.z};
+				auto &n = vTransformed.normal;
+				n = {vn.x,vn.y,vn.z};
 				n += normalOffset;
 				uvec::normalize(&n);
 
-				Vector3 t {vt.x,vt.y,vt.z};
+				auto &t = vTransformed.tangent;
+				t = {vt.x,vt.y,vt.z};
 				t += normalOffset;
 				uvec::normalize(&t);
 
-				mesh.AddVertex(pos,n,t,v.uv);
+				vTransformed.uv = v.uv;
 			}
 			else
-				mesh.AddVertex(v.position,v.normal,v.tangent,v.uv);
-			mesh.AddWrinkleFactor(wrinkle);
+				transformedVerts.push_back(v);
+			if(includeWrinkles)
+				wrinkles->push_back(wrinkle);
 		}
 		else
 		{
 			// We're probably baking something (e.g. ao map), so we don't want to include the entity's animated pose.
-			mesh.AddVertex(v.position,v.normal,v.tangent,v.uv);
+			transformedVerts.push_back(v);
 		}
-
-		if(hasAlphas)
+		
+		if(includeAlphas)
 		{
-			auto alpha = (vertIdx < alphas.size()) ? alphas.at(vertIdx).x : 0.f;
-			mesh.AddAlpha(alpha);
+			auto alpha = (vertIdx < meshAlphas.size()) ? meshAlphas.at(vertIdx).x : 0.f;
+			meshData->alphas->push_back(alpha);
 		}
 	}
 
-	auto &tris = mdlMesh.GetTriangles();
-	for(auto i=decltype(tris.size()){0u};i<tris.size();i+=3)
-		mesh.AddTriangle(triIndexVertexOffset +tris.at(i),triIndexVertexOffset +tris.at(i +1),triIndexVertexOffset +tris.at(i +2),shaderIdx);
+	auto &meshTris = mdlMesh.GetTriangles();
+	std::vector<int32_t> indices;
+	indices.reserve(meshTris.size());
+	for(auto idx : meshTris)
+		indices.push_back(idx);
+
+	// Subdivision
+	auto applySubdivision = true;
+
+	static auto subdivisionEnabled = false;//true;
+	if(subdivisionEnabled == false)
+		applySubdivision = false;
+
+	if(applySubdivision)
+	{
+		std::vector<std::shared_ptr<BaseChannelData>> customAttributes {};
+		customAttributes.reserve(2);
+
+		std::vector<float> perFaceAlphaData {};
+		if(alphas.has_value())
+		{
+			auto alphaData = std::make_shared<ChannelData<OsdFloatAttr>>([&perFaceAlphaData](BaseChannelData &cd,FaceVertexIndex faceVertexIndex,Vertex &v,int idx) {
+				perFaceAlphaData.at(faceVertexIndex) = static_cast<OsdFloatAttr*>(cd.GetElementPtr(idx))->value;
+			},[&perFaceAlphaData](uint32_t numFaces) {
+				perFaceAlphaData.resize(numFaces *3);
+			});
+			alphaData->ReserveBuffer(meshData->vertices.size());
+
+			for(auto alpha : *alphas)
+				alphaData->buffer.push_back(alpha);
+			customAttributes.push_back(alphaData);
+		}
+		
+		std::vector<float> perFaceWrinkleData {};
+		if(wrinkles.has_value())
+		{
+			auto wrinkleData = std::make_shared<ChannelData<OsdFloatAttr>>([&perFaceWrinkleData](BaseChannelData &cd,FaceVertexIndex faceVertexIndex,Vertex &v,int idx) {
+				perFaceWrinkleData.at(faceVertexIndex) = static_cast<OsdFloatAttr*>(cd.GetElementPtr(idx))->value;
+			},[&perFaceWrinkleData](uint32_t numFaces) {
+				perFaceWrinkleData.resize(numFaces *3);
+			});
+			wrinkleData->ReserveBuffer(meshData->vertices.size());
+
+			for(auto wrinkle : *wrinkles)
+				wrinkleData->buffer.push_back(wrinkle);
+			customAttributes.push_back(wrinkleData);
+		}
+		subdivide_mesh(transformedVerts,indices,meshData->vertices,meshData->triangles,2 /* subDivLevel */,customAttributes);
+
+		if(alphas.has_value())
+		{
+			meshData->alphas = std::vector<float>{};
+			meshData->alphas->resize(meshData->vertices.size());
+			for(auto i=decltype(meshData->triangles.size()){0u};i<meshData->triangles.size();++i)
+			{
+				auto idx = meshData->triangles.at(i);
+				meshData->alphas->at(idx) = perFaceAlphaData.at(i);
+			}
+		}
+		if(wrinkles.has_value())
+		{
+			meshData->wrinkles = std::vector<float>{};
+			meshData->wrinkles->resize(meshData->vertices.size());
+			for(auto i=decltype(meshData->triangles.size()){0u};i<meshData->triangles.size();++i)
+			{
+				auto idx = meshData->triangles.at(i);
+				meshData->wrinkles->at(idx) = perFaceWrinkleData.at(i);
+			}
+		}
+	}
+	else
+	{
+		meshData->vertices = std::move(transformedVerts);
+		meshData->triangles = std::move(indices);
+		if(alphas.has_value())
+			meshData->alphas = std::move(*alphas);
+		if(wrinkles.has_value())
+			meshData->wrinkles = std::move(*wrinkles);
+	}
+	return meshData;
+}
+
+void cycles::Scene::AddMesh(Model &mdl,raytracing::Mesh &mesh,ModelSubMesh &mdlMesh,pragma::CModelComponent *optMdlC,pragma::CAnimatedComponent *optAnimC)
+{
+	auto meshData = CalcMeshData(mdl,mdlMesh,mesh.HasAlphas(),mesh.HasWrinkles(),optMdlC,optAnimC);
+	if(meshData == nullptr)
+		return;
+	AddMeshDataToMesh(mesh,*meshData);
+}
+
+void cycles::Scene::AddMeshDataToMesh(raytracing::Mesh &mesh,const MeshData &meshData) const
+{
+	auto triIndexVertexOffset = mesh.GetVertexOffset();
+	auto shaderIdx = mesh.AddSubMeshShader(*meshData.shader);
+	for(auto &v : meshData.vertices)
+		mesh.AddVertex(v.position,v.normal,v.tangent,v.uv);
+	
+	for(auto i=decltype(meshData.triangles.size()){0u};i<meshData.triangles.size();i+=3)
+		mesh.AddTriangle(triIndexVertexOffset +meshData.triangles.at(i),triIndexVertexOffset +meshData.triangles.at(i +1),triIndexVertexOffset +meshData.triangles.at(i +2),shaderIdx);
+
+	if(meshData.wrinkles.has_value())
+	{
+		for(auto wrinkle : *meshData.wrinkles)
+			mesh.AddWrinkleFactor(wrinkle);
+	}
+	if(meshData.alphas.has_value())
+	{
+		for(auto alpha : *meshData.alphas)
+			mesh.AddAlpha(alpha);
+	}
+}
+
+raytracing::PMesh cycles::Scene::BuildMesh(const std::string &meshName,const std::vector<std::shared_ptr<MeshData>> &meshDatas) const
+{
+	uint64_t numVerts = 0;
+	uint64_t numTris = 0;
+	auto hasAlphas = false;
+	auto hasWrinkles = false;
+	for(auto &meshData : meshDatas)
+	{
+		numVerts += meshData->vertices.size();
+		numTris += meshData->triangles.size();
+		hasAlphas = hasAlphas || meshData->alphas.has_value();
+		hasWrinkles = hasWrinkles || meshData->wrinkles.has_value();
+	}
+
+	auto flags = raytracing::Mesh::Flags::None;
+	if(hasAlphas)
+		flags |= raytracing::Mesh::Flags::HasAlphas;
+	if(hasWrinkles)
+		flags |= raytracing::Mesh::Flags::HasWrinkles;
+	auto mesh = raytracing::Mesh::Create(*m_rtScene,meshName,numVerts,numTris /3,flags);
+	for(auto &meshData : meshDatas)
+		AddMeshDataToMesh(*mesh,*meshData);
+	return mesh;
 }
 
 raytracing::PMesh cycles::Scene::AddMeshList(
@@ -882,40 +1073,29 @@ raytracing::PMesh cycles::Scene::AddMeshList(
 		origin = optEnt->GetPosition();
 		rot = optEnt->GetRotation();
 	}
-	std::vector<ModelSubMesh*> targetMeshes {};
-	targetMeshes.reserve(mdl.GetSubMeshCount());
-	uint64_t numVerts = 0ull;
-	uint64_t numTris = 0ull;
 	auto hasAlphas = false;
+	auto hasWrinkles = (mdl.GetVertexAnimations().empty() == false); // TODO: Not the best way to determine if the entity uses wrinkles
+	std::vector<std::shared_ptr<MeshData>> meshDatas {};
+	meshDatas.reserve(meshList.size());
 	for(auto &mesh : meshList)
 	{
 		if(optMeshFilter != nullptr && optMeshFilter(*mesh,origin,rot) == false)
 			continue;
 		for(auto &subMesh : mesh->GetSubMeshes())
 		{
-			if(subMesh->GetGeometryType() != ModelSubMesh::GeometryType::Triangles || (optSubMeshFilter != nullptr && optSubMeshFilter(*subMesh,origin,rot) == false))
+			if(subMesh->GetGeometryType() != ModelSubMesh::GeometryType::Triangles || subMesh->GetTriangleCount() == 0 || (optSubMeshFilter != nullptr && optSubMeshFilter(*subMesh,origin,rot) == false))
 				continue;
-			targetMeshes.push_back(subMesh.get());
-			numVerts += subMesh->GetVertexCount();
-			numTris += subMesh->GetTriangleCount();
 			hasAlphas = hasAlphas || (subMesh->GetAlphaCount() > 0);
+
+			auto meshData = CalcMeshData(mdl,*subMesh,hasAlphas,hasWrinkles,optMdlC,optAnimC);
+			meshData->shader = CreateShader(GetUniqueName(),mdl,*subMesh,optEnt,skinId);
+			meshDatas.push_back(meshData);
 		}
 	}
 
-	if(numTris == 0)
+	if(meshDatas.empty())
 		return nullptr;
-
-	// Create the mesh
-	// TODO: If multiple entities are using same model, CACHE the mesh(es)! (Unless they're animated)
-	auto flags = raytracing::Mesh::Flags::None;
-	if(hasAlphas)
-		flags |= raytracing::Mesh::Flags::HasAlphas;
-	if(mdl.GetVertexAnimations().empty() == false) // TODO: Not the best way to determine if the entity uses wrinkles
-		flags |= raytracing::Mesh::Flags::HasWrinkles;
-	auto mesh = raytracing::Mesh::Create(*m_rtScene,meshName,numVerts,numTris,flags);
-	for(auto *subMesh : targetMeshes)
-		AddMesh(mdl,*mesh,*subMesh,optMdlC,optAnimC,optEnt,skinId);
-	return mesh;
+	return BuildMesh(meshName,meshDatas);
 }
 
 raytracing::PMesh cycles::Scene::AddModel(

@@ -23,6 +23,7 @@ add_external_library(luajit)
 link_external_library(materialsystem)
 link_external_library(cmaterialsystem)
 link_external_library(alsoundsystem)
+link_external_library(opensubdiv)
 if(WIN32)
 	add_external_library(lua)
 endif()
@@ -54,6 +55,7 @@ add_def(FREEGLUT_STATIC)
 add_def(FREEGLUT_LIB_PRAGMAS=0)
 add_def(CCL_NAMESPACE_BEGIN=namespace\ ccl\ {)
 add_def(CCL_NAMESPACE_END=})
+add_def(RT_ENABLE_SUBDIVISION) # TODO: Make this optional
 
 option(CONFIG_ENABLE_CYCLES_LOGGING "Enable logging for the Cycles renderer. Requires glog and gflags, as well as Cycles built with logging enabled!" OFF)
 

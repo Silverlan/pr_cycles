@@ -470,6 +470,28 @@ extern "C"
 				return 1;
 			})}
 		});
+#if 0
+		modCycles[
+			luabind::def("subdivision",static_cast<luabind::object(*)(lua_State*,luabind::table<>,luabind::table<>,uint32_t)>([](lua_State *l,luabind::table<> tVerts,luabind::table<> tTris,uint32_t subDivLevel) -> luabind::object {
+				auto verts = Lua::table_to_vector<Vertex>(l,tVerts,1);
+				auto tris = Lua::table_to_vector<uint16_t>(l,tTris,2);
+
+
+				std::vector<OpenSubdiv::Far::Index> osdIndices {};
+				osdIndices.reserve(tris.size());
+				for(auto idx : tris)
+					osdIndices.push_back(idx);
+
+				std::vector<Vertex> newVerts;
+				std::vector<int32_t> newTris;
+				test_subdiv(verts,osdIndices,newVerts,newTris,subDivLevel);
+				auto t = luabind::newtable(l);
+				t[1] = Lua::vector_to_table(l,newVerts);
+				t[2] = Lua::vector_to_table(l,newTris);
+				return t;
+			}))
+		];
+#endif
 
 		auto defCamera = luabind::class_<raytracing::Camera>("Camera");
 		defCamera.add_static_constant("TYPE_PERSPECTIVE",umath::to_integral(raytracing::Camera::CameraType::Perspective));

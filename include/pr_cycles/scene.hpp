@@ -17,6 +17,7 @@
 #include <optional>
 #include <atomic>
 #include <thread>
+#include <pragma/model/vertex.h>
 
 #define ENABLE_TEST_AMBIENT_OCCLUSION
 
@@ -84,6 +85,16 @@ namespace pragma::modules::cycles
 			raytracing::PMesh mesh = nullptr;
 			uint32_t skin = 0;
 		};
+		struct MeshData
+		{
+			std::vector<Vertex> vertices;
+			std::vector<int32_t> triangles;
+
+			std::optional<std::vector<float>> alphas {};
+			std::optional<std::vector<float>> wrinkles {};
+
+			raytracing::PShader shader = nullptr;
+		};
 		struct ShaderInfo
 		{
 			// These are only required if the shader is used for eyeballs
@@ -93,17 +104,23 @@ namespace pragma::modules::cycles
 			std::optional<pragma::CParticleSystemComponent*> particleSystem = {};
 			std::optional<const void*> particle = {};
 		};
-		void AddMesh(Model &mdl,raytracing::Mesh &mesh,ModelSubMesh &mdlMesh,pragma::CModelComponent *optMdlC=nullptr,pragma::CAnimatedComponent *optAnimC=nullptr,BaseEntity *optEnt=nullptr,uint32_t skinId=0);
+		std::shared_ptr<MeshData> CalcMeshData(Model &mdl,ModelSubMesh &mdlMesh,bool includeAlphas,bool includeWrinkles,pragma::CModelComponent *optMdlC=nullptr,pragma::CAnimatedComponent *optAnimC=nullptr);
+		raytracing::PMesh BuildMesh(const std::string &meshName,const std::vector<std::shared_ptr<MeshData>> &meshDatas) const;
+		void AddMeshDataToMesh(raytracing::Mesh &mesh,const MeshData &meshData) const;
+
+		void AddMesh(Model &mdl,raytracing::Mesh &mesh,ModelSubMesh &mdlMesh,pragma::CModelComponent *optMdlC=nullptr,pragma::CAnimatedComponent *optAnimC=nullptr);
 		void AddRoughnessMapImageTextureNode(raytracing::ShaderModuleRoughness &shader,Material &mat,float defaultRoughness) const;
-		raytracing::PShader CreateShader(Material &mat,const std::string &meshName,const ShaderInfo &shaderInfo={});
-		raytracing::PShader CreateShader(raytracing::Mesh &mesh,Model &mdl,ModelSubMesh &subMesh,BaseEntity *optEnt=nullptr,uint32_t skinId=0);
+		raytracing::PShader CreateShader(Material &mat,const std::string &meshName,const ShaderInfo &shaderInfo={}) const;
+		raytracing::PShader CreateShader(const std::string &meshName,Model &mdl,ModelSubMesh &subMesh,BaseEntity *optEnt=nullptr,uint32_t skinId=0) const;
 		Material *GetMaterial(Model &mdl,ModelSubMesh &subMesh,uint32_t skinId) const;
 		Material *GetMaterial(pragma::CModelComponent &mdlC,ModelSubMesh &subMesh,uint32_t skinId) const;
 		Material *GetMaterial(BaseEntity &ent,ModelSubMesh &subMesh,uint32_t skinId) const;
 
+		std::string GetUniqueName() {return "internal" +std::to_string(m_uniqueNameIndex++);};
 		std::unordered_map<std::string,std::vector<ModelCacheInstance>> m_modelCache;
 		std::shared_ptr<raytracing::Scene> m_rtScene = nullptr;
 		util::WeakHandle<pragma::CLightMapComponent> m_lightmapTargetComponent = {};
+		uint32_t m_uniqueNameIndex = 0;
 	};
 };
 
