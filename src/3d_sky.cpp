@@ -36,7 +36,7 @@ void cycles::Scene::Add3DSkybox(pragma::CSkyCameraComponent &skyCam,const Vector
 	auto &posSkyCam = skyCam.GetEntity().GetPosition();
 	for(auto *ent : ents)
 	{
-		auto obj = AddEntity(*ent,nullptr,nullptr,nullptr,"3d_sky");
+		auto obj = m_cache->AddEntity(*ent,nullptr,nullptr,nullptr,"3d_sky");
 		if(obj == nullptr)
 			continue;
 		auto entPos = obj->GetPos();

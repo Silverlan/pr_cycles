@@ -89,7 +89,7 @@ static Vector3 get_corner_particle_vertex_position(
 		+up *squareVert.y *vsize.y;
 }
 
-void cycles::Scene::AddParticleSystem(pragma::CParticleSystemComponent &ptc,const Vector3 &camPos,const Mat4 &vp,float nearZ,float farZ)
+void cycles::Cache::AddParticleSystem(pragma::CParticleSystemComponent &ptc,const Vector3 &camPos,const Mat4 &vp,float nearZ,float farZ)
 {
 	auto *mat = ptc.GetMaterial();
 	if(mat == nullptr)
@@ -128,7 +128,7 @@ void cycles::Scene::AddParticleSystem(pragma::CParticleSystemComponent &ptc,cons
 		auto ptMeshName = meshName +"_" +std::to_string(i);
 		constexpr uint32_t numVerts = pragma::ShaderParticle2DBase::VERTEX_COUNT;
 		uint32_t numTris = pragma::ShaderParticle2DBase::TRIANGLE_COUNT *2;
-		auto mesh = raytracing::Mesh::Create(*m_rtScene,ptMeshName,numVerts,numTris);
+		auto mesh = raytracing::Mesh::Create(ptMeshName,numVerts,numTris);
 		auto pos = ptc.GetParticlePosition(ptIdx);
 		for(auto vertIdx=decltype(numVerts){0u};vertIdx<numVerts;++vertIdx)
 		{
@@ -149,6 +149,7 @@ void cycles::Scene::AddParticleSystem(pragma::CParticleSystemComponent &ptc,cons
 		auto shader = CreateShader(*mat,ptMeshName,shaderInfo);
 		if(shader == nullptr)
 			continue;
+#if 0
 		shader->SetFlags(raytracing::Shader::Flags::AdditiveByColor,alphaMode == ParticleAlphaMode::AdditiveByColor);
 		shader->SetAlphaMode(AlphaMode::Blend);
 		auto *shaderModAlbedo = dynamic_cast<raytracing::ShaderModuleAlbedo*>(shader.get());
@@ -209,6 +210,7 @@ void cycles::Scene::AddParticleSystem(pragma::CParticleSystemComponent &ptc,cons
 		mesh->AddSubMeshShader(*shader);
 
 		raytracing::Object::Create(*m_rtScene,*mesh);
+#endif
 	}
 }
 #pragma optimize("",on)
