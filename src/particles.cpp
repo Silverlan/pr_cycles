@@ -134,7 +134,7 @@ void cycles::Cache::AddParticleSystem(pragma::CParticleSystemComponent &ptc,cons
 		{
 			auto vertPos = pShader->CalcVertexPosition(ptc,ptc.TranslateBufferIndex(i),vertIdx,camPos,camUpWs,camRightWs,nearZ,farZ);
 			auto uv = pragma::ShaderParticle2DBase::GetVertexUV(vertIdx);
-			mesh->AddVertex(vertPos,-uvec::RIGHT,uvec::FORWARD,uv);
+			mesh->AddVertex(vertPos,-uvec::RIGHT,Vector4{uvec::FORWARD,1.f},uv);
 		}
 		static_assert(pragma::ShaderParticle2DBase::TRIANGLE_COUNT == 2 && pragma::ShaderParticle2DBase::VERTEX_COUNT == 6);
 		mesh->AddTriangle(0,1,2,0);

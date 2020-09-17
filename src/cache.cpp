@@ -507,9 +507,10 @@ std::shared_ptr<pragma::modules::cycles::Cache::MeshData> pragma::modules::cycle
 				uvec::normalize(&n);
 
 				auto &t = vTransformed.tangent;
-				t = {vt.x,vt.y,vt.z};
-				t += normalOffset;
-				uvec::normalize(&t);
+				Vector3 nt = {vt.x,vt.y,vt.z};
+				nt += normalOffset;
+				uvec::normalize(&nt);
+				t = {nt,t.w};
 
 				vTransformed.uv = v.uv;
 			}
