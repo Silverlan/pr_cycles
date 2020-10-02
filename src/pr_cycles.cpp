@@ -2059,6 +2059,7 @@ extern "C"
 
 		auto defSceneCreateInfo = luabind::class_<raytracing::Scene::CreateInfo>("CreateInfo");
 		defSceneCreateInfo.def(luabind::constructor<>());
+		defSceneCreateInfo.def_readwrite("exposure",&raytracing::Scene::CreateInfo::exposure);
 		defSceneCreateInfo.def_readwrite("progressive",&raytracing::Scene::CreateInfo::progressive);
 		defSceneCreateInfo.def_readwrite("progressiveRefine",&raytracing::Scene::CreateInfo::progressiveRefine);
 		defSceneCreateInfo.def_readwrite("hdrOutput",&raytracing::Scene::CreateInfo::hdrOutput);

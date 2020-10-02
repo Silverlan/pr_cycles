@@ -100,7 +100,7 @@ void ProgressiveTexture::Initialize(raytracing::Scene &scene)
 	imgCreateInfo.width = res.x;
 	imgCreateInfo.height = res.y;
 	imgCreateInfo.format = prosper::Format::R16G16B16A16_SFloat;
-	imgCreateInfo.usage = prosper::ImageUsageFlags::SampledBit | prosper::ImageUsageFlags::ColorAttachmentBit | prosper::ImageUsageFlags::TransferSrcBit | prosper::ImageUsageFlags::TransferDstBit;
+	imgCreateInfo.usage = prosper::ImageUsageFlags::SampledBit/* | prosper::ImageUsageFlags::ColorAttachmentBit*/ | prosper::ImageUsageFlags::TransferSrcBit | prosper::ImageUsageFlags::TransferDstBit;
 	imgCreateInfo.memoryFeatures = prosper::MemoryFeatureFlags::HostAccessable | prosper::MemoryFeatureFlags::HostCached;
 	imgCreateInfo.tiling = prosper::ImageTiling::Linear;
 	imgCreateInfo.postCreateLayout = prosper::ImageLayout::TransferDstOptimal;
