@@ -1952,8 +1952,6 @@ extern "C"
 		defScene.add_static_constant("DENOISE_MODE_NONE",umath::to_integral(raytracing::Scene::DenoiseMode::None));
 		defScene.add_static_constant("DENOISE_MODE_FAST",umath::to_integral(raytracing::Scene::DenoiseMode::Fast));
 		defScene.add_static_constant("DENOISE_MODE_DETAILED",umath::to_integral(raytracing::Scene::DenoiseMode::Detailed));
-		
-		defScene.add_static_constant("COLOR_TRANSFORM_FILMIC_BLENDER",umath::to_integral(raytracing::ColorTransform::FilmicBlender));
 
 		defScene.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,cycles::Scene&,Scene&,const Vector3&,const Quat&,const Mat4&,float,float,float,uint32_t,luabind::object,luabind::object)>([](lua_State *l,cycles::Scene &scene,Scene &gameScene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,uint32_t sceneFlags,luabind::object entFilter,luabind::object lightFilter) {
 			initialize_from_game_scene(l,gameScene,scene,camPos,camRot,vp,nearZ,farZ,fov,static_cast<SceneFlags>(sceneFlags),&entFilter,&lightFilter);
@@ -2068,8 +2066,14 @@ extern "C"
 		defSceneCreateInfo.def("SetSamplesPerPixel",static_cast<void(*)(lua_State*,raytracing::Scene::CreateInfo&,uint32_t)>([](lua_State *l,raytracing::Scene::CreateInfo &createInfo,uint32_t samples) {
 			createInfo.samples = samples;
 		}));
-		defSceneCreateInfo.def("SetColorTransform",static_cast<void(*)(lua_State*,raytracing::Scene::CreateInfo&,raytracing::ColorTransform)>([](lua_State *l,raytracing::Scene::CreateInfo &createInfo,raytracing::ColorTransform colorTransform) {
-			createInfo.colorTransform = colorTransform;
+		defSceneCreateInfo.def("SetColorTransform",static_cast<void(*)(lua_State*,raytracing::Scene::CreateInfo&,const std::string&)>([](lua_State *l,raytracing::Scene::CreateInfo &createInfo,const std::string &config) {
+			createInfo.colorTransform = raytracing::Scene::ColorTransformInfo{};
+			createInfo.colorTransform->config = config;
+		}));
+		defSceneCreateInfo.def("SetColorTransform",static_cast<void(*)(lua_State*,raytracing::Scene::CreateInfo&,const std::string&,const std::string&)>([](lua_State *l,raytracing::Scene::CreateInfo &createInfo,const std::string &config,const std::string &lookName) {
+			createInfo.colorTransform = raytracing::Scene::ColorTransformInfo{};
+			createInfo.colorTransform->config = config;
+			createInfo.colorTransform->lookName = lookName;
 		}));
 		defScene.scope[defSceneCreateInfo];
 
