@@ -340,7 +340,7 @@ static void initialize_cycles_geometry(
 }
 
 static void initialize_cycles_scene_from_game_scene(
-	Scene &gameScene,pragma::modules::cycles::Scene &scene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,float aspectRatio,SceneFlags sceneFlags,
+	Scene &gameScene,pragma::modules::cycles::Scene &scene,const Vector3 &camPos,const Quat &camRot,bool equirect,const Mat4 &vp,float nearZ,float farZ,float fov,float aspectRatio,SceneFlags sceneFlags,
 	const std::function<bool(BaseEntity&)> &entFilter=nullptr,const std::function<bool(BaseEntity&)> &lightFilter=nullptr
 )
 {
@@ -365,6 +365,12 @@ static void initialize_cycles_scene_from_game_scene(
 	cam.SetNearZ(nearZ);
 	cam.SetFarZ(farZ);
 	cam.SetFOV(umath::deg_to_rad(fov));
+
+	if(equirect)
+	{
+		cam.SetCameraType(raytracing::Camera::CameraType::Panorama);
+		cam.SetPanoramaType(raytracing::Camera::PanoramaType::Equirectangular);
+	}
 
 	// 3D Sky
 	EntityIterator entIt3dSky {*c_game};
@@ -406,7 +412,7 @@ static void initialize_from_game_scene(
 	auto entFilter = to_entity_filter(l,optEntFilter,10);
 	auto lightFilter = to_entity_filter(l,optLightFilter,11);
 	auto aspectRatio = gameScene.GetWidth() /static_cast<float>(gameScene.GetHeight());
-	initialize_cycles_scene_from_game_scene(gameScene,scene,camPos,camRot,vp,nearZ,farZ,fov,aspectRatio,sceneFlags,entFilter,lightFilter);
+	initialize_cycles_scene_from_game_scene(gameScene,scene,camPos,camRot,false,vp,nearZ,farZ,fov,aspectRatio,sceneFlags,entFilter,lightFilter);
 	scene.Finalize();
 }
 
@@ -627,7 +633,7 @@ extern "C"
 {
 	PRAGMA_EXPORT void pr_cycles_render_image(
 		uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,bool denoise,
-		const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,umath::Degree fov,
+		const Vector3 &camPos,const Quat &camRot,bool equirect,const Mat4 &vp,float nearZ,float farZ,umath::Degree fov,
 		SceneFlags sceneFlags,std::string skyOverride,EulerAngles skyAngles,float skyStrength,
 		float maxTransparencyBounces,const std::function<bool(BaseEntity&)> &entFilter,util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> &outJob
 	)
@@ -637,7 +643,8 @@ extern "C"
 		if(scene == nullptr)
 			return;
 		auto aspectRatio = width /static_cast<float>(height);
-		initialize_cycles_scene_from_game_scene(*c_game->GetScene(),*scene,camPos,camRot,vp,nearZ,farZ,fov,aspectRatio,sceneFlags,entFilter);
+		initialize_cycles_scene_from_game_scene(*c_game->GetScene(),*scene,camPos,camRot,equirect,vp,nearZ,farZ,fov,aspectRatio,sceneFlags,entFilter);
+		scene->Finalize();
 		if(skyOverride.empty() == false)
 			(*scene)->SetSky(skyOverride);
 		(*scene)->SetSkyAngles(skyAngles);
