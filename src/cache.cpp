@@ -280,63 +280,59 @@ pragma::modules::cycles::Cache::Cache(raytracing::Scene::RenderMode renderMode)
 	m_mdlCache->AddChunk(*m_shaderCache);
 }
 
-raytracing::PMesh pragma::modules::cycles::Cache::AddMeshList(
-	Model &mdl,const std::vector<std::shared_ptr<ModelMesh>> &meshList,const std::string &meshName,BaseEntity *optEnt,uint32_t skinId,
+std::vector<std::shared_ptr<pragma::modules::cycles::Cache::MeshData>> pragma::modules::cycles::Cache::AddMeshList(
+	Model &mdl,const std::vector<std::shared_ptr<ModelMesh>> &meshList,const std::string &meshName,BaseEntity *optEnt,const std::optional<umath::ScaledTransform> &opose,uint32_t skinId,
 	pragma::CModelComponent *optMdlC,pragma::CAnimatedComponent *optAnimC,
-	const std::function<bool(ModelMesh&,const Vector3&,const Quat&)> &optMeshFilter,
-	const std::function<bool(ModelSubMesh&,const Vector3&,const Quat&)> &optSubMeshFilter
+	const std::function<bool(ModelMesh&,const umath::ScaledTransform&)> &optMeshFilter,
+	const std::function<bool(ModelSubMesh&,const umath::ScaledTransform&)> &optSubMeshFilter
 )
 {
-	Vector3 origin {};
-	auto rot = uquat::identity();
-	if(optEnt)
-	{
-		origin = optEnt->GetPosition();
-		rot = optEnt->GetRotation();
-	}
+	auto pose = opose.has_value() ? *opose : umath::ScaledTransform{};
 	auto hasAlphas = false;
 	auto hasWrinkles = (mdl.GetVertexAnimations().empty() == false); // TODO: Not the best way to determine if the entity uses wrinkles
 	std::vector<std::shared_ptr<MeshData>> meshDatas {};
 	meshDatas.reserve(meshList.size());
 	for(auto &mesh : meshList)
 	{
-		if(optMeshFilter != nullptr && optMeshFilter(*mesh,origin,rot) == false)
+		if(optMeshFilter != nullptr && optMeshFilter(*mesh,pose) == false)
 			continue;
 		for(auto &subMesh : mesh->GetSubMeshes())
 		{
-			if(subMesh->GetGeometryType() != ModelSubMesh::GeometryType::Triangles || subMesh->GetTriangleCount() == 0 || (optSubMeshFilter != nullptr && optSubMeshFilter(*subMesh,origin,rot) == false))
+			if(subMesh->GetGeometryType() != ModelSubMesh::GeometryType::Triangles || subMesh->GetTriangleCount() == 0 || (optSubMeshFilter != nullptr && optSubMeshFilter(*subMesh,pose) == false))
 				continue;
 			hasAlphas = hasAlphas || (subMesh->GetAlphaCount() > 0);
 
 			auto meshData = CalcMeshData(mdl,*subMesh,hasAlphas,hasWrinkles,optMdlC,optAnimC);
+			if(opose.has_value())
+			{
+				for(auto &v : meshData->vertices)
+					v.position = *opose *v.position;
+			}
 			meshData->shader = CreateShader(GetUniqueName(),mdl,*subMesh,optEnt,skinId);
 			if(meshData->shader)
 				meshDatas.push_back(meshData);
 		}
 	}
-
-	if(meshDatas.empty())
-		return nullptr;
-	return BuildMesh(meshName,meshDatas);
+	return meshDatas;
 }
 
-raytracing::PMesh pragma::modules::cycles::Cache::AddModel(
-	Model &mdl,const std::string &meshName,BaseEntity *optEnt,uint32_t skinId,
+std::vector<std::shared_ptr<pragma::modules::cycles::Cache::MeshData>> pragma::modules::cycles::Cache::AddModel(
+	Model &mdl,const std::string &meshName,BaseEntity *optEnt,const std::optional<umath::ScaledTransform> &pose,uint32_t skinId,
 	pragma::CModelComponent *optMdlC,pragma::CAnimatedComponent *optAnimC,
-	const std::function<bool(ModelMesh&,const Vector3&,const Quat&)> &optMeshFilter,const std::function<bool(ModelSubMesh&,const Vector3&,const Quat&)> &optSubMeshFilter
+	const std::function<bool(ModelMesh&,const umath::ScaledTransform&)> &optMeshFilter,const std::function<bool(ModelSubMesh&,const umath::ScaledTransform&)> &optSubMeshFilter
 )
 {
 	std::vector<std::shared_ptr<ModelMesh>> lodMeshes {};
 	std::vector<uint32_t> bodyGroups {};
 	bodyGroups.resize(mdl.GetBodyGroupCount());
 	mdl.GetBodyGroupMeshes(bodyGroups,0,lodMeshes);
-	return AddMeshList(mdl,lodMeshes,meshName,optEnt,skinId,optMdlC,optAnimC,optMeshFilter,optSubMeshFilter);
+	return AddMeshList(mdl,lodMeshes,meshName,optEnt,pose,skinId,optMdlC,optAnimC,optMeshFilter,optSubMeshFilter);
 }
 
-raytracing::PObject pragma::modules::cycles::Cache::AddEntity(
+std::vector<std::shared_ptr<pragma::modules::cycles::Cache::MeshData>> pragma::modules::cycles::Cache::AddEntityMesh(
 	BaseEntity &ent,std::vector<ModelSubMesh*> *optOutTargetMeshes,
-	const std::function<bool(ModelMesh&,const Vector3&,const Quat&)> &meshFilter,const std::function<bool(ModelSubMesh&,const Vector3&,const Quat&)> &subMeshFilter,
-	const std::string &nameSuffix
+	const std::function<bool(ModelMesh&,const umath::ScaledTransform&)> &meshFilter,const std::function<bool(ModelSubMesh&,const umath::ScaledTransform&)> &subMeshFilter,
+	const std::string &nameSuffix,const std::optional<umath::ScaledTransform> &pose
 )
 {
 #if 0
@@ -349,7 +345,7 @@ raytracing::PObject pragma::modules::cycles::Cache::AddEntity(
 	auto *mdlC = static_cast<pragma::CModelComponent*>(ent.GetModelComponent().get());
 	auto mdl = mdlC ? mdlC->GetModel() : nullptr;
 	if(mdl == nullptr)
-		return nullptr;
+		return {};
 	auto animC = ent.GetComponent<CAnimatedComponent>();
 
 	raytracing::PMesh mesh = nullptr;
@@ -375,22 +371,27 @@ raytracing::PObject pragma::modules::cycles::Cache::AddEntity(
 				mesh = itInstance->mesh;
 		}
 	}
+	std::vector<std::shared_ptr<MeshData>> meshDatas;
 	if(mesh == nullptr)
 	{
 		std::string name = "ent" +nameSuffix +"_" +std::to_string(ent.GetLocalIndex());
 		std::vector<ModelSubMesh*> tmpTargetMeshes {};
 		auto *targetMeshes = (optOutTargetMeshes != nullptr) ? optOutTargetMeshes : &tmpTargetMeshes;
-		targetMeshes->reserve(mdl->GetSubMeshCount());
+		targetMeshes->reserve(targetMeshes->size() +mdl->GetSubMeshCount());
 
 		auto skyC = ent.GetComponent<CSkyboxComponent>();
 		if(skyC.valid())
 		{
-			AddModel(*mdl,name,&ent,ent.GetSkin(),mdlC,animC.get(),meshFilter,[&targetMeshes,&subMeshFilter](ModelSubMesh &mesh,const Vector3 &origin,const Quat &rot) -> bool {
-				if(subMeshFilter && subMeshFilter(mesh,origin,rot) == false)
+			// Special case
+			umath::ScaledTransform pose;
+			ent.GetPose(pose);
+			AddModel(*mdl,name,&ent,pose,ent.GetSkin(),mdlC,animC.get(),meshFilter,[&targetMeshes,&subMeshFilter](ModelSubMesh &mesh,const umath::ScaledTransform &pose) -> bool {
+				if(subMeshFilter && subMeshFilter(mesh,pose) == false)
 					return false;
 				targetMeshes->push_back(&mesh);
 				return false;
 			});
+			
 			std::optional<std::string> skyboxTexture {};
 			for(auto &mesh : *targetMeshes)
 			{
@@ -410,11 +411,11 @@ raytracing::PObject pragma::modules::cycles::Cache::AddEntity(
 			}
 			if(skyboxTexture.has_value())
 				m_sky = *skyboxTexture;
-			return nullptr;
+			return {};
 		}
 
-		auto fFilterMesh = [&targetMeshes,&subMeshFilter](ModelSubMesh &mesh,const Vector3 &origin,const Quat &rot) -> bool {
-			if(subMeshFilter && subMeshFilter(mesh,origin,rot) == false)
+		auto fFilterMesh = [&targetMeshes,&subMeshFilter](ModelSubMesh &mesh,const umath::ScaledTransform &pose) -> bool {
+			if(subMeshFilter && subMeshFilter(mesh,pose) == false)
 				return false;
 			targetMeshes->push_back(&mesh);
 			return true;
@@ -422,11 +423,11 @@ raytracing::PObject pragma::modules::cycles::Cache::AddEntity(
 
 		auto renderC = ent.GetComponent<pragma::CRenderComponent>();
 		if(renderC.valid())
-			mesh = AddMeshList(*mdl,renderC->GetLODMeshes(),name,&ent,ent.GetSkin(),mdlC,animC.get(),meshFilter,fFilterMesh);
+			meshDatas = AddMeshList(*mdl,renderC->GetLODMeshes(),name,&ent,pose,ent.GetSkin(),mdlC,animC.get(),meshFilter,fFilterMesh);
 		else
-			mesh = AddModel(*mdl,name,&ent,ent.GetSkin(),mdlC,animC.get(),meshFilter,fFilterMesh);
-		if(mesh == nullptr)
-			return nullptr;
+			meshDatas = AddModel(*mdl,name,&ent,pose,ent.GetSkin(),mdlC,animC.get(),meshFilter,fFilterMesh);
+		if(meshDatas.empty())
+			return meshDatas;
 	}
 
 	if(mdlName.empty() == false)
@@ -439,12 +440,26 @@ raytracing::PObject pragma::modules::cycles::Cache::AddEntity(
 			it->second.push_back({mesh,skin});
 		}
 	}
-
+	return meshDatas;
+}
+raytracing::PObject pragma::modules::cycles::Cache::AddEntity(
+	BaseEntity &ent,std::vector<ModelSubMesh*> *optOutTargetMeshes,
+	const std::function<bool(ModelMesh&,const umath::ScaledTransform&)> &meshFilter,const std::function<bool(ModelSubMesh&,const umath::ScaledTransform&)> &subMeshFilter,
+	const std::string &nameSuffix
+)
+{
+	auto meshDatas = AddEntityMesh(ent,optOutTargetMeshes,meshFilter,subMeshFilter,nameSuffix);
+	if(meshDatas.empty())
+		return nullptr;
+	std::string name = "ent" +nameSuffix +"_" +std::to_string(ent.GetLocalIndex());
+	auto mesh = BuildMesh(name,meshDatas);
+	if(mesh == nullptr)
+		return nullptr;
+	auto renderMode = m_renderMode;
 	// Create the object using the mesh
 	umath::ScaledTransform t;
 	ent.GetPose(t);
 	auto o = raytracing::Object::Create(*mesh);
-	auto renderMode = m_renderMode;
 	if(raytracing::Scene::IsRenderSceneMode(renderMode) || renderMode == raytracing::Scene::RenderMode::BakeDiffuseLighting)
 	{
 		o->SetPos(t.GetOrigin());
@@ -658,7 +673,7 @@ void pragma::modules::cycles::Cache::AddMesh(Model &mdl,raytracing::Mesh &mesh,M
 	AddMeshDataToMesh(mesh,*meshData);
 }
 
-raytracing::PMesh pragma::modules::cycles::Cache::BuildMesh(const std::string &meshName,const std::vector<std::shared_ptr<MeshData>> &meshDatas) const
+raytracing::PMesh pragma::modules::cycles::Cache::BuildMesh(const std::string &meshName,const std::vector<std::shared_ptr<MeshData>> &meshDatas,const std::optional<umath::ScaledTransform> &pose) const
 {
 	uint64_t numVerts = 0;
 	uint64_t numTris = 0;
@@ -680,16 +695,21 @@ raytracing::PMesh pragma::modules::cycles::Cache::BuildMesh(const std::string &m
 	auto mesh = raytracing::Mesh::Create(meshName,numVerts,numTris /3,flags);
 	m_mdlCache->GetChunks().front().AddMesh(*mesh);
 	for(auto &meshData : meshDatas)
-		AddMeshDataToMesh(*mesh,*meshData);
+		AddMeshDataToMesh(*mesh,*meshData,pose);
 	return mesh;
 }
 
-void pragma::modules::cycles::Cache::AddMeshDataToMesh(raytracing::Mesh &mesh,const MeshData &meshData) const
+void pragma::modules::cycles::Cache::AddMeshDataToMesh(raytracing::Mesh &mesh,const MeshData &meshData,const std::optional<umath::ScaledTransform> &pose) const
 {
 	auto triIndexVertexOffset = mesh.GetVertexOffset();
 	auto shaderIdx = mesh.AddSubMeshShader(*meshData.shader);
 	for(auto &v : meshData.vertices)
-		mesh.AddVertex(v.position,v.normal,v.tangent,v.uv);
+	{
+		auto pos = v.position;
+		if(pose.has_value())
+			pos = *pose *pos;
+		mesh.AddVertex(pos,v.normal,v.tangent,v.uv);
+	}
 	
 	for(auto i=decltype(meshData.triangles.size()){0u};i<meshData.triangles.size();i+=3)
 		mesh.AddTriangle(triIndexVertexOffset +meshData.triangles.at(i),triIndexVertexOffset +meshData.triangles.at(i +1),triIndexVertexOffset +meshData.triangles.at(i +2),shaderIdx);
@@ -706,11 +726,11 @@ void pragma::modules::cycles::Cache::AddMeshDataToMesh(raytracing::Mesh &mesh,co
 	}
 }
 
-void pragma::modules::cycles::Cache::AddAOBakeTarget(Model &mdl,uint32_t matIndex,std::shared_ptr<raytracing::Object> &oAo,std::shared_ptr<raytracing::Object> &oEnv)
+void pragma::modules::cycles::Cache::AddAOBakeTarget(BaseEntity *optEnt,Model &mdl,uint32_t matIndex,std::shared_ptr<raytracing::Object> &oAo,std::shared_ptr<raytracing::Object> &oEnv)
 {
 	std::vector<std::shared_ptr<MeshData>> materialMeshes;
 	std::vector<std::shared_ptr<MeshData>> envMeshes;
-	AddModel(mdl,"ao_mesh",nullptr,0 /* skin */,nullptr,nullptr,nullptr,[this,matIndex,&materialMeshes,&envMeshes,&mdl](ModelSubMesh &mesh,const Vector3 &origin,const Quat &rot) -> bool {
+	auto fFilterMeshes = [this,matIndex,&materialMeshes,&envMeshes,&mdl](ModelSubMesh &mesh,const umath::ScaledTransform &pose) -> bool {
 		auto meshData = CalcMeshData(mdl,mesh,false,false);
 		meshData->shader = CreateShader(GetUniqueName(),mdl,mesh);
 		auto texIdx = mdl.GetMaterialIndex(mesh);
@@ -721,12 +741,17 @@ void pragma::modules::cycles::Cache::AddAOBakeTarget(Model &mdl,uint32_t matInde
 		}
 		envMeshes.push_back(meshData);
 		return false;
-	});
+	};
+	if(optEnt)
+		AddEntityMesh(*optEnt,nullptr,nullptr,fFilterMeshes);
+	else
+		AddModel(mdl,"ao_mesh",nullptr,{},0 /* skin */,nullptr,nullptr,nullptr,fFilterMeshes);
 
 	// We'll create a separate mesh from all model meshes which use the specified material.
 	// This way we can map the uv coordinates to the ao output texture more easily.
 	auto mesh = BuildMesh("ao_target",materialMeshes);
 	oAo = raytracing::Object::Create(*mesh);
+	m_mdlCache->GetChunks().front().AddObject(*oAo);
 	
 	oEnv = nullptr;
 	if(envMeshes.empty())
@@ -739,5 +764,16 @@ void pragma::modules::cycles::Cache::AddAOBakeTarget(Model &mdl,uint32_t matInde
 	// The reason for this is currently unknown.
 	auto meshEnv = BuildMesh("ao_mesh",envMeshes);
 	oEnv = raytracing::Object::Create(*meshEnv);
+	m_mdlCache->GetChunks().front().AddObject(*oEnv);
 }
+
+void pragma::modules::cycles::Cache::AddAOBakeTarget(BaseEntity &ent,uint32_t matIndex,std::shared_ptr<raytracing::Object> &oAo,std::shared_ptr<raytracing::Object> &oEnv)
+{
+	auto mdl = ent.GetModel();
+	if(mdl == nullptr)
+		return;
+	AddAOBakeTarget(&ent,*mdl,matIndex,oAo,oEnv);
+}
+
+void pragma::modules::cycles::Cache::AddAOBakeTarget(Model &mdl,uint32_t matIndex,std::shared_ptr<raytracing::Object> &oAo,std::shared_ptr<raytracing::Object> &oEnv) {AddAOBakeTarget(nullptr,mdl,matIndex,oAo,oEnv);}
 #pragma optimize("",on)

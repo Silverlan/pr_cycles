@@ -72,6 +72,7 @@ cycles::Scene::Scene(raytracing::Scene &rtScene)
 	: m_rtScene{rtScene.shared_from_this()}
 {
 	m_cache = std::make_shared<Cache>(rtScene.GetRenderMode());
+	m_cache->GetModelCache().SetUnique(true);
 }
 
 void cycles::Scene::AddRoughnessMapImageTextureNode(raytracing::ShaderModuleRoughness &shader,Material &mat,float defaultRoughness) const
@@ -112,6 +113,14 @@ void cycles::Scene::AddRoughnessMapImageTextureNode(raytracing::ShaderModuleRoug
 			shader.SetRoughnessFactor(1.f);
 	}
 #endif
+}
+
+void cycles::Scene::SetAOBakeTarget(BaseEntity &ent,uint32_t matIndex)
+{
+	std::shared_ptr<raytracing::Object> oAo;
+	std::shared_ptr<raytracing::Object> oEnv;
+	m_cache->AddAOBakeTarget(ent,matIndex,oAo,oEnv);
+	m_rtScene->SetAOBakeTarget(*oAo);
 }
 
 void cycles::Scene::SetAOBakeTarget(Model &mdl,uint32_t matIndex)
@@ -169,26 +178,49 @@ cycles::Cache &cycles::Scene::GetCache() {return *m_cache;}
 
 void cycles::Scene::Finalize()
 {
+	BuildLightMapObject();
 	m_rtScene->AddModelsFromCache(m_cache->GetModelCache());
 }
 
-void cycles::Scene::SetLightmapBakeTarget(BaseEntity &ent)
+void cycles::Scene::BuildLightMapObject()
 {
-	auto lightmapC = ent.GetComponent<pragma::CLightMapComponent>();
-	m_lightmapTargetComponent = lightmapC;
-	if(lightmapC.expired())
-	{
-		Con::cwar<<"WARNING: Invalid target for lightmap baking: Entity has no lightmap component!"<<Con::endl;
+	if(m_lightMapTargets.empty())
 		return;
-	}
 	std::vector<ModelSubMesh*> targetMeshes {};
-	auto o = m_cache->AddEntity(ent,&targetMeshes);
+	std::vector<std::shared_ptr<pragma::modules::cycles::Cache::MeshData>> meshDatas;
+	for(auto &hEnt : m_lightMapTargets)
+	{
+		if(hEnt.IsValid() == false || hEnt->GetModel() == nullptr)
+			continue;
+		umath::ScaledTransform t;
+		hEnt->GetPose(t);
+		std::vector<ModelSubMesh*> entMeshes;
+		auto meshes = m_cache->AddEntityMesh(*hEnt.get(),&entMeshes,nullptr,nullptr,"",t);
+		if(meshes.empty() == false)
+		{
+			targetMeshes.reserve(targetMeshes.size() +entMeshes.size());
+			for(auto *mesh : entMeshes)
+				targetMeshes.push_back(mesh);
+			meshDatas.reserve(meshDatas.size() +meshes.size());
+			for(auto &mesh : meshes)
+				meshDatas.push_back(mesh);
+		}
+	}
+
+	if(meshDatas.empty())
+		return;
+
+	auto mesh = m_cache->BuildMesh("bake_target",meshDatas);
+	if(mesh == nullptr)
+		return;
+
+	auto o = raytracing::Object::Create(*mesh);
 	if(o == nullptr)
 		return;
-	auto &mesh = o->GetMesh();
+	m_cache->GetModelCache().GetChunks().front().AddObject(*o);
 
 	// Lightmap uvs per mesh
-	auto numTris = mesh.GetTriangleCount();
+	auto numTris = mesh->GetTriangleCount();
 	std::vector<ccl::float2> cclLightmapUvs {};
 	cclLightmapUvs.resize(numTris *3);
 	size_t uvOffset = 0;
@@ -210,9 +242,10 @@ void cycles::Scene::SetLightmapBakeTarget(BaseEntity &ent)
 		}
 		uvOffset += tris.size();
 	}
-	mesh.SetLightmapUVs(std::move(cclLightmapUvs));
+	mesh->SetLightmapUVs(std::move(cclLightmapUvs));
 	m_rtScene->SetAOBakeTarget(*o);
 }
+void cycles::Scene::AddLightmapBakeTarget(BaseEntity &ent) {m_lightMapTargets.push_back(ent.GetHandle());}
 
 raytracing::PShader cycles::Cache::CreateShader(Material &mat,const std::string &meshName,const ShaderInfo &shaderInfo) const
 {

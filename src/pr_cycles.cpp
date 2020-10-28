@@ -35,6 +35,7 @@ namespace pragma::asset {class WorldData; class EntityData;};
 #include <pragma/entities/components/c_model_component.hpp>
 #include <pragma/entities/components/c_render_component.hpp>
 #include <pragma/entities/components/c_toggle_component.hpp>
+#include <pragma/entities/components/c_light_map_receiver_component.hpp>
 #include <pragma/entities/environment/effects/c_env_particle_system.h>
 #include <pragma/entities/environment/c_sky_camera.hpp>
 #include <pragma/entities/environment/c_env_camera.h>
@@ -158,13 +159,17 @@ pragma::modules::cycles::ShaderManager &pragma::modules::cycles::get_shader_mana
 		g_shaderManager = pragma::modules::cycles::ShaderManager::Create();
 	return *g_shaderManager;
 }
-static std::shared_ptr<cycles::Scene> setup_scene(raytracing::Scene::RenderMode renderMode,uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,raytracing::Scene::DenoiseMode denoiseMode,raytracing::Scene::DeviceType deviceType=raytracing::Scene::DeviceType::CPU)
+static std::shared_ptr<cycles::Scene> setup_scene(
+	raytracing::Scene::RenderMode renderMode,uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,raytracing::Scene::DenoiseMode denoiseMode,
+	raytracing::Scene::DeviceType deviceType=raytracing::Scene::DeviceType::CPU,const std::optional<raytracing::Scene::ColorTransformInfo> &colorTransform={}
+)
 {
 	raytracing::Scene::CreateInfo createInfo {};
 	createInfo.denoiseMode = denoiseMode;
 	createInfo.hdrOutput = hdrOutput;
 	createInfo.samples = sampleCount;
 	createInfo.deviceType = deviceType;
+	createInfo.colorTransform = colorTransform;
 	auto scene = raytracing::Scene::Create(pragma::modules::cycles::get_node_manager(),renderMode,createInfo);
 	if(scene == nullptr)
 		return nullptr;
@@ -265,20 +270,20 @@ static void initialize_cycles_geometry(
 		auto renderMode = renderC->GetRenderMode();
 		if((renderMode != RenderMode::World && renderMode != RenderMode::Skybox) || (camData.has_value() && renderC->ShouldDraw(camData->position) == false) || (entFilter && entFilter(*ent) == false))
 			continue;
-		std::function<bool(ModelMesh&,const Vector3&,const Quat&)> meshFilter = nullptr;
+		std::function<bool(ModelMesh&,const umath::ScaledTransform&)> meshFilter = nullptr;
 		if(renderC->IsExemptFromOcclusionCulling() == false)
 		{
 			// We'll only do per-mesh culling for world entities
 			if(enableFrustumCulling  && ent->IsWorld())
 			{
-				meshFilter = [&planes](ModelMesh &mesh,const Vector3 &origin,const Quat &rotation) -> bool {
+				meshFilter = [&planes](ModelMesh &mesh,const umath::ScaledTransform &pose) -> bool {
 					Vector3 min,max;
 					mesh.GetBounds(min,max);
 					auto center = (min +max) /2.f;
 					min -= center;
 					max -= center;
 					auto r = umath::max(umath::abs(min.x),umath::abs(min.y),umath::abs(min.z),umath::abs(max.x),umath::abs(max.y),umath::abs(max.z));
-					center += origin;
+					center += pose.GetOrigin();
 					return (Intersection::SphereInPlaneMesh(center,r,planes) != INTERSECT_OUTSIDE) ? true : false;
 				};
 			}
@@ -289,8 +294,8 @@ static void initialize_cycles_geometry(
 				if(ent->IsWorld())
 				{
 					auto pos = ent->GetPosition();
-					meshFilter = [bspTree,node,pos,curFilter](ModelMesh &mesh,const Vector3 &origin,const Quat &rot) -> bool {
-						if(curFilter && curFilter(mesh,origin,rot) == false)
+					meshFilter = [bspTree,node,pos,curFilter](ModelMesh &mesh,const umath::ScaledTransform &pose) -> bool {
+						if(curFilter && curFilter(mesh,pose) == false)
 							return false;
 						if(node == nullptr)
 							return false;
@@ -661,28 +666,71 @@ extern "C"
 		if(scene == nullptr)
 			return;
 		scene->SetAOBakeTarget(mdl,materialIndex);
+		scene->Finalize();
+		outJob = (*scene)->Finalize();
+	}
+	PRAGMA_EXPORT void pr_cycles_bake_ao_ent(
+		BaseEntity &ent,uint32_t materialIndex,uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,bool denoise,const std::string &deviceType,util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> &outJob
+	)
+	{
+		outJob = {};
+		auto eDeviceType = ustring::compare(deviceType,"gpu",false) ? raytracing::Scene::DeviceType::GPU : raytracing::Scene::DeviceType::CPU;
+		auto scene = setup_scene(raytracing::Scene::RenderMode::BakeAmbientOcclusion,width,height,sampleCount,hdrOutput,denoise ? raytracing::Scene::DenoiseMode::Detailed : raytracing::Scene::DenoiseMode::None,eDeviceType);
+		if(scene == nullptr)
+			return;
+		scene->SetAOBakeTarget(ent,materialIndex);
+		scene->Finalize();
 		outJob = (*scene)->Finalize();
 	}
 	PRAGMA_EXPORT void pr_cycles_bake_lightmaps(
-		BaseEntity &entTarget,uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,bool denoise,
-		std::string skyOverride,EulerAngles skyAngles,float skyStrength,
+		uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,bool denoise,
+		std::string skyOverride,EulerAngles skyAngles,float skyStrength,bool externalJob,
 		util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> &outJob
 	)
 	{
 		outJob = {};
-		auto scene = setup_scene(raytracing::Scene::RenderMode::BakeDiffuseLighting,width,height,sampleCount,hdrOutput,denoise ? raytracing::Scene::DenoiseMode::Detailed : raytracing::Scene::DenoiseMode::None);
+		raytracing::Scene::ColorTransformInfo colorTransform {};
+		colorTransform.config = "filmic-blender";
+		colorTransform.lookName = "Medium Low Contrast";
+		auto scene = setup_scene(
+			raytracing::Scene::RenderMode::BakeDiffuseLighting,width,height,sampleCount,hdrOutput,denoise ? raytracing::Scene::DenoiseMode::Detailed : raytracing::Scene::DenoiseMode::None,
+			raytracing::Scene::DeviceType::GPU,colorTransform
+		);
 		if(scene == nullptr)
 			return;
 		auto &gameScene = *c_game->GetScene();
 		setup_light_sources(*scene,[&gameScene](BaseEntity &ent) -> bool {
 			return static_cast<CBaseEntity&>(ent).IsInScene(gameScene);
 		});
-		scene->SetLightmapBakeTarget(entTarget);
+		EntityIterator entIt {*c_game};
+		entIt.AttachFilter<TEntityIteratorFilterComponent<pragma::CLightMapReceiverComponent>>();
+		for(auto *ent : entIt)
+			scene->AddLightmapBakeTarget(*ent);
 		if(skyOverride.empty() == false)
 			(*scene)->SetSky(skyOverride);
 		(*scene)->SetSkyAngles(skyAngles);
 		(*scene)->SetSkyStrength(skyStrength);
-		outJob = (*scene)->Finalize();
+		scene->Finalize();
+		
+		if(externalJob)
+		{
+			std::string path = "render/lightmaps/";
+			auto fileName = path +"lightmap.prt";
+			auto rootPath = util::Path::CreatePath(FileManager::GetProgramPath()).GetString() +path;
+			raytracing::Scene::SerializationData serializationData {};
+			serializationData.outputFileName = fileName;
+			DataStream ds {};
+			(*scene)->Save(ds,rootPath,serializationData);
+			FileManager::CreatePath(path.c_str());
+			auto f = FileManager::OpenFile<VFilePtrReal>(fileName.c_str(),"wb");
+			if(f)
+			{
+				f->Write(ds->GetData(),ds->GetInternalSize());
+				f = nullptr;
+			}
+		}
+		else
+			outJob = (*scene)->Finalize();
 	}
 
 	bool PRAGMA_EXPORT pragma_attach(std::string &errMsg)
@@ -2031,11 +2079,17 @@ extern "C"
 			scene->AddLight(*light);
 			Lua::Push(l,light.get());
 		}));
-		defScene.def("Serialize",static_cast<void(*)(lua_State*,cycles::Scene&,DataStream&,const raytracing::Scene::SerializationData&)>([](lua_State *l,cycles::Scene &scene,DataStream &ds,const raytracing::Scene::SerializationData &serializationData) {
-			scene->Serialize(ds,serializationData);
+		defScene.def("Save",static_cast<void(*)(lua_State*,cycles::Scene&,DataStream&,const std::string&,const raytracing::Scene::SerializationData&)>([](lua_State *l,cycles::Scene &scene,DataStream &ds,const std::string &rootDir,const raytracing::Scene::SerializationData &serializationData) {
+			auto path = rootDir;
+			if(Lua::file::validate_write_operation(l,path) == false)
+				return;
+			scene->Save(ds,path,serializationData);
 		}));
-		defScene.def("Deserialize",static_cast<void(*)(lua_State*,cycles::Scene&,DataStream&)>([](lua_State *l,cycles::Scene &scene,DataStream &ds) {
-			scene->Deserialize(ds);
+		defScene.def("Load",static_cast<void(*)(lua_State*,cycles::Scene&,DataStream&,const std::string&)>([](lua_State *l,cycles::Scene &scene,DataStream &ds,const std::string &rootDir) {
+			auto path = rootDir;
+			if(Lua::file::validate_write_operation(l,path) == false)
+				return;
+			scene->Load(ds,path);
 		}));
 		defScene.def("CreateProgressiveImageHandler",static_cast<std::shared_ptr<pragma::modules::cycles::ProgressiveTexture>(*)(lua_State*,cycles::Scene&)>([](lua_State *l,cycles::Scene &scene) -> std::shared_ptr<pragma::modules::cycles::ProgressiveTexture> {
 			auto prt = std::make_shared<pragma::modules::cycles::ProgressiveTexture>();
