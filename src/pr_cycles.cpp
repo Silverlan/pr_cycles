@@ -50,10 +50,9 @@ namespace pragma::asset {class WorldData; class EntityData;};
 #include <pragma/rendering/occlusion_culling/occlusion_culling_handler_bsp.hpp>
 #include <pragma/lua/classes/ldef_entity.h>
 #include <pragma/lua/libraries/lfile.h>
+#include <pragma/lua/c_lentity_handles.hpp>
 #include <util_image_buffer.hpp>
-
-#undef __SCENE_H__
-#include <pragma/rendering/scene/scene.h>
+#include <pragma/entities/components/c_scene_component.hpp>
 
 #include <luainterface.hpp>
 #include <pragma/lua/lua_entity_component.hpp>
@@ -76,6 +75,13 @@ namespace pragma::asset {class WorldData; class EntityData;};
 #include <util_raytracing/model_cache.hpp>
 #include <util_raytracing/color_management.hpp>
 #include <sharedutils/util_path.hpp>
+
+#define ENABLE_BAKE_DEBUGGING_INTERFACE 1
+
+#if ENABLE_BAKE_DEBUGGING_INTERFACE == 1
+#include <wgui/wgui.h>
+#include <wgui/types/wirect.h>
+#endif
 
 #pragma optimize("",off)
 
@@ -200,7 +206,7 @@ struct CameraData
 	float aspectRatio = 0.f;
 };
 static void initialize_cycles_geometry(
-	Scene &gameScene,pragma::modules::cycles::Cache &cache,const std::optional<CameraData> &camData,SceneFlags sceneFlags,
+	pragma::CSceneComponent &gameScene,pragma::modules::cycles::Cache &cache,const std::optional<CameraData> &camData,SceneFlags sceneFlags,
 	const std::function<bool(BaseEntity&)> &entFilter=nullptr,const std::function<bool(BaseEntity&)> &lightFilter=nullptr
 )
 {
@@ -223,13 +229,10 @@ static void initialize_cycles_geometry(
 			return false;
 		if(renderC->IsExemptFromOcclusionCulling())
 			return true;
-		if(renderC->ShouldDraw(camData->position) == false)
+		if(renderC->ShouldDraw() == false)
 			return false;
-		auto sphere = renderC->GetRenderSphereBounds();
-		umath::Transform pose;
-		ent.GetPose(pose);
-		auto pos = pose.GetOrigin();
-		if(Intersection::SphereInPlaneMesh(pos +sphere.pos,sphere.radius,planes,true) == INTERSECT_OUTSIDE)
+		auto sphere = renderC->GetAbsoluteRenderSphere();
+		if(Intersection::SphereInPlaneMesh(sphere.pos,sphere.radius,planes,true) == Intersection::Intersect::Outside)
 			return false;
 		return true;
 		/* // TODO: Take rotation into account
@@ -268,7 +271,7 @@ static void initialize_cycles_geometry(
 	{
 		auto renderC = ent->GetComponent<pragma::CRenderComponent>();
 		auto renderMode = renderC->GetRenderMode();
-		if((renderMode != RenderMode::World && renderMode != RenderMode::Skybox) || (camData.has_value() && renderC->ShouldDraw(camData->position) == false) || (entFilter && entFilter(*ent) == false))
+		if((renderMode != RenderMode::World && renderMode != RenderMode::Skybox) || (camData.has_value() && renderC->ShouldDraw() == false) || (entFilter && entFilter(*ent) == false))
 			continue;
 		std::function<bool(ModelMesh&,const umath::ScaledTransform&)> meshFilter = nullptr;
 		if(renderC->IsExemptFromOcclusionCulling() == false)
@@ -284,7 +287,7 @@ static void initialize_cycles_geometry(
 					max -= center;
 					auto r = umath::max(umath::abs(min.x),umath::abs(min.y),umath::abs(min.z),umath::abs(max.x),umath::abs(max.y),umath::abs(max.z));
 					center += pose.GetOrigin();
-					return (Intersection::SphereInPlaneMesh(center,r,planes) != INTERSECT_OUTSIDE) ? true : false;
+					return (Intersection::SphereInPlaneMesh(center,r,planes) != Intersection::Intersect::Outside) ? true : false;
 				};
 			}
 			if(node)
@@ -345,7 +348,7 @@ static void initialize_cycles_geometry(
 }
 
 static void initialize_cycles_scene_from_game_scene(
-	Scene &gameScene,pragma::modules::cycles::Scene &scene,const Vector3 &camPos,const Quat &camRot,bool equirect,const Mat4 &vp,float nearZ,float farZ,float fov,float aspectRatio,SceneFlags sceneFlags,
+	pragma::CSceneComponent &gameScene,pragma::modules::cycles::Scene &scene,const Vector3 &camPos,const Quat &camRot,bool equirect,const Mat4 &vp,float nearZ,float farZ,float fov,float aspectRatio,SceneFlags sceneFlags,
 	const std::function<bool(BaseEntity&)> &entFilter=nullptr,const std::function<bool(BaseEntity&)> &lightFilter=nullptr
 )
 {
@@ -410,7 +413,7 @@ inline std::function<bool(BaseEntity&)> to_entity_filter(lua_State *l,luabind::o
 }
 
 static void initialize_from_game_scene(
-	lua_State *l,Scene &gameScene,cycles::Scene &scene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,
+	lua_State *l,pragma::CSceneComponent &gameScene,cycles::Scene &scene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,
 	float nearZ,float farZ,float fov,SceneFlags sceneFlags,luabind::object *optEntFilter,luabind::object *optLightFilter
 )
 {
@@ -531,7 +534,7 @@ static raytracing::Socket get_socket(const luabind::object &o)
 	return raytracing::Socket{};
 }
 
-static raytracing::GroupNodeDesc &get_socket_node(lua_State *l,const std::vector<std::reference_wrapper<raytracing::Socket>> &sockets)
+static raytracing::GroupNodeDesc *find_socket_node(lua_State *l,const std::vector<std::reference_wrapper<raytracing::Socket>> &sockets)
 {
 	raytracing::GroupNodeDesc *node = nullptr;
 	for(auto &socket : sockets)
@@ -541,17 +544,27 @@ static raytracing::GroupNodeDesc &get_socket_node(lua_State *l,const std::vector
 		if(node != nullptr)
 			break;
 	}
+	return node;
+}
+static raytracing::GroupNodeDesc &get_socket_node(lua_State *l,const std::vector<std::reference_wrapper<raytracing::Socket>> &sockets)
+{
+	auto *node = find_socket_node(l,sockets);
 	if(node == nullptr)
 		Lua::Error(l,"This operation is only supported for non-concrete socket types!");
 	return *node;
 }
-static raytracing::GroupNodeDesc &get_socket_node(lua_State *l,raytracing::Socket &socket)
+static raytracing::GroupNodeDesc *find_socket_node(lua_State *l,raytracing::Socket &socket)
 {
 	auto *node = socket.GetNode();
 	auto *parent = node ? node->GetParent() : nullptr;
-	if(parent == nullptr)
+	return parent;
+}
+static raytracing::GroupNodeDesc &get_socket_node(lua_State *l,raytracing::Socket &socket)
+{
+	auto *node = find_socket_node(l,socket);
+	if(node == nullptr)
 		Lua::Error(l,"This operation is only supported for non-concrete socket types!");
-	return *parent;
+	return *node;
 }
 
 enum class VectorChannel : uint8_t
@@ -634,6 +647,27 @@ template<ccl::NodeVectorMathType type,bool useVectorOutput=true>
 	return result.GetOutputSocket(raytracing::nodes::vector_math::OUT_VALUE);
 }
 
+static std::array<raytracing::Socket*,3> socket_to_xyz(lua_State *l,raytracing::Socket &socket)
+{
+	auto &node = get_socket_node(l,socket);
+	std::array<raytracing::Socket*,3> socketXyz;
+	if(raytracing::is_vector_type(socket.GetType()))
+	{
+		auto &nodeXyz = node.SeparateRGB(socket);
+		socketXyz = {&nodeXyz.GetOutputSocket(raytracing::nodes::separate_rgb::OUT_R),&nodeXyz.GetOutputSocket(raytracing::nodes::separate_rgb::OUT_G),&nodeXyz.GetOutputSocket(raytracing::nodes::separate_rgb::OUT_B)};
+	}
+	else
+		socketXyz = {&socket,&socket,&socket};
+	return socketXyz;
+}
+
+static raytracing::Socket socket_to_vector(raytracing::GroupNodeDesc &node,raytracing::Socket &socket)
+{
+	if(raytracing::is_vector_type(socket.GetType()))
+		return socket;
+	return node.CombineRGB(socket,socket,socket);
+}
+
 extern "C"
 {
 	PRAGMA_EXPORT void pr_cycles_render_image(
@@ -667,6 +701,19 @@ extern "C"
 			return;
 		scene->SetAOBakeTarget(mdl,materialIndex);
 		scene->Finalize();
+#if ENABLE_BAKE_DEBUGGING_INTERFACE == 1
+		{
+			static std::shared_ptr<pragma::modules::cycles::ProgressiveTexture> prt = nullptr;
+			prt = std::make_shared<pragma::modules::cycles::ProgressiveTexture>();
+			prt->Initialize(**scene);
+			auto el = WGUI::GetInstance().Create<WITexturedRect>();
+			el->SetSize(512,512);
+			el->SetTexture(*prt->GetTexture());
+			el->SetZPos(10000);
+			el->SetName("bake_feedback");
+			
+		}
+#endif
 		outJob = (*scene)->Finalize();
 	}
 	PRAGMA_EXPORT void pr_cycles_bake_ao_ent(
@@ -711,6 +758,20 @@ extern "C"
 		(*scene)->SetSkyAngles(skyAngles);
 		(*scene)->SetSkyStrength(skyStrength);
 		scene->Finalize();
+
+#if ENABLE_BAKE_DEBUGGING_INTERFACE == 1
+		{
+			static std::shared_ptr<pragma::modules::cycles::ProgressiveTexture> prt = nullptr;
+			prt = std::make_shared<pragma::modules::cycles::ProgressiveTexture>();
+			prt->Initialize(**scene);
+			auto el = WGUI::GetInstance().Create<WITexturedRect>();
+			el->SetSize(512,512);
+			el->SetTexture(*prt->GetTexture());
+			el->SetZPos(10000);
+			el->SetName("bake_feedback");
+			
+		}
+#endif
 		
 		if(externalJob)
 		{
@@ -1267,6 +1328,8 @@ extern "C"
 		t["TYPE_CEIL"] = ccl::NodeMathType::NODE_MATH_CEIL;
 		t["TYPE_FRACTION"] = ccl::NodeMathType::NODE_MATH_FRACTION;
 		t["TYPE_SQRT"] = ccl::NodeMathType::NODE_MATH_SQRT;
+#if 0
+		// These were removed from Cycles for some reason?
 		t["TYPE_INV_SQRT"] = ccl::NodeMathType::NODE_MATH_INV_SQRT;
 		t["TYPE_SIGN"] = ccl::NodeMathType::NODE_MATH_SIGN;
 		t["TYPE_EXPONENT"] = ccl::NodeMathType::NODE_MATH_EXPONENT;
@@ -1283,6 +1346,7 @@ extern "C"
 		t["TYPE_PINGPONG"] = ccl::NodeMathType::NODE_MATH_PINGPONG;
 		t["TYPE_SMOOTH_MIN"] = ccl::NodeMathType::NODE_MATH_SMOOTH_MIN;
 		t["TYPE_SMOOTH_MAX"] = ccl::NodeMathType::NODE_MATH_SMOOTH_MAX;
+#endif
 		
 		t = nodeTypeEnums[raytracing::NODE_HSV] = luabind::newtable(l.GetState());
 		t["IN_HUE"] = raytracing::nodes::hsv::IN_HUE;
@@ -1809,6 +1873,7 @@ extern "C"
 			return socket_math_op_unary<ccl::NodeMathType::NODE_MATH_ABSOLUTE>(l,socket);
 		}));
 		defSocket.def("Sqrt",socket_math_op_unary<ccl::NodeMathType::NODE_MATH_SQRT>);
+#if 0
 		defSocket.def("InvSqrt",socket_math_op_unary<ccl::NodeMathType::NODE_MATH_INV_SQRT>);
 		defSocket.def("Sign",socket_math_op_unary<ccl::NodeMathType::NODE_MATH_SIGN>);
 		defSocket.def("Exp",socket_math_op_unary<ccl::NodeMathType::NODE_MATH_EXPONENT>);
@@ -1829,6 +1894,19 @@ extern "C"
 		defSocket.def("Pingpong",socket_math_op<ccl::NodeMathType::NODE_MATH_PINGPONG>);
 		defSocket.def("SmoothMin",socket_math_op_tri<ccl::NodeMathType::NODE_MATH_SMOOTH_MIN>);
 		defSocket.def("SmoothMax",socket_math_op_tri<ccl::NodeMathType::NODE_MATH_SMOOTH_MAX>);
+#endif
+		defSocket.def("Lerp",static_cast<raytracing::Socket(*)(lua_State*,raytracing::Socket&,raytracing::Socket&,raytracing::Socket&)>([](lua_State *l,raytracing::Socket &socket,raytracing::Socket &other,raytracing::Socket &factor) -> raytracing::Socket {
+			auto *node = find_socket_node(l,socket);
+			node = node ? node : find_socket_node(l,other);
+			node = node ? node : &get_socket_node(l,factor);
+			if(raytracing::is_vector_type(socket.GetType()) || raytracing::is_vector_type(other.GetType()) || raytracing::is_vector_type(factor.GetType()))
+				return socket_to_vector(*node,socket) +(socket_to_vector(*node,other) -socket_to_vector(*node,socket)) *socket_to_vector(*node,factor);
+			return socket +(other -socket) *factor;
+		}));
+		defSocket.def("Clamp",static_cast<raytracing::Socket(*)(lua_State*,raytracing::Socket&,luabind::object,luabind::object)>([](lua_State *l,raytracing::Socket &socket,luabind::object min,luabind::object max) -> raytracing::Socket {
+			auto *node = find_socket_node(l,socket);
+			return socket_math_op<ccl::NodeMathType::NODE_MATH_MAXIMUM>(l,socket_math_op<ccl::NodeMathType::NODE_MATH_MINIMUM>(l,socket,min),max);
+		}));
 
 		// Vector operations
 		defSocket.def("Cross",socket_vector_op<ccl::NodeVectorMathType::NODE_VECTOR_MATH_CROSS_PRODUCT>);
@@ -1974,11 +2052,13 @@ extern "C"
 		/*defCache.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,pragma::modules::cycles::Cache&,Scene&,luabind::object,luabind::object)>([](lua_State *l,pragma::modules::cycles::Cache &cache,Scene &gameScene,luabind::object entFilter,luabind::object lightFilter) {
 			initialize_cycles_geometry(const_cast<Scene&>(gameScene),cache,{},SceneFlags::None,to_entity_filter(l,&entFilter,3),to_entity_filter(l,&entFilter,4));
 		}));*/
-		defCache.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,pragma::modules::cycles::Cache&,Scene&,luabind::object)>([](lua_State *l,pragma::modules::cycles::Cache &cache,Scene &gameScene,luabind::object entFilter) {
-			initialize_cycles_geometry(const_cast<Scene&>(gameScene),cache,{},SceneFlags::None,to_entity_filter(l,&entFilter,3),nullptr);
+		defCache.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,pragma::modules::cycles::Cache&,CSceneHandle&,luabind::object)>([](lua_State *l,pragma::modules::cycles::Cache &cache,CSceneHandle &gameScene,luabind::object entFilter) {
+			pragma::Lua::check_component(l,gameScene);
+			initialize_cycles_geometry(*gameScene,cache,{},SceneFlags::None,to_entity_filter(l,&entFilter,3),nullptr);
 		}));
-		defCache.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,pragma::modules::cycles::Cache&,Scene&)>([](lua_State *l,pragma::modules::cycles::Cache &cache,Scene &gameScene) {
-			initialize_cycles_geometry(const_cast<Scene&>(gameScene),cache,{},SceneFlags::None,nullptr,nullptr);
+		defCache.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,pragma::modules::cycles::Cache&,CSceneHandle&)>([](lua_State *l,pragma::modules::cycles::Cache &cache,CSceneHandle &gameScene) {
+			pragma::Lua::check_component(l,gameScene);
+			initialize_cycles_geometry(*gameScene,cache,{},SceneFlags::None,nullptr,nullptr);
 		}));
 		modCycles[defCache];
 
@@ -2008,14 +2088,17 @@ extern "C"
 		defScene.add_static_constant("DENOISE_MODE_FAST",umath::to_integral(raytracing::Scene::DenoiseMode::Fast));
 		defScene.add_static_constant("DENOISE_MODE_DETAILED",umath::to_integral(raytracing::Scene::DenoiseMode::Detailed));
 
-		defScene.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,cycles::Scene&,Scene&,const Vector3&,const Quat&,const Mat4&,float,float,float,uint32_t,luabind::object,luabind::object)>([](lua_State *l,cycles::Scene &scene,Scene &gameScene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,uint32_t sceneFlags,luabind::object entFilter,luabind::object lightFilter) {
-			initialize_from_game_scene(l,gameScene,scene,camPos,camRot,vp,nearZ,farZ,fov,static_cast<SceneFlags>(sceneFlags),&entFilter,&lightFilter);
+		defScene.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,cycles::Scene&,CSceneHandle&,const Vector3&,const Quat&,const Mat4&,float,float,float,uint32_t,luabind::object,luabind::object)>([](lua_State *l,cycles::Scene &scene,CSceneHandle &gameScene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,uint32_t sceneFlags,luabind::object entFilter,luabind::object lightFilter) {
+			pragma::Lua::check_component(l,gameScene);
+			initialize_from_game_scene(l,*gameScene,scene,camPos,camRot,vp,nearZ,farZ,fov,static_cast<SceneFlags>(sceneFlags),&entFilter,&lightFilter);
 		}));
-		defScene.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,cycles::Scene&,Scene&,const Vector3&,const Quat&,const Mat4&,float,float,float,uint32_t,luabind::object)>([](lua_State *l,cycles::Scene &scene,Scene &gameScene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,uint32_t sceneFlags,luabind::object entFilter) {
-			initialize_from_game_scene(l,gameScene,scene,camPos,camRot,vp,nearZ,farZ,fov,static_cast<SceneFlags>(sceneFlags),&entFilter,nullptr);
+		defScene.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,cycles::Scene&,CSceneHandle&,const Vector3&,const Quat&,const Mat4&,float,float,float,uint32_t,luabind::object)>([](lua_State *l,cycles::Scene &scene,CSceneHandle &gameScene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,uint32_t sceneFlags,luabind::object entFilter) {
+			pragma::Lua::check_component(l,gameScene);
+			initialize_from_game_scene(l,*gameScene,scene,camPos,camRot,vp,nearZ,farZ,fov,static_cast<SceneFlags>(sceneFlags),&entFilter,nullptr);
 		}));
-		defScene.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,cycles::Scene&,Scene&,const Vector3&,const Quat&,const Mat4&,float,float,float,uint32_t)>([](lua_State *l,cycles::Scene &scene,Scene &gameScene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,uint32_t sceneFlags) {
-			initialize_from_game_scene(l,gameScene,scene,camPos,camRot,vp,nearZ,farZ,fov,static_cast<SceneFlags>(sceneFlags),nullptr,nullptr);
+		defScene.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,cycles::Scene&,CSceneHandle&,const Vector3&,const Quat&,const Mat4&,float,float,float,uint32_t)>([](lua_State *l,cycles::Scene &scene,CSceneHandle &gameScene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,uint32_t sceneFlags) {
+			pragma::Lua::check_component(l,gameScene);
+			initialize_from_game_scene(l,*gameScene,scene,camPos,camRot,vp,nearZ,farZ,fov,static_cast<SceneFlags>(sceneFlags),nullptr,nullptr);
 		}));
 		defScene.def("SetSky",static_cast<void(*)(lua_State*,cycles::Scene&,const std::string&)>([](lua_State *l,cycles::Scene &scene,const std::string &skyPath) {
 			scene->SetSky(skyPath);

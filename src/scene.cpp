@@ -192,8 +192,7 @@ void cycles::Scene::BuildLightMapObject()
 	{
 		if(hEnt.IsValid() == false || hEnt->GetModel() == nullptr)
 			continue;
-		umath::ScaledTransform t;
-		hEnt->GetPose(t);
+		auto &t = hEnt->GetPose();
 		std::vector<ModelSubMesh*> entMeshes;
 		auto meshes = m_cache->AddEntityMesh(*hEnt.get(),&entMeshes,nullptr,nullptr,"",t);
 		if(meshes.empty() == false)

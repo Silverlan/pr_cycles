@@ -13,7 +13,6 @@
 #include "util_raytracing/shader.hpp"
 #include <sharedutils/functioncallback.h>
 #include <pragma/rendering/c_rendermode.h>
-#include <pragma/rendering/scene/scene.h>
 #include <pragma/entities/environment/c_sky_camera.hpp>
 
 using namespace pragma::modules;
@@ -21,6 +20,8 @@ using namespace pragma::modules;
 #pragma optimize("",off)
 void cycles::Scene::Add3DSkybox(pragma::CSkyCameraComponent &skyCam,const Vector3 &camPos)
 {
+	// TODO
+#if 0
 	auto filteredMeshes = skyCam.GetRenderMeshCollectionHandler().GetOcclusionFilteredMeshes();
 	if(filteredMeshes.empty())
 		return;
@@ -44,19 +45,7 @@ void cycles::Scene::Add3DSkybox(pragma::CSkyCameraComponent &skyCam,const Vector
 		entPos *= scale;
 		obj->SetPos(entPos);
 		obj->SetScale(Vector3{scale,scale,scale});
-#if 0
-		auto entPos = obj->GetPos();
-		obj->SetPos({});
-		auto &mesh = obj->GetMesh();
-		// Move vertices so they are relative to camera
-		for(auto i=decltype(mesh->verts.size()){0u};i<mesh->verts.size();++i)
-		{
-			auto v = entPos +raytracing::Scene::ToPragmaPosition(mesh->verts[i]);
-			v -= posSkyCam;
-			v *= scale;
-			mesh->verts[i] = raytracing::Scene::ToCyclesPosition(v);
-		}
-#endif
 	}
+#endif
 }
 #pragma optimize("",on)

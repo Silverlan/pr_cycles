@@ -342,7 +342,7 @@ std::vector<std::shared_ptr<pragma::modules::cycles::Cache::MeshData>> pragma::m
 		return;
 	}
 #endif
-	auto *mdlC = static_cast<pragma::CModelComponent*>(ent.GetModelComponent().get());
+	auto *mdlC = static_cast<pragma::CModelComponent*>(ent.GetModelComponent());
 	auto mdl = mdlC ? mdlC->GetModel() : nullptr;
 	if(mdl == nullptr)
 		return {};
@@ -383,8 +383,7 @@ std::vector<std::shared_ptr<pragma::modules::cycles::Cache::MeshData>> pragma::m
 		if(skyC.valid())
 		{
 			// Special case
-			umath::ScaledTransform pose;
-			ent.GetPose(pose);
+			auto &pose = ent.GetPose();
 			AddModel(*mdl,name,&ent,pose,ent.GetSkin(),mdlC,animC.get(),meshFilter,[&targetMeshes,&subMeshFilter](ModelSubMesh &mesh,const umath::ScaledTransform &pose) -> bool {
 				if(subMeshFilter && subMeshFilter(mesh,pose) == false)
 					return false;
@@ -457,8 +456,7 @@ raytracing::PObject pragma::modules::cycles::Cache::AddEntity(
 		return nullptr;
 	auto renderMode = m_renderMode;
 	// Create the object using the mesh
-	umath::ScaledTransform t;
-	ent.GetPose(t);
+	auto &t = ent.GetPose();
 	auto o = raytracing::Object::Create(*mesh);
 	if(raytracing::Scene::IsRenderSceneMode(renderMode) || renderMode == raytracing::Scene::RenderMode::BakeDiffuseLighting)
 	{
@@ -632,7 +630,7 @@ std::shared_ptr<pragma::modules::cycles::Cache::MeshData> pragma::modules::cycle
 Material *pragma::modules::cycles::Cache::GetMaterial(BaseEntity &ent,ModelSubMesh &subMesh,uint32_t skinId) const
 {
 	auto mdlC = ent.GetModelComponent();
-	return mdlC.valid() ? GetMaterial(static_cast<pragma::CModelComponent&>(*mdlC),subMesh,skinId) : nullptr;
+	return mdlC ? GetMaterial(static_cast<pragma::CModelComponent&>(*mdlC),subMesh,skinId) : nullptr;
 }
 
 Material *pragma::modules::cycles::Cache::GetMaterial(Model &mdl,ModelSubMesh &subMesh,uint32_t skinId) const
