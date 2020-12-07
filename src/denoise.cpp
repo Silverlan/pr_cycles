@@ -27,8 +27,8 @@ DenoiseWorker::DenoiseWorker(uimg::ImageBuffer &imgBuffer)
 	: m_imgBuffer{imgBuffer.shared_from_this()}
 {
 	AddThread([this]() {
-		raytracing::DenoiseInfo denoiseInfo {};
-		auto success = raytracing::denoise(denoiseInfo,*m_imgBuffer,nullptr,nullptr,[this](float progress) -> bool {
+		unirender::DenoiseInfo denoiseInfo {};
+		auto success = unirender::denoise(denoiseInfo,*m_imgBuffer,nullptr,nullptr,[this](float progress) -> bool {
 			UpdateProgress(progress);
 			return !IsCancelled();
 		});

@@ -51,7 +51,7 @@ void DenoiseTexture::UpdatePendingTiles()
 	}
 }
 
-void DenoiseTexture::AppendTile(raytracing::TileManager::TileData &&tileData)
+void DenoiseTexture::AppendTile(unirender::TileManager::TileData &&tileData)
 {
 	m_tileMutex.lock();
 		m_pendingTiles.push(std::move(tileData));
@@ -67,7 +67,7 @@ void DenoiseTexture::RunDenoise()
 {
 	auto w = m_denoisedImage->GetWidth();
 	auto h = m_denoisedImage->GetHeight();
-	raytracing::DenoiseInfo denoiseInfo {};
+	unirender::DenoiseInfo denoiseInfo {};
 	denoiseInfo.hdr = true;
 	denoiseInfo.width = w;
 	denoiseInfo.height = h;
@@ -89,10 +89,11 @@ ProgressiveTexture::~ProgressiveTexture()
 		m_cbThink.Remove();
 }
 std::shared_ptr<prosper::Texture> ProgressiveTexture::GetTexture() const {return m_texture;}
-void ProgressiveTexture::Initialize(raytracing::Scene &scene)
+void ProgressiveTexture::Initialize(unirender::Renderer &renderer)
 {
-	m_scene = scene.shared_from_this();
-	m_tileSize = scene.GetTileSize();
+	m_renderer = renderer.shared_from_this();
+	auto &scene = m_renderer->GetScene();
+	m_tileSize = m_renderer->GetTileManager().GetTileSize();
 	auto res = scene.GetResolution();
 
 	auto &context = c_engine->GetRenderContext();
@@ -128,15 +129,13 @@ void ProgressiveTexture::Initialize(raytracing::Scene &scene)
 }
 void ProgressiveTexture::Update()
 {
-	if(m_scene.expired())
-		return;
-	auto &scene = *m_scene.lock();
-	auto &tileManager = scene.GetTileManager();
+	auto &scene = m_renderer->GetScene();
+	auto &tileManager = m_renderer->GetTileManager();
 	// We'll wait for all tiles to have at least 1 finished sample before we write the image data, otherwise
 	// the image can look confusing
 	if(tileManager.AllTilesHaveRenderedSamples() == false)
 		return;
-	auto tiles = scene.GetRenderedTileBatch();
+	auto tiles = m_renderer->GetRenderedTileBatch();
 	/*if(m_denoiseTexture->IsDenoisingComplete())
 	{
 		auto imgSrc = m_denoiseTexture->GetDenoisedImageData();

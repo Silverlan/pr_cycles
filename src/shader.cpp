@@ -12,17 +12,17 @@
 
 using namespace pragma::modules::cycles;
 
-void Shader::Initialize(raytracing::NodeManager &nodeManager,BaseEntity *ent,Material &mat)
+void Shader::Initialize(unirender::NodeManager &nodeManager,BaseEntity *ent,Material &mat)
 {
 	m_nodeManager = &nodeManager;
 	m_hEntity = ent ? ent->GetHandle() : EntityHandle{};
 	m_hMaterial = mat.GetHandle();
 }
 
-std::shared_ptr<raytracing::GroupNodeDesc> Shader::InitializeCombinedPass() {return nullptr;}
-std::shared_ptr<raytracing::GroupNodeDesc> Shader::InitializeAlbedoPass() {return nullptr;}
-std::shared_ptr<raytracing::GroupNodeDesc> Shader::InitializeNormalPass() {return nullptr;}
-std::shared_ptr<raytracing::GroupNodeDesc> Shader::InitializeDepthPass() {return nullptr;}
+std::shared_ptr<unirender::GroupNodeDesc> Shader::InitializeCombinedPass() {return nullptr;}
+std::shared_ptr<unirender::GroupNodeDesc> Shader::InitializeAlbedoPass() {return nullptr;}
+std::shared_ptr<unirender::GroupNodeDesc> Shader::InitializeNormalPass() {return nullptr;}
+std::shared_ptr<unirender::GroupNodeDesc> Shader::InitializeDepthPass() {return nullptr;}
 BaseEntity *Shader::GetEntity() const {return m_hEntity.get();}
 Material *Shader::GetMaterial() const {return m_hMaterial.get();}
 
@@ -33,7 +33,7 @@ void ShaderManager::RegisterShader(const std::string &name,luabind::object oClas
 {
 	m_shaders[name] = oClass;
 }
-std::shared_ptr<Shader> ShaderManager::CreateShader(raytracing::NodeManager &nodeManager,const std::string &name,BaseEntity *ent,Material &mat)
+std::shared_ptr<Shader> ShaderManager::CreateShader(unirender::NodeManager &nodeManager,const std::string &name,BaseEntity *ent,Material &mat)
 {
 	auto it = m_shaders.find(name);
 	if(it == m_shaders.end())
@@ -80,31 +80,31 @@ void LuaShader::Initialize(const luabind::object &o)
 {
 	m_baseLuaObj = std::shared_ptr<luabind::object>(new luabind::object(o));
 }
-std::shared_ptr<raytracing::GroupNodeDesc> LuaShader::InitializeCombinedPass()
+std::shared_ptr<unirender::GroupNodeDesc> LuaShader::InitializeCombinedPass()
 {
-	auto desc = raytracing::GroupNodeDesc::Create(*m_nodeManager);
-	auto &nodeOutput = desc->AddNode(raytracing::NODE_OUTPUT);
-	CallLuaMember<void,std::shared_ptr<raytracing::GroupNodeDesc>,std::shared_ptr<raytracing::NodeDesc>>("InitializeCombinedPass",desc,nodeOutput.shared_from_this());
+	auto desc = unirender::GroupNodeDesc::Create(*m_nodeManager);
+	auto &nodeOutput = desc->AddNode(unirender::NODE_OUTPUT);
+	CallLuaMember<void,std::shared_ptr<unirender::GroupNodeDesc>,std::shared_ptr<unirender::NodeDesc>>("InitializeCombinedPass",desc,nodeOutput.shared_from_this());
 	return desc;
 }
-std::shared_ptr<raytracing::GroupNodeDesc> LuaShader::InitializeAlbedoPass()
+std::shared_ptr<unirender::GroupNodeDesc> LuaShader::InitializeAlbedoPass()
 {
-	auto desc = raytracing::GroupNodeDesc::Create(*m_nodeManager);
-	auto &nodeOutput = desc->AddNode(raytracing::NODE_OUTPUT);
-	CallLuaMember<void,std::shared_ptr<raytracing::GroupNodeDesc>,std::shared_ptr<raytracing::NodeDesc>>("InitializeAlbedoPass",desc,nodeOutput.shared_from_this());
+	auto desc = unirender::GroupNodeDesc::Create(*m_nodeManager);
+	auto &nodeOutput = desc->AddNode(unirender::NODE_OUTPUT);
+	CallLuaMember<void,std::shared_ptr<unirender::GroupNodeDesc>,std::shared_ptr<unirender::NodeDesc>>("InitializeAlbedoPass",desc,nodeOutput.shared_from_this());
 	return desc;
 }
-std::shared_ptr<raytracing::GroupNodeDesc> LuaShader::InitializeNormalPass()
+std::shared_ptr<unirender::GroupNodeDesc> LuaShader::InitializeNormalPass()
 {
-	auto desc = raytracing::GroupNodeDesc::Create(*m_nodeManager);
-	auto &nodeOutput = desc->AddNode(raytracing::NODE_OUTPUT);
-	CallLuaMember<void,std::shared_ptr<raytracing::GroupNodeDesc>,std::shared_ptr<raytracing::NodeDesc>>("InitializeNormalPass",desc,nodeOutput.shared_from_this());
+	auto desc = unirender::GroupNodeDesc::Create(*m_nodeManager);
+	auto &nodeOutput = desc->AddNode(unirender::NODE_OUTPUT);
+	CallLuaMember<void,std::shared_ptr<unirender::GroupNodeDesc>,std::shared_ptr<unirender::NodeDesc>>("InitializeNormalPass",desc,nodeOutput.shared_from_this());
 	return desc;
 }
-std::shared_ptr<raytracing::GroupNodeDesc> LuaShader::InitializeDepthPass()
+std::shared_ptr<unirender::GroupNodeDesc> LuaShader::InitializeDepthPass()
 {
-	auto desc = raytracing::GroupNodeDesc::Create(*m_nodeManager);
-	auto &nodeOutput = desc->AddNode(raytracing::NODE_OUTPUT);
-	CallLuaMember<void,std::shared_ptr<raytracing::GroupNodeDesc>,std::shared_ptr<raytracing::NodeDesc>>("InitializeDepthPass",desc,nodeOutput.shared_from_this());
+	auto desc = unirender::GroupNodeDesc::Create(*m_nodeManager);
+	auto &nodeOutput = desc->AddNode(unirender::NODE_OUTPUT);
+	CallLuaMember<void,std::shared_ptr<unirender::GroupNodeDesc>,std::shared_ptr<unirender::NodeDesc>>("InitializeDepthPass",desc,nodeOutput.shared_from_this());
 	return desc;
 }

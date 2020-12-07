@@ -128,7 +128,7 @@ void cycles::Cache::AddParticleSystem(pragma::CParticleSystemComponent &ptc,cons
 		auto ptMeshName = meshName +"_" +std::to_string(i);
 		constexpr uint32_t numVerts = pragma::ShaderParticle2DBase::VERTEX_COUNT;
 		uint32_t numTris = pragma::ShaderParticle2DBase::TRIANGLE_COUNT *2;
-		auto mesh = raytracing::Mesh::Create(ptMeshName,numVerts,numTris);
+		auto mesh = unirender::Mesh::Create(ptMeshName,numVerts,numTris);
 		auto pos = ptc.GetParticlePosition(ptIdx);
 		for(auto vertIdx=decltype(numVerts){0u};vertIdx<numVerts;++vertIdx)
 		{
@@ -150,11 +150,11 @@ void cycles::Cache::AddParticleSystem(pragma::CParticleSystemComponent &ptc,cons
 		if(shader == nullptr)
 			continue;
 #if 0
-		shader->SetFlags(raytracing::Shader::Flags::AdditiveByColor,alphaMode == ParticleAlphaMode::AdditiveByColor);
+		shader->SetFlags(unirender::Shader::Flags::AdditiveByColor,alphaMode == ParticleAlphaMode::AdditiveByColor);
 		shader->SetAlphaMode(AlphaMode::Blend);
-		auto *shaderModAlbedo = dynamic_cast<raytracing::ShaderModuleAlbedo*>(shader.get());
-		auto *shaderModEmission = dynamic_cast<raytracing::ShaderModuleEmission*>(shader.get());
-		auto *shaderModSpriteSheet = dynamic_cast<raytracing::ShaderModuleSpriteSheet*>(shader.get());
+		auto *shaderModAlbedo = dynamic_cast<unirender::ShaderModuleAlbedo*>(shader.get());
+		auto *shaderModEmission = dynamic_cast<unirender::ShaderModuleEmission*>(shader.get());
+		auto *shaderModSpriteSheet = dynamic_cast<unirender::ShaderModuleSpriteSheet*>(shader.get());
 		if(shaderModAlbedo)
 		{
 			if(shaderModSpriteSheet)
@@ -209,7 +209,7 @@ void cycles::Cache::AddParticleSystem(pragma::CParticleSystemComponent &ptc,cons
 		}
 		mesh->AddSubMeshShader(*shader);
 
-		raytracing::Object::Create(*m_rtScene,*mesh);
+		unirender::Object::Create(*m_rtScene,*mesh);
 #endif
 	}
 }

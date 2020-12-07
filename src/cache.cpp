@@ -272,11 +272,11 @@ static std::optional<std::string> prepare_texture(
 	return result;
 }
 
-pragma::modules::cycles::Cache::Cache(raytracing::Scene::RenderMode renderMode)
+pragma::modules::cycles::Cache::Cache(unirender::Scene::RenderMode renderMode)
 	: m_renderMode{renderMode}
 {
-	m_shaderCache = raytracing::ShaderCache::Create();
-	m_mdlCache = raytracing::ModelCache::Create();
+	m_shaderCache = unirender::ShaderCache::Create();
+	m_mdlCache = unirender::ModelCache::Create();
 	m_mdlCache->AddChunk(*m_shaderCache);
 }
 
@@ -348,7 +348,7 @@ std::vector<std::shared_ptr<pragma::modules::cycles::Cache::MeshData>> pragma::m
 		return {};
 	auto animC = ent.GetComponent<CAnimatedComponent>();
 
-	raytracing::PMesh mesh = nullptr;
+	unirender::PMesh mesh = nullptr;
 	auto &mdlName = mdl->GetName();
 	auto shouldCache = false;//true;
 	if(ent.IsWorld())
@@ -441,7 +441,7 @@ std::vector<std::shared_ptr<pragma::modules::cycles::Cache::MeshData>> pragma::m
 	}
 	return meshDatas;
 }
-raytracing::PObject pragma::modules::cycles::Cache::AddEntity(
+unirender::PObject pragma::modules::cycles::Cache::AddEntity(
 	BaseEntity &ent,std::vector<ModelSubMesh*> *optOutTargetMeshes,
 	const std::function<bool(ModelMesh&,const umath::ScaledTransform&)> &meshFilter,const std::function<bool(ModelSubMesh&,const umath::ScaledTransform&)> &subMeshFilter,
 	const std::string &nameSuffix
@@ -457,8 +457,8 @@ raytracing::PObject pragma::modules::cycles::Cache::AddEntity(
 	auto renderMode = m_renderMode;
 	// Create the object using the mesh
 	auto &t = ent.GetPose();
-	auto o = raytracing::Object::Create(*mesh);
-	if(raytracing::Scene::IsRenderSceneMode(renderMode) || renderMode == raytracing::Scene::RenderMode::BakeDiffuseLighting)
+	auto o = unirender::Object::Create(*mesh);
+	if(unirender::Scene::IsRenderSceneMode(renderMode) || renderMode == unirender::Scene::RenderMode::BakeDiffuseLighting)
 	{
 		o->SetPos(t.GetOrigin());
 		o->SetRotation(t.GetRotation());
@@ -494,7 +494,7 @@ std::shared_ptr<pragma::modules::cycles::Cache::MeshData> pragma::modules::cycle
 	for(auto vertIdx=decltype(meshVerts.size()){0u};vertIdx<meshVerts.size();++vertIdx)
 	{
 		auto &v = meshVerts.at(vertIdx);
-		if(raytracing::Scene::IsRenderSceneMode(m_renderMode))
+		if(unirender::Scene::IsRenderSceneMode(m_renderMode))
 		{
 			// TODO: Do we really need the tangent?
 			Vector3 normalOffset {};
@@ -648,7 +648,7 @@ Material *pragma::modules::cycles::Cache::GetMaterial(pragma::CModelComponent &m
 	return texIdx.has_value() ? mdlC.GetRenderMaterial(*texIdx) : nullptr;
 }
 
-raytracing::PShader pragma::modules::cycles::Cache::CreateShader(const std::string &meshName,Model &mdl,ModelSubMesh &subMesh,BaseEntity *optEnt,uint32_t skinId) const
+unirender::PShader pragma::modules::cycles::Cache::CreateShader(const std::string &meshName,Model &mdl,ModelSubMesh &subMesh,BaseEntity *optEnt,uint32_t skinId) const
 {
 	// Make sure all textures have finished loading
 	static_cast<CMaterialManager&>(client->GetMaterialManager()).GetTextureManager().WaitForTextures();
@@ -663,7 +663,7 @@ raytracing::PShader pragma::modules::cycles::Cache::CreateShader(const std::stri
 	return CreateShader(*mat,meshName,shaderInfo);
 }
 
-void pragma::modules::cycles::Cache::AddMesh(Model &mdl,raytracing::Mesh &mesh,ModelSubMesh &mdlMesh,pragma::CModelComponent *optMdlC,pragma::CAnimatedComponent *optAnimC)
+void pragma::modules::cycles::Cache::AddMesh(Model &mdl,unirender::Mesh &mesh,ModelSubMesh &mdlMesh,pragma::CModelComponent *optMdlC,pragma::CAnimatedComponent *optAnimC)
 {
 	auto meshData = CalcMeshData(mdl,mdlMesh,mesh.HasAlphas(),mesh.HasWrinkles(),optMdlC,optAnimC);
 	if(meshData == nullptr)
@@ -671,7 +671,7 @@ void pragma::modules::cycles::Cache::AddMesh(Model &mdl,raytracing::Mesh &mesh,M
 	AddMeshDataToMesh(mesh,*meshData);
 }
 
-raytracing::PMesh pragma::modules::cycles::Cache::BuildMesh(const std::string &meshName,const std::vector<std::shared_ptr<MeshData>> &meshDatas,const std::optional<umath::ScaledTransform> &pose) const
+unirender::PMesh pragma::modules::cycles::Cache::BuildMesh(const std::string &meshName,const std::vector<std::shared_ptr<MeshData>> &meshDatas,const std::optional<umath::ScaledTransform> &pose) const
 {
 	uint64_t numVerts = 0;
 	uint64_t numTris = 0;
@@ -685,19 +685,19 @@ raytracing::PMesh pragma::modules::cycles::Cache::BuildMesh(const std::string &m
 		hasWrinkles = hasWrinkles || meshData->wrinkles.has_value();
 	}
 
-	auto flags = raytracing::Mesh::Flags::None;
+	auto flags = unirender::Mesh::Flags::None;
 	if(hasAlphas)
-		flags |= raytracing::Mesh::Flags::HasAlphas;
+		flags |= unirender::Mesh::Flags::HasAlphas;
 	if(hasWrinkles)
-		flags |= raytracing::Mesh::Flags::HasWrinkles;
-	auto mesh = raytracing::Mesh::Create(meshName,numVerts,numTris /3,flags);
+		flags |= unirender::Mesh::Flags::HasWrinkles;
+	auto mesh = unirender::Mesh::Create(meshName,numVerts,numTris /3,flags);
 	m_mdlCache->GetChunks().front().AddMesh(*mesh);
 	for(auto &meshData : meshDatas)
 		AddMeshDataToMesh(*mesh,*meshData,pose);
 	return mesh;
 }
 
-void pragma::modules::cycles::Cache::AddMeshDataToMesh(raytracing::Mesh &mesh,const MeshData &meshData,const std::optional<umath::ScaledTransform> &pose) const
+void pragma::modules::cycles::Cache::AddMeshDataToMesh(unirender::Mesh &mesh,const MeshData &meshData,const std::optional<umath::ScaledTransform> &pose) const
 {
 	auto triIndexVertexOffset = mesh.GetVertexOffset();
 	auto shaderIdx = mesh.AddSubMeshShader(*meshData.shader);
@@ -724,7 +724,7 @@ void pragma::modules::cycles::Cache::AddMeshDataToMesh(raytracing::Mesh &mesh,co
 	}
 }
 
-void pragma::modules::cycles::Cache::AddAOBakeTarget(BaseEntity *optEnt,Model &mdl,uint32_t matIndex,std::shared_ptr<raytracing::Object> &oAo,std::shared_ptr<raytracing::Object> &oEnv)
+void pragma::modules::cycles::Cache::AddAOBakeTarget(BaseEntity *optEnt,Model &mdl,uint32_t matIndex,std::shared_ptr<unirender::Object> &oAo,std::shared_ptr<unirender::Object> &oEnv)
 {
 	std::vector<std::shared_ptr<MeshData>> materialMeshes;
 	std::vector<std::shared_ptr<MeshData>> envMeshes;
@@ -748,7 +748,7 @@ void pragma::modules::cycles::Cache::AddAOBakeTarget(BaseEntity *optEnt,Model &m
 	// We'll create a separate mesh from all model meshes which use the specified material.
 	// This way we can map the uv coordinates to the ao output texture more easily.
 	auto mesh = BuildMesh("ao_target",materialMeshes);
-	oAo = raytracing::Object::Create(*mesh);
+	oAo = unirender::Object::Create(*mesh);
 	m_mdlCache->GetChunks().front().AddObject(*oAo);
 	
 	oEnv = nullptr;
@@ -761,11 +761,11 @@ void pragma::modules::cycles::Cache::AddAOBakeTarget(BaseEntity *optEnt,Model &m
 	// The actual ao bake target (see code above) has to be the first mesh added to the scene, otherwise the ao result may be incorrect.
 	// The reason for this is currently unknown.
 	auto meshEnv = BuildMesh("ao_mesh",envMeshes);
-	oEnv = raytracing::Object::Create(*meshEnv);
+	oEnv = unirender::Object::Create(*meshEnv);
 	m_mdlCache->GetChunks().front().AddObject(*oEnv);
 }
 
-void pragma::modules::cycles::Cache::AddAOBakeTarget(BaseEntity &ent,uint32_t matIndex,std::shared_ptr<raytracing::Object> &oAo,std::shared_ptr<raytracing::Object> &oEnv)
+void pragma::modules::cycles::Cache::AddAOBakeTarget(BaseEntity &ent,uint32_t matIndex,std::shared_ptr<unirender::Object> &oAo,std::shared_ptr<unirender::Object> &oEnv)
 {
 	auto mdl = ent.GetModel();
 	if(mdl == nullptr)
@@ -773,5 +773,5 @@ void pragma::modules::cycles::Cache::AddAOBakeTarget(BaseEntity &ent,uint32_t ma
 	AddAOBakeTarget(&ent,*mdl,matIndex,oAo,oEnv);
 }
 
-void pragma::modules::cycles::Cache::AddAOBakeTarget(Model &mdl,uint32_t matIndex,std::shared_ptr<raytracing::Object> &oAo,std::shared_ptr<raytracing::Object> &oEnv) {AddAOBakeTarget(nullptr,mdl,matIndex,oAo,oEnv);}
+void pragma::modules::cycles::Cache::AddAOBakeTarget(Model &mdl,uint32_t matIndex,std::shared_ptr<unirender::Object> &oAo,std::shared_ptr<unirender::Object> &oEnv) {AddAOBakeTarget(nullptr,mdl,matIndex,oAo,oEnv);}
 #pragma optimize("",on)
