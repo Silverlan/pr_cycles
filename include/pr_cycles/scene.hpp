@@ -80,13 +80,15 @@ namespace pragma::modules::cycles
 			Model &mdl,const std::string &meshName,BaseEntity *optEnt=nullptr,const std::optional<umath::ScaledTransform> &pose={},uint32_t skinId=0,
 			CModelComponent *optMdlC=nullptr,CAnimatedComponent *optAnimC=nullptr,
 			const std::function<bool(ModelMesh&,const umath::ScaledTransform&)> &optMeshFilter=nullptr,
-			const std::function<bool(ModelSubMesh&,const umath::ScaledTransform&)> &optSubMeshFilter=nullptr
+			const std::function<bool(ModelSubMesh&,const umath::ScaledTransform&)> &optSubMeshFilter=nullptr,
+			const std::function<void(ModelSubMesh&)> &optOnMeshAdded=nullptr
 		);
 		std::vector<std::shared_ptr<MeshData>> AddMeshList(
 			Model &mdl,const std::vector<std::shared_ptr<ModelMesh>> &meshList,const std::string &meshName,BaseEntity *optEnt=nullptr,const std::optional<umath::ScaledTransform> &pose={},uint32_t skinId=0,
 			CModelComponent *optMdlC=nullptr,CAnimatedComponent *optAnimC=nullptr,
 			const std::function<bool(ModelMesh&,const umath::ScaledTransform&)> &optMeshFilter=nullptr,
-			const std::function<bool(ModelSubMesh&,const umath::ScaledTransform&)> &optSubMeshFilter=nullptr
+			const std::function<bool(ModelSubMesh&,const umath::ScaledTransform&)> &optSubMeshFilter=nullptr,
+			const std::function<void(ModelSubMesh&)> &optOnMeshAdded=nullptr
 		);
 		unirender::PMesh BuildMesh(const std::string &meshName,const std::vector<std::shared_ptr<MeshData>> &meshDatas,const std::optional<umath::ScaledTransform> &pose={}) const;
 		void AddAOBakeTarget(BaseEntity &ent,uint32_t matIndex,std::shared_ptr<unirender::Object> &oAo,std::shared_ptr<unirender::Object> &oEnv);

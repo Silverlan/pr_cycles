@@ -168,7 +168,7 @@ pragma::modules::cycles::ShaderManager &pragma::modules::cycles::get_shader_mana
 }
 static std::shared_ptr<cycles::Scene> setup_scene(
 	unirender::Scene::RenderMode renderMode,uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,unirender::Scene::DenoiseMode denoiseMode,
-	unirender::Scene::DeviceType deviceType=unirender::Scene::DeviceType::CPU,const std::optional<unirender::Scene::ColorTransformInfo> &colorTransform={}
+	unirender::Scene::DeviceType deviceType=unirender::Scene::DeviceType::CPU,float exposure=1.f,const std::optional<unirender::Scene::ColorTransformInfo> &colorTransform={}
 )
 {
 	unirender::Scene::CreateInfo createInfo {};
@@ -177,6 +177,7 @@ static std::shared_ptr<cycles::Scene> setup_scene(
 	createInfo.samples = sampleCount;
 	createInfo.deviceType = deviceType;
 	createInfo.colorTransform = colorTransform;
+	createInfo.exposure = exposure;
 	auto scene = unirender::Scene::Create(pragma::modules::cycles::get_node_manager(),renderMode,createInfo);
 	if(scene == nullptr)
 		return nullptr;
@@ -742,16 +743,20 @@ extern "C"
 	PRAGMA_EXPORT void pr_cycles_bake_lightmaps(
 		uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,bool denoise,
 		std::string skyOverride,EulerAngles skyAngles,float skyStrength,bool externalJob,
-		util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> &outJob
+		float exposure,const std::optional<std::string> &colorTransformConfig,const std::optional<std::string> &colorTransformLook,util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> &outJob
 	)
 	{
 		outJob = {};
-		unirender::Scene::ColorTransformInfo colorTransform {};
-		colorTransform.config = "filmic-blender";
-		colorTransform.lookName = "Medium Low Contrast";
+		std::optional<unirender::Scene::ColorTransformInfo> colorTransform {};
+		if(colorTransformConfig.has_value() && colorTransformLook.has_value())
+		{
+			colorTransform = unirender::Scene::ColorTransformInfo{};
+			colorTransform->config = *colorTransformConfig;
+			colorTransform->lookName = *colorTransformLook;
+		}
 		auto scene = setup_scene(
 			unirender::Scene::RenderMode::BakeDiffuseLighting,width,height,sampleCount,hdrOutput,denoise ? unirender::Scene::DenoiseMode::Detailed : unirender::Scene::DenoiseMode::None,
-			unirender::Scene::DeviceType::GPU,colorTransform
+			unirender::Scene::DeviceType::GPU,exposure,colorTransform
 		);
 		if(scene == nullptr)
 			return;

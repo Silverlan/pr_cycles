@@ -284,7 +284,8 @@ std::vector<std::shared_ptr<pragma::modules::cycles::Cache::MeshData>> pragma::m
 	Model &mdl,const std::vector<std::shared_ptr<ModelMesh>> &meshList,const std::string &meshName,BaseEntity *optEnt,const std::optional<umath::ScaledTransform> &opose,uint32_t skinId,
 	pragma::CModelComponent *optMdlC,pragma::CAnimatedComponent *optAnimC,
 	const std::function<bool(ModelMesh&,const umath::ScaledTransform&)> &optMeshFilter,
-	const std::function<bool(ModelSubMesh&,const umath::ScaledTransform&)> &optSubMeshFilter
+	const std::function<bool(ModelSubMesh&,const umath::ScaledTransform&)> &optSubMeshFilter,
+	const std::function<void(ModelSubMesh&)> &optOnMeshAdded
 )
 {
 	auto pose = opose.has_value() ? *opose : umath::ScaledTransform{};
@@ -310,7 +311,10 @@ std::vector<std::shared_ptr<pragma::modules::cycles::Cache::MeshData>> pragma::m
 			}
 			meshData->shader = CreateShader(GetUniqueName(),mdl,*subMesh,optEnt,skinId);
 			if(meshData->shader)
+			{
 				meshDatas.push_back(meshData);
+				optOnMeshAdded(*subMesh);
+			}
 		}
 	}
 	return meshDatas;
@@ -319,14 +323,15 @@ std::vector<std::shared_ptr<pragma::modules::cycles::Cache::MeshData>> pragma::m
 std::vector<std::shared_ptr<pragma::modules::cycles::Cache::MeshData>> pragma::modules::cycles::Cache::AddModel(
 	Model &mdl,const std::string &meshName,BaseEntity *optEnt,const std::optional<umath::ScaledTransform> &pose,uint32_t skinId,
 	pragma::CModelComponent *optMdlC,pragma::CAnimatedComponent *optAnimC,
-	const std::function<bool(ModelMesh&,const umath::ScaledTransform&)> &optMeshFilter,const std::function<bool(ModelSubMesh&,const umath::ScaledTransform&)> &optSubMeshFilter
+	const std::function<bool(ModelMesh&,const umath::ScaledTransform&)> &optMeshFilter,const std::function<bool(ModelSubMesh&,const umath::ScaledTransform&)> &optSubMeshFilter,
+	const std::function<void(ModelSubMesh&)> &optOnMeshAdded
 )
 {
 	std::vector<std::shared_ptr<ModelMesh>> lodMeshes {};
 	std::vector<uint32_t> bodyGroups {};
 	bodyGroups.resize(mdl.GetBodyGroupCount());
 	mdl.GetBodyGroupMeshes(bodyGroups,0,lodMeshes);
-	return AddMeshList(mdl,lodMeshes,meshName,optEnt,pose,skinId,optMdlC,optAnimC,optMeshFilter,optSubMeshFilter);
+	return AddMeshList(mdl,lodMeshes,meshName,optEnt,pose,skinId,optMdlC,optAnimC,optMeshFilter,optSubMeshFilter,optOnMeshAdded);
 }
 
 std::vector<std::shared_ptr<pragma::modules::cycles::Cache::MeshData>> pragma::modules::cycles::Cache::AddEntityMesh(
@@ -413,18 +418,26 @@ std::vector<std::shared_ptr<pragma::modules::cycles::Cache::MeshData>> pragma::m
 			return {};
 		}
 
-		auto fFilterMesh = [&targetMeshes,&subMeshFilter](ModelSubMesh &mesh,const umath::ScaledTransform &pose) -> bool {
-			if(subMeshFilter && subMeshFilter(mesh,pose) == false)
-				return false;
+		auto fFilterMesh = [&subMeshFilter](ModelSubMesh &mesh,const umath::ScaledTransform &pose) -> bool {
+			return !subMeshFilter || subMeshFilter(mesh,pose);
+		};
+		auto fOnMeshAdded = [&targetMeshes](ModelSubMesh &mesh) {
 			targetMeshes->push_back(&mesh);
-			return true;
 		};
 
 		auto renderC = ent.GetComponent<pragma::CRenderComponent>();
 		if(renderC.valid())
-			meshDatas = AddMeshList(*mdl,renderC->GetLODMeshes(),name,&ent,pose,ent.GetSkin(),mdlC,animC.get(),meshFilter,fFilterMesh);
+		{
+			auto &lodGroup = renderC->GetLodMeshGroup(0);
+			auto &lodMeshes = renderC->GetLODMeshes();
+			std::vector<std::shared_ptr<ModelMesh>> meshes;
+			meshes.reserve(lodGroup.second);
+			for(auto meshIdx=lodGroup.first;meshIdx<lodGroup.first +lodGroup.second;++meshIdx)
+				meshes.push_back(lodMeshes.at(meshIdx));
+			meshDatas = AddMeshList(*mdl,lodMeshes,name,&ent,pose,ent.GetSkin(),mdlC,animC.get(),meshFilter,fFilterMesh,fOnMeshAdded);
+		}
 		else
-			meshDatas = AddModel(*mdl,name,&ent,pose,ent.GetSkin(),mdlC,animC.get(),meshFilter,fFilterMesh);
+			meshDatas = AddModel(*mdl,name,&ent,pose,ent.GetSkin(),mdlC,animC.get(),meshFilter,fFilterMesh,fOnMeshAdded);
 		if(meshDatas.empty())
 			return meshDatas;
 	}
