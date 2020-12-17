@@ -214,7 +214,7 @@ static void initialize_cycles_geometry(
 {
 	auto enableFrustumCulling = umath::is_flag_set(sceneFlags,SceneFlags::CullObjectsOutsideCameraFrustum);
 	auto cullObjectsOutsidePvs = umath::is_flag_set(sceneFlags,SceneFlags::CullObjectsOutsidePvs);
-	std::vector<Plane> planes {};
+	std::vector<umath::Plane> planes {};
 	if(camData.has_value())
 	{
 		auto forward = uquat::forward(camData->rotation);
@@ -234,7 +234,7 @@ static void initialize_cycles_geometry(
 		if(renderC->ShouldDraw() == false)
 			return false;
 		auto sphere = renderC->GetAbsoluteRenderSphere();
-		if(Intersection::SphereInPlaneMesh(sphere.pos,sphere.radius,planes,true) == Intersection::Intersect::Outside)
+		if(umath::intersection::sphere_in_plane_mesh(sphere.pos,sphere.radius,planes,true) == umath::intersection::Intersect::Outside)
 			return false;
 		return true;
 		/* // TODO: Take rotation into account
@@ -289,7 +289,7 @@ static void initialize_cycles_geometry(
 					max -= center;
 					auto r = umath::max(umath::abs(min.x),umath::abs(min.y),umath::abs(min.z),umath::abs(max.x),umath::abs(max.y),umath::abs(max.z));
 					center += pose.GetOrigin();
-					return (Intersection::SphereInPlaneMesh(center,r,planes) != Intersection::Intersect::Outside) ? true : false;
+					return (umath::intersection::sphere_in_plane_mesh(center,r,planes) != umath::intersection::Intersect::Outside) ? true : false;
 				};
 			}
 			if(node)
@@ -327,7 +327,7 @@ static void initialize_cycles_geometry(
 						renderC->GetRenderBounds(&min,&max);
 						min += pos;
 						max += pos;
-						return Intersection::AABBAABB(min,max,node->minVisible,node->maxVisible);
+						return umath::intersection::aabb_aabb(min,max,node->minVisible,node->maxVisible);
 					};
 #endif
 				}
@@ -603,7 +603,7 @@ template<VectorChannel channel>
 	);
 }
 
-template<ccl::NodeMathType type>
+template<unirender::nodes::math::MathType type>
 	static unirender::Socket socket_math_op_tri(lua_State *l,unirender::Socket &socket,luabind::object socketOther,luabind::object third)
 {
 	auto &parent = get_socket_node(l,socket);
@@ -615,21 +615,21 @@ template<ccl::NodeMathType type>
 	return *result.GetPrimaryOutputSocket();
 }
 
-template<ccl::NodeMathType type>
+template<unirender::nodes::math::MathType type>
 	static unirender::Socket socket_math_op(lua_State *l,unirender::Socket &socket,luabind::object socketOther)
 {
 	auto &parent = get_socket_node(l,socket);
 	return parent.AddMathNode(socket,get_socket(socketOther),type);
 }
 
-template<ccl::NodeMathType type>
+template<unirender::nodes::math::MathType type>
 	static unirender::Socket socket_math_op_unary(lua_State *l,unirender::Socket &socket)
 {
 	auto &parent = get_socket_node(l,socket);
 	return parent.AddMathNode(socket,{},type);
 }
 
-template<ccl::NodeVectorMathType type,bool useVectorOutput=true>
+template<unirender::nodes::vector_math::MathType type,bool useVectorOutput=true>
 	static unirender::Socket socket_vector_op(lua_State *l,unirender::Socket &socket,luabind::object socketOther)
 {
 	auto &parent = get_socket_node(l,socket);
@@ -639,7 +639,7 @@ template<ccl::NodeVectorMathType type,bool useVectorOutput=true>
 	return result.GetOutputSocket(unirender::nodes::vector_math::OUT_VALUE);
 }
 
-template<ccl::NodeVectorMathType type,bool useVectorOutput=true>
+template<unirender::nodes::vector_math::MathType type,bool useVectorOutput=true>
 	static unirender::Socket socket_vector_op_unary(lua_State *l,unirender::Socket &socket)
 {
 	auto &parent = get_socket_node(l,socket);
@@ -668,6 +668,23 @@ static unirender::Socket socket_to_vector(unirender::GroupNodeDesc &node,unirend
 	if(unirender::is_vector_type(socket.GetType()))
 		return socket;
 	return node.CombineRGB(socket,socket,socket);
+}
+
+#include <sharedutils/util_library.hpp>
+static void test_luxcore(cycles::Scene &scene)
+{
+	std::vector<std::string> additionalSearchDirectories;
+	additionalSearchDirectories.push_back("E:/projects/pragma/build_winx64/output/modules/unirender/luxcorerender/");
+	std::string err;
+	auto lib = util::Library::Load("E:/projects/pragma/build_winx64/output/modules/unirender/luxcorerender/UniRender_LuxCoreRender",additionalSearchDirectories,&err);
+	if(lib == nullptr)
+	{
+		std::cout<<"Err: "<<err<<std::endl;
+		return;
+	}
+	auto *func = lib->FindSymbolAddress<std::shared_ptr<unirender::Renderer>(*)(const unirender::Scene&)>("test_luxcorerender");
+	auto renderer = func(*scene);
+	std::cout<<renderer.get()<<std::endl;
 }
 
 extern "C"
@@ -881,6 +898,7 @@ extern "C"
 			})},
 			{"create_renderer",static_cast<int32_t(*)(lua_State*)>([](lua_State *l) -> int32_t {
 				auto &scene = Lua::Check<cycles::Scene>(l,1);
+				test_luxcore(scene);
 				std::string rendererIdentifier = Lua::CheckString(l,2);
 				if(rendererIdentifier != "cycles") // TODO: Implement this properly!
 					return 0;
@@ -1154,8 +1172,8 @@ extern "C"
 			catch(const unirender::Exception &e) {std::rethrow_exception(std::current_exception());}
 			return {};
 		}));
-		defGroupNode.def("AddMathNode",static_cast<luabind::object(*)(lua_State*,unirender::GroupNodeDesc&,ccl::NodeMathType,luabind::object,luabind::object)>(
-			[](lua_State *l,unirender::GroupNodeDesc &node,ccl::NodeMathType mathOp,luabind::object socket0,luabind::object socket1) -> luabind::object {
+		defGroupNode.def("AddMathNode",static_cast<luabind::object(*)(lua_State*,unirender::GroupNodeDesc&,unirender::nodes::math::MathType,luabind::object,luabind::object)>(
+			[](lua_State *l,unirender::GroupNodeDesc &node,unirender::nodes::math::MathType mathOp,luabind::object socket0,luabind::object socket1) -> luabind::object {
 			try
 			{
 				return luabind::object{l,node.AddMathNode(get_socket(socket0),get_socket(socket1),mathOp)};
@@ -1163,8 +1181,8 @@ extern "C"
 			catch(const unirender::Exception &e) {std::rethrow_exception(std::current_exception());}
 			return {};
 		}));
-		defGroupNode.def("AddVectorMathNode",static_cast<luabind::object(*)(lua_State*,unirender::GroupNodeDesc&,ccl::NodeVectorMathType,luabind::object,luabind::object)>(
-			[](lua_State *l,unirender::GroupNodeDesc &node,ccl::NodeVectorMathType mathOp,luabind::object socket0,luabind::object socket1) -> luabind::object {
+		defGroupNode.def("AddVectorMathNode",static_cast<luabind::object(*)(lua_State*,unirender::GroupNodeDesc&,unirender::nodes::vector_math::MathType,luabind::object,luabind::object)>(
+			[](lua_State *l,unirender::GroupNodeDesc &node,unirender::nodes::vector_math::MathType mathOp,luabind::object socket0,luabind::object socket1) -> luabind::object {
 			try
 			{
 				auto &n = node.AddVectorMathNode(get_socket(socket0),get_socket(socket1),mathOp);
@@ -1874,7 +1892,7 @@ extern "C"
 			auto &parent = get_socket_node(l,std::vector<std::reference_wrapper<unirender::Socket>>{socket,socketOther,fac});
 			return parent.Mix(socket,socketOther,fac);
 		}));
-		defSocket.def("Mix",static_cast<unirender::Socket(*)(lua_State*,unirender::Socket&,luabind::object,luabind::object,ccl::NodeMix)>([](lua_State *l,unirender::Socket &socket,luabind::object oSocketOther,luabind::object oFac,ccl::NodeMix mixType) -> unirender::Socket {
+		defSocket.def("Mix",static_cast<unirender::Socket(*)(lua_State*,unirender::Socket&,luabind::object,luabind::object,unirender::nodes::mix::Mix)>([](lua_State *l,unirender::Socket &socket,luabind::object oSocketOther,luabind::object oFac,unirender::nodes::mix::Mix mixType) -> unirender::Socket {
 			auto socketOther = get_socket(oSocketOther);
 			auto fac = get_socket(oFac);
 			auto &parent = get_socket_node(l,std::vector<std::reference_wrapper<unirender::Socket>>{socket,socketOther,fac});
@@ -1895,67 +1913,67 @@ extern "C"
 		}));
 
 		// Math operations
-		defSocket.def("Sin",socket_math_op_unary<ccl::NodeMathType::NODE_MATH_SINE>);
-		defSocket.def("Cos",socket_math_op_unary<ccl::NodeMathType::NODE_MATH_COSINE>);
-		defSocket.def("Tan",socket_math_op_unary<ccl::NodeMathType::NODE_MATH_TANGENT>);
-		defSocket.def("Asin",socket_math_op_unary<ccl::NodeMathType::NODE_MATH_ARCSINE>);
-		defSocket.def("Acos",socket_math_op_unary<ccl::NodeMathType::NODE_MATH_ARCCOSINE>);
-		defSocket.def("Atan",socket_math_op_unary<ccl::NodeMathType::NODE_MATH_ARCTANGENT>);
-		defSocket.def("Log",socket_math_op<ccl::NodeMathType::NODE_MATH_LOGARITHM>);
+		defSocket.def("Sin",socket_math_op_unary<unirender::nodes::math::MathType::Sine>);
+		defSocket.def("Cos",socket_math_op_unary<unirender::nodes::math::MathType::Cosine>);
+		defSocket.def("Tan",socket_math_op_unary<unirender::nodes::math::MathType::Tangent>);
+		defSocket.def("Asin",socket_math_op_unary<unirender::nodes::math::MathType::ArcSine>);
+		defSocket.def("Acos",socket_math_op_unary<unirender::nodes::math::MathType::ArcCosine>);
+		defSocket.def("Atan",socket_math_op_unary<unirender::nodes::math::MathType::ArcTangent>);
+		defSocket.def("Log",socket_math_op<unirender::nodes::math::MathType::Logarithm>);
 		defSocket.def("Min",static_cast<unirender::Socket(*)(lua_State*,unirender::Socket&,luabind::object)>([](lua_State *l,unirender::Socket &socket,luabind::object socketOther) -> unirender::Socket {
 			if(unirender::is_vector_type(socket.GetType()))
-				return socket_vector_op<ccl::NodeVectorMathType::NODE_VECTOR_MATH_MINIMUM>(l,socket,socketOther);
-			return socket_math_op<ccl::NodeMathType::NODE_MATH_MINIMUM>(l,socket,socketOther);
+				return socket_vector_op<unirender::nodes::vector_math::MathType::Minimum>(l,socket,socketOther);
+			return socket_math_op<unirender::nodes::math::MathType::Minimum>(l,socket,socketOther);
 		}));
 		defSocket.def("Max",static_cast<unirender::Socket(*)(lua_State*,unirender::Socket&,luabind::object)>([](lua_State *l,unirender::Socket &socket,luabind::object socketOther) -> unirender::Socket {
 			if(unirender::is_vector_type(socket.GetType()))
-				return socket_vector_op<ccl::NodeVectorMathType::NODE_VECTOR_MATH_MAXIMUM>(l,socket,socketOther);
-			return socket_math_op<ccl::NodeMathType::NODE_MATH_MAXIMUM>(l,socket,socketOther);
+				return socket_vector_op<unirender::nodes::vector_math::MathType::Maximum>(l,socket,socketOther);
+			return socket_math_op<unirender::nodes::math::MathType::Maximum>(l,socket,socketOther);
 		}));
-		defSocket.def("Round",socket_math_op_unary<ccl::NodeMathType::NODE_MATH_ROUND>);
-		defSocket.def("Atan2",socket_math_op<ccl::NodeMathType::NODE_MATH_ARCTAN2>);
+		defSocket.def("Round",socket_math_op_unary<unirender::nodes::math::MathType::Round>);
+		defSocket.def("Atan2",socket_math_op<unirender::nodes::math::MathType::ArcTan2>);
 		defSocket.def("Floor",static_cast<unirender::Socket(*)(lua_State*,unirender::Socket&)>([](lua_State *l,unirender::Socket &socket) -> unirender::Socket {
 			if(unirender::is_vector_type(socket.GetType()))
-				return socket_vector_op_unary<ccl::NodeVectorMathType::NODE_VECTOR_MATH_FLOOR>(l,socket);
-			return socket_math_op_unary<ccl::NodeMathType::NODE_MATH_FLOOR>(l,socket);
+				return socket_vector_op_unary<unirender::nodes::vector_math::MathType::Floor>(l,socket);
+			return socket_math_op_unary<unirender::nodes::math::MathType::Floor>(l,socket);
 		}));
 		defSocket.def("Ceil",static_cast<unirender::Socket(*)(lua_State*,unirender::Socket&)>([](lua_State *l,unirender::Socket &socket) -> unirender::Socket {
 			if(unirender::is_vector_type(socket.GetType()))
-				return socket_vector_op_unary<ccl::NodeVectorMathType::NODE_VECTOR_MATH_CEIL>(l,socket);
-			return socket_math_op_unary<ccl::NodeMathType::NODE_MATH_CEIL>(l,socket);
+				return socket_vector_op_unary<unirender::nodes::vector_math::MathType::Ceil>(l,socket);
+			return socket_math_op_unary<unirender::nodes::math::MathType::Ceil>(l,socket);
 		}));
 		defSocket.def("Fraction",static_cast<unirender::Socket(*)(lua_State*,unirender::Socket&)>([](lua_State *l,unirender::Socket &socket) -> unirender::Socket {
 			if(unirender::is_vector_type(socket.GetType()))
-				return socket_vector_op_unary<ccl::NodeVectorMathType::NODE_VECTOR_MATH_FRACTION>(l,socket);
-			return socket_math_op_unary<ccl::NodeMathType::NODE_MATH_FRACTION>(l,socket);
+				return socket_vector_op_unary<unirender::nodes::vector_math::MathType::Fraction>(l,socket);
+			return socket_math_op_unary<unirender::nodes::math::MathType::Fraction>(l,socket);
 		}));
 		defSocket.def("Abs",static_cast<unirender::Socket(*)(lua_State*,unirender::Socket&)>([](lua_State *l,unirender::Socket &socket) -> unirender::Socket {
 			if(unirender::is_vector_type(socket.GetType()))
-				return socket_vector_op_unary<ccl::NodeVectorMathType::NODE_VECTOR_MATH_ABSOLUTE>(l,socket);
-			return socket_math_op_unary<ccl::NodeMathType::NODE_MATH_ABSOLUTE>(l,socket);
+				return socket_vector_op_unary<unirender::nodes::vector_math::MathType::Absolute>(l,socket);
+			return socket_math_op_unary<unirender::nodes::math::MathType::Absolute>(l,socket);
 		}));
-		defSocket.def("Sqrt",socket_math_op_unary<ccl::NodeMathType::NODE_MATH_SQRT>);
+		defSocket.def("Sqrt",socket_math_op_unary<unirender::nodes::math::MathType::Sqrt>);
 #if 0
-		defSocket.def("InvSqrt",socket_math_op_unary<ccl::NodeMathType::NODE_MATH_INV_SQRT>);
-		defSocket.def("Sign",socket_math_op_unary<ccl::NodeMathType::NODE_MATH_SIGN>);
-		defSocket.def("Exp",socket_math_op_unary<ccl::NodeMathType::NODE_MATH_EXPONENT>);
-		defSocket.def("Rad",socket_math_op_unary<ccl::NodeMathType::NODE_MATH_RADIANS>);
-		defSocket.def("Deg",socket_math_op_unary<ccl::NodeMathType::NODE_MATH_DEGREES>);
-		defSocket.def("SinH",socket_math_op_unary<ccl::NodeMathType::NODE_MATH_SINH>);
-		defSocket.def("CosH",socket_math_op_unary<ccl::NodeMathType::NODE_MATH_COSH>);
-		defSocket.def("TanH",socket_math_op_unary<ccl::NodeMathType::NODE_MATH_TANH>);
-		defSocket.def("Trunc",socket_math_op_unary<ccl::NodeMathType::NODE_MATH_TRUNC>);
+		defSocket.def("InvSqrt",socket_math_op_unary<unirender::nodes::math::MathType::NODE_MATH_INV_SQRT>);
+		defSocket.def("Sign",socket_math_op_unary<unirender::nodes::math::MathType::NODE_MATH_SIGN>);
+		defSocket.def("Exp",socket_math_op_unary<unirender::nodes::math::MathType::NODE_MATH_EXPONENT>);
+		defSocket.def("Rad",socket_math_op_unary<unirender::nodes::math::MathType::NODE_MATH_RADIANS>);
+		defSocket.def("Deg",socket_math_op_unary<unirender::nodes::math::MathType::NODE_MATH_DEGREES>);
+		defSocket.def("SinH",socket_math_op_unary<unirender::nodes::math::MathType::NODE_MATH_SINH>);
+		defSocket.def("CosH",socket_math_op_unary<unirender::nodes::math::MathType::NODE_MATH_COSH>);
+		defSocket.def("TanH",socket_math_op_unary<unirender::nodes::math::MathType::NODE_MATH_TANH>);
+		defSocket.def("Trunc",socket_math_op_unary<unirender::nodes::math::MathType::NODE_MATH_TRUNC>);
 		defSocket.def("Snap",static_cast<unirender::Socket(*)(lua_State*,unirender::Socket&,luabind::object)>([](lua_State *l,unirender::Socket &socket,luabind::object socketOther) -> unirender::Socket {
 			if(unirender::is_vector_type(socket.GetType()))
-				return socket_vector_op<ccl::NodeVectorMathType::NODE_VECTOR_MATH_SNAP>(l,socket,socketOther);
-			return socket_math_op<ccl::NodeMathType::NODE_MATH_SNAP>(l,socket,socketOther);
+				return socket_vector_op<unirender::nodes::vector_math::MathType::NODE_VECTOR_MATH_SNAP>(l,socket,socketOther);
+			return socket_math_op<unirender::nodes::math::MathType::NODE_MATH_SNAP>(l,socket,socketOther);
 		}));
-		defSocket.def("Wrap",socket_math_op_tri<ccl::NodeMathType::NODE_MATH_WRAP>);
-		defSocket.def("Compare",socket_math_op_tri<ccl::NodeMathType::NODE_MATH_COMPARE>);
-		defSocket.def("MultiplyAdd",socket_math_op_tri<ccl::NodeMathType::NODE_MATH_MULTIPLY_ADD>);
-		defSocket.def("Pingpong",socket_math_op<ccl::NodeMathType::NODE_MATH_PINGPONG>);
-		defSocket.def("SmoothMin",socket_math_op_tri<ccl::NodeMathType::NODE_MATH_SMOOTH_MIN>);
-		defSocket.def("SmoothMax",socket_math_op_tri<ccl::NodeMathType::NODE_MATH_SMOOTH_MAX>);
+		defSocket.def("Wrap",socket_math_op_tri<unirender::nodes::math::MathType::NODE_MATH_WRAP>);
+		defSocket.def("Compare",socket_math_op_tri<unirender::nodes::math::MathType::NODE_MATH_COMPARE>);
+		defSocket.def("MultiplyAdd",socket_math_op_tri<unirender::nodes::math::MathType::NODE_MATH_MULTIPLY_ADD>);
+		defSocket.def("Pingpong",socket_math_op<unirender::nodes::math::MathType::NODE_MATH_PINGPONG>);
+		defSocket.def("SmoothMin",socket_math_op_tri<unirender::nodes::math::MathType::NODE_MATH_SMOOTH_MIN>);
+		defSocket.def("SmoothMax",socket_math_op_tri<unirender::nodes::math::MathType::NODE_MATH_SMOOTH_MAX>);
 #endif
 		defSocket.def("Lerp",static_cast<unirender::Socket(*)(lua_State*,unirender::Socket&,unirender::Socket&,unirender::Socket&)>([](lua_State *l,unirender::Socket &socket,unirender::Socket &other,unirender::Socket &factor) -> unirender::Socket {
 			auto *node = find_socket_node(l,socket);
@@ -1967,31 +1985,31 @@ extern "C"
 		}));
 		defSocket.def("Clamp",static_cast<unirender::Socket(*)(lua_State*,unirender::Socket&,luabind::object,luabind::object)>([](lua_State *l,unirender::Socket &socket,luabind::object min,luabind::object max) -> unirender::Socket {
 			auto *node = find_socket_node(l,socket);
-			return socket_math_op<ccl::NodeMathType::NODE_MATH_MAXIMUM>(l,socket_math_op<ccl::NodeMathType::NODE_MATH_MINIMUM>(l,socket,min),max);
+			return socket_math_op<unirender::nodes::math::MathType::Maximum>(l,socket_math_op<unirender::nodes::math::MathType::Minimum>(l,socket,min),max);
 		}));
 
 		// Vector operations
-		defSocket.def("Cross",socket_vector_op<ccl::NodeVectorMathType::NODE_VECTOR_MATH_CROSS_PRODUCT>);
-		defSocket.def("Project",socket_vector_op<ccl::NodeVectorMathType::NODE_VECTOR_MATH_PROJECT>);
-		defSocket.def("Reflect",socket_vector_op<ccl::NodeVectorMathType::NODE_VECTOR_MATH_REFLECT>);
-		defSocket.def("DotProduct",socket_vector_op<ccl::NodeVectorMathType::NODE_VECTOR_MATH_DOT_PRODUCT,false>);
-		defSocket.def("Distance",socket_vector_op<ccl::NodeVectorMathType::NODE_VECTOR_MATH_DISTANCE,false>);
-		defSocket.def("Length",socket_vector_op_unary<ccl::NodeVectorMathType::NODE_VECTOR_MATH_LENGTH,false>);
+		defSocket.def("Cross",socket_vector_op<unirender::nodes::vector_math::MathType::CrossProduct>);
+		defSocket.def("Project",socket_vector_op<unirender::nodes::vector_math::MathType::Project>);
+		defSocket.def("Reflect",socket_vector_op<unirender::nodes::vector_math::MathType::Reflect>);
+		defSocket.def("DotProduct",socket_vector_op<unirender::nodes::vector_math::MathType::DotProduct,false>);
+		defSocket.def("Distance",socket_vector_op<unirender::nodes::vector_math::MathType::Distance,false>);
+		defSocket.def("Length",socket_vector_op_unary<unirender::nodes::vector_math::MathType::Length,false>);
 		defSocket.def("Scale",static_cast<unirender::Socket(*)(lua_State*,unirender::Socket&,luabind::object)>([](lua_State *l,unirender::Socket &socket,luabind::object scale) {
 			auto &parent = get_socket_node(l,socket);
-			auto &result = parent.AddVectorMathNode(socket,{},ccl::NodeVectorMathType::NODE_VECTOR_MATH_SCALE);
+			auto &result = parent.AddVectorMathNode(socket,{},unirender::nodes::vector_math::MathType::Scale);
 			parent.Link(get_socket(scale),result.GetInputSocket(unirender::nodes::vector_math::IN_SCALE));
 			return *result.GetPrimaryOutputSocket();
 		}));
-		defSocket.def("Normalize",socket_vector_op_unary<ccl::NodeVectorMathType::NODE_VECTOR_MATH_NORMALIZE>);
+		defSocket.def("Normalize",socket_vector_op_unary<unirender::nodes::vector_math::MathType::Normalize>);
 		// These are already defined above (since they have both float and vector variants)
-		// defSocket.def("Snap",socket_vector_op<ccl::NodeVectorMathType::NODE_VECTOR_MATH_SNAP>);
-		// defSocket.def("Min",socket_vector_op<ccl::NodeVectorMathType::NODE_VECTOR_MATH_MINIMUM>);
-		// defSocket.def("Max",socket_vector_op<ccl::NodeVectorMathType::NODE_VECTOR_MATH_MAXIMUM>);
-		// defSocket.def("Floor",socket_vector_op_unary<ccl::NodeVectorMathType::NODE_VECTOR_MATH_FLOOR>);
-		// defSocket.def("Ceil",socket_vector_op_unary<ccl::NodeVectorMathType::NODE_VECTOR_MATH_CEIL>);
-		// defSocket.def("Fraction",socket_vector_op_unary<ccl::NodeVectorMathType::NODE_VECTOR_MATH_FRACTION>);
-		// defSocket.def("Abs",socket_vector_op_unary<ccl::NodeVectorMathType::NODE_VECTOR_MATH_ABSOLUTE>);
+		// defSocket.def("Snap",socket_vector_op<unirender::nodes::vector_math::MathType::NODE_VECTOR_MATH_SNAP>);
+		// defSocket.def("Min",socket_vector_op<unirender::nodes::vector_math::MathType::NODE_VECTOR_MATH_MINIMUM>);
+		// defSocket.def("Max",socket_vector_op<unirender::nodes::vector_math::MathType::NODE_VECTOR_MATH_MAXIMUM>);
+		// defSocket.def("Floor",socket_vector_op_unary<unirender::nodes::vector_math::MathType::NODE_VECTOR_MATH_FLOOR>);
+		// defSocket.def("Ceil",socket_vector_op_unary<unirender::nodes::vector_math::MathType::NODE_VECTOR_MATH_CEIL>);
+		// defSocket.def("Fraction",socket_vector_op_unary<unirender::nodes::vector_math::MathType::NODE_VECTOR_MATH_FRACTION>);
+		// defSocket.def("Abs",socket_vector_op_unary<unirender::nodes::vector_math::MathType::NODE_VECTOR_MATH_ABSOLUTE>);
 		modCycles[defSocket];
 
 		auto defSceneObject = luabind::class_<unirender::SceneObject>("SceneObject");

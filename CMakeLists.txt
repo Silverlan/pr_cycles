@@ -117,10 +117,10 @@ if(WIN32)
 		${DEPENDENCY_OPENEXR_ILM_IMF_UTIL}
 		${DEPENDENCY_OPENEXR_ILM_THREAD}
 		${DEPENDENCY_OPENEXR_IMATH}
-		${DEPENDENCY_BOOST_LIBRARY_LOCATION}/libboost_filesystem-vc141-mt-x64-1_69.lib
-		${DEPENDENCY_BOOST_LIBRARY_LOCATION}/libboost_date_time-vc141-mt-x64-1_69.lib
-		${DEPENDENCY_BOOST_LIBRARY_LOCATION}/libboost_thread-vc141-mt-x64-1_69.lib
-		${DEPENDENCY_BOOST_LIBRARY_LOCATION}/libboost_chrono-vc141-mt-x64-1_69.lib
-		${DEPENDENCY_BOOST_LIBRARY_LOCATION}/libboost_regex-vc141-mt-x64-1_69.lib
+		${DEPENDENCY_BOOST_LIBRARY_LOCATION}/libboost_filesystem-vc142-mt-x64-1_72.lib
+		${DEPENDENCY_BOOST_LIBRARY_LOCATION}/libboost_date_time-vc142-mt-x64-1_72.lib
+		${DEPENDENCY_BOOST_LIBRARY_LOCATION}/libboost_thread-vc142-mt-x64-1_72.lib
+		${DEPENDENCY_BOOST_LIBRARY_LOCATION}/libboost_chrono-vc142-mt-x64-1_72.lib
+		${DEPENDENCY_BOOST_LIBRARY_LOCATION}/libboost_regex-vc142-mt-x64-1_72.lib
 	)
 endif()
