@@ -22,17 +22,22 @@ namespace pragma::modules::cycles
 	{
 	public:
 		virtual ~Shader()=default;
-		void Initialize(unirender::NodeManager &nodeManager,BaseEntity *ent,Material &mat);
+		virtual void Initialize(unirender::NodeManager &nodeManager,BaseEntity *ent,Material &mat);
 		virtual std::shared_ptr<unirender::GroupNodeDesc> InitializeCombinedPass();
 		virtual std::shared_ptr<unirender::GroupNodeDesc> InitializeAlbedoPass();
 		virtual std::shared_ptr<unirender::GroupNodeDesc> InitializeNormalPass();
 		virtual std::shared_ptr<unirender::GroupNodeDesc> InitializeDepthPass();
+
+		void SetHairConfig(const unirender::HairConfig &hairConfig) {m_hairConfig = hairConfig;}
+		void ClearHairConfig() {m_hairConfig = {};}
+		const std::optional<unirender::HairConfig> &GetHairConfig() const {return m_hairConfig;}
 
 		BaseEntity *GetEntity() const;
 		Material *GetMaterial() const;
 	protected:
 		Shader()=default;
 		unirender::NodeManager *m_nodeManager = nullptr;
+		std::optional<unirender::HairConfig> m_hairConfig {};
 	private:
 		mutable EntityHandle m_hEntity {};
 		mutable MaterialHandle m_hMaterial {};
@@ -62,7 +67,10 @@ namespace pragma::modules::cycles
 	{
 	public:
 		void Initialize(const luabind::object &o);
-		using Shader::Initialize;
+		virtual void Initialize(unirender::NodeManager &nodeManager,BaseEntity *ent,Material &mat) override;
+
+		void Lua_Initialize() {}
+		static void Lua_default_Initialize(lua_State *l,LuaShader &shader) {}
 
 		void Lua_InitializeCombinedPass(unirender::GroupNodeDesc &desc,unirender::NodeDesc &outputNode) {}
 		static void Lua_default_InitializeCombinedPass(lua_State *l,LuaShader &shader,unirender::GroupNodeDesc &desc,unirender::NodeDesc &outputNode) {(&shader)->Shader::InitializeCombinedPass();}

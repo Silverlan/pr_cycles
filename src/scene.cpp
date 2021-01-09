@@ -269,6 +269,10 @@ unirender::PShader cycles::Cache::CreateShader(Material &mat,const std::string &
 	auto rtShader = unirender::Shader::Create<unirender::GenericShader>();
 	m_rtShaderToShader[rtShader.get()] = shader;
 
+	auto &hairConfig = shader->GetHairConfig();
+	if(hairConfig.has_value())
+		rtShader->SetHairConfig(*hairConfig);
+
 	rtShader->combinedPass = shader->InitializeCombinedPass();
 	rtShader->albedoPass = shader->InitializeAlbedoPass();
 	rtShader->normalPass = shader->InitializeNormalPass();

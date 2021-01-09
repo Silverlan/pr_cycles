@@ -65,6 +65,7 @@ namespace pragma::asset {class WorldData; class EntityData;};
 
 #include <sharedutils/datastream.h>
 #include <sharedutils/util.h>
+#include <sharedutils/util_library.hpp>
 #include "pr_cycles/scene.hpp"
 #include <util_raytracing/shader.hpp>
 #include <util_raytracing/camera.hpp>
@@ -670,23 +671,6 @@ static unirender::Socket socket_to_vector(unirender::GroupNodeDesc &node,unirend
 	return node.CombineRGB(socket,socket,socket);
 }
 
-#include <sharedutils/util_library.hpp>
-static void test_luxcore(cycles::Scene &scene)
-{
-	std::vector<std::string> additionalSearchDirectories;
-	additionalSearchDirectories.push_back("E:/projects/pragma/build_winx64/output/modules/unirender/luxcorerender/");
-	std::string err;
-	auto lib = util::Library::Load("E:/projects/pragma/build_winx64/output/modules/unirender/luxcorerender/UniRender_LuxCoreRender",additionalSearchDirectories,&err);
-	if(lib == nullptr)
-	{
-		std::cout<<"Err: "<<err<<std::endl;
-		return;
-	}
-	auto *func = lib->FindSymbolAddress<std::shared_ptr<unirender::Renderer>(*)(const unirender::Scene&)>("test_luxcorerender");
-	auto renderer = func(*scene);
-	std::cout<<renderer.get()<<std::endl;
-}
-
 extern "C"
 {
 	PRAGMA_EXPORT void pr_cycles_render_image(
@@ -844,7 +828,7 @@ extern "C"
 
 	void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 	{
-		auto &modCycles = l.RegisterLibrary("cycles",std::unordered_map<std::string,int32_t(*)(lua_State*)>{
+		auto &modCycles = l.RegisterLibrary("unirender",std::unordered_map<std::string,int32_t(*)(lua_State*)>{
 			{"create_scene",static_cast<int32_t(*)(lua_State*)>([](lua_State *l) -> int32_t {
 				auto renderMode = static_cast<unirender::Scene::RenderMode>(Lua::CheckInt(l,1));
 				auto &createInfo = Lua::Check<unirender::Scene::CreateInfo>(l,2);
@@ -898,11 +882,25 @@ extern "C"
 			})},
 			{"create_renderer",static_cast<int32_t(*)(lua_State*)>([](lua_State *l) -> int32_t {
 				auto &scene = Lua::Check<cycles::Scene>(l,1);
-				test_luxcore(scene);
 				std::string rendererIdentifier = Lua::CheckString(l,2);
-				if(rendererIdentifier != "cycles") // TODO: Implement this properly!
-					return 0;
-				auto renderer = unirender::cycles::Renderer::Create(*scene);
+				unirender::PRenderer renderer = nullptr;
+				if(rendererIdentifier == "luxcorerender")
+				{
+					// TODO: Implement this properly!
+					std::vector<std::string> additionalSearchDirectories;
+					additionalSearchDirectories.push_back("E:/projects/pragma/build_winx64/output/modules/unirender/luxcorerender/");
+					std::string err;
+					static auto lib = util::Library::Load("E:/projects/pragma/build_winx64/output/modules/unirender/luxcorerender/UniRender_LuxCoreRender",additionalSearchDirectories,&err);
+					if(lib == nullptr)
+					{
+						std::cout<<"Err: "<<err<<std::endl;
+						return 0;
+					}
+					auto *func = lib->FindSymbolAddress<std::shared_ptr<unirender::Renderer>(*)(const unirender::Scene&)>("test_luxcorerender");
+					renderer = func(*scene);
+				}
+				else
+					renderer = unirender::cycles::Renderer::Create(*scene);
 				if(renderer == nullptr)
 					return 0;
 				Lua::Push<std::shared_ptr<pragma::modules::cycles::Renderer>>(l,std::make_shared<pragma::modules::cycles::Renderer>(scene,*renderer));
@@ -1363,9 +1361,9 @@ extern "C"
 			{"NODE_LAYER_WEIGHT",unirender::NODE_LAYER_WEIGHT}
 		};
 		static_assert(unirender::NODE_COUNT == 35,"Increase this number if new node types are added!");
-		Lua::RegisterLibraryValues<std::string>(l.GetState(),"cycles",nodeTypes);
+		Lua::RegisterLibraryValues<std::string>(l.GetState(),"unirender",nodeTypes);
 
-		Lua::RegisterLibraryValues<uint32_t>(l.GetState(),"cycles",{
+		Lua::RegisterLibraryValues<uint32_t>(l.GetState(),"unirender",{
 			{"SUBSURFACE_SCATTERING_METHOD_CUBIC",ccl::ClosureType::CLOSURE_BSSRDF_CUBIC_ID},
 			{"SUBSURFACE_SCATTERING_METHOD_GAUSSIAN",ccl::ClosureType::CLOSURE_BSSRDF_GAUSSIAN_ID},
 			{"SUBSURFACE_SCATTERING_METHOD_PRINCIPLED",ccl::ClosureType::CLOSURE_BSSRDF_PRINCIPLED_ID},
@@ -1740,10 +1738,11 @@ extern "C"
 		t["OUT_FACING"] = unirender::nodes::layer_weight::OUT_FACING;
 
 		static_assert(unirender::NODE_COUNT == 35,"Increase this number if new node types are added!");
-		Lua::RegisterLibraryValues<luabind::object>(l.GetState(),"cycles.Node",nodeTypeEnums);
+		Lua::RegisterLibraryValues<luabind::object>(l.GetState(),"unirender.Node",nodeTypeEnums);
 
 		auto defShader = luabind::class_<pragma::modules::cycles::LuaShader>("Shader");
 		defShader.def(luabind::constructor<>());
+		defShader.def("Initialize",&pragma::modules::cycles::LuaShader::Lua_Initialize,&pragma::modules::cycles::LuaShader::Lua_default_Initialize);
 		defShader.def("InitializeCombinedPass",&pragma::modules::cycles::LuaShader::Lua_InitializeCombinedPass,&pragma::modules::cycles::LuaShader::Lua_default_InitializeCombinedPass);
 		defShader.def("InitializeAlbedoPass",&pragma::modules::cycles::LuaShader::Lua_InitializeAlbedoPass,&pragma::modules::cycles::LuaShader::Lua_default_InitializeAlbedoPass);
 		defShader.def("InitializeNormalPass",&pragma::modules::cycles::LuaShader::Lua_InitializeNormalPass,&pragma::modules::cycles::LuaShader::Lua_default_InitializeNormalPass);
@@ -1765,6 +1764,29 @@ extern "C"
 			auto res = pragma::modules::cycles::prepare_texture(texturePath,defaultTexture);
 			return res.has_value() ? luabind::object{l,*res} : luabind::object{};
 		}));
+		defShader.def("ClearHairConfig",static_cast<void(*)(lua_State*,pragma::modules::cycles::LuaShader&)>([](lua_State *l,pragma::modules::cycles::LuaShader &shader) {
+			shader.ClearHairConfig();
+		}));
+		defShader.def("GetHairConfig",static_cast<luabind::object(*)(lua_State*,pragma::modules::cycles::LuaShader&)>([](lua_State *l,pragma::modules::cycles::LuaShader &shader) -> luabind::object {
+			auto hairConfig = shader.GetHairConfig();
+			if(hairConfig.has_value() == false)
+				return {};
+			return luabind::object{l,*hairConfig};
+		}));
+		defShader.def("SetHairConfig",static_cast<void(*)(lua_State*,pragma::modules::cycles::LuaShader&,const unirender::HairConfig&)>([](lua_State *l,pragma::modules::cycles::LuaShader &shader,const unirender::HairConfig &hairConfig) {
+			shader.SetHairConfig(hairConfig);
+		}));
+
+		auto defHairConfig = luabind::class_<unirender::HairConfig>("HairConfig");
+		defHairConfig.def(luabind::constructor<>());
+		defHairConfig.def_readwrite("numSegments",&unirender::HairConfig::numSegments);
+		defHairConfig.def_readwrite("hairPerSquareMeter",&unirender::HairConfig::hairPerSquareMeter);
+		defHairConfig.def_readwrite("defaultThickness",&unirender::HairConfig::defaultThickness);
+		defHairConfig.def_readwrite("defaultLength",&unirender::HairConfig::defaultLength);
+		defHairConfig.def_readwrite("defaultHairStrength",&unirender::HairConfig::defaultHairStrength);
+		defHairConfig.def_readwrite("randomHairLengthFactor",&unirender::HairConfig::randomHairLengthFactor);
+		defShader.scope[defHairConfig];
+
 		modCycles[defShader];
 
 		auto defSocket = luabind::class_<unirender::Socket>("Socket");
@@ -2316,7 +2338,7 @@ extern "C"
 
 		modCycles[defScene];
 #if 0
-		auto &modConvert = l.RegisterLibrary("cycles",std::unordered_map<std::string,int32_t(*)(lua_State*)>{
+		auto &modConvert = l.RegisterLibrary("unirender",std::unordered_map<std::string,int32_t(*)(lua_State*)>{
 			{"render_image",static_cast<int32_t(*)(lua_State*)>([](lua_State *l) -> int32_t {
 
 				pr_cycles_render_image(width,height,sampleCount,hdrOutput,denoise,camPos,camRot,nearZ,farZ,fov,entFilter,outputHandler,outScene);

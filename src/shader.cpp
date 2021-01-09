@@ -80,6 +80,11 @@ void LuaShader::Initialize(const luabind::object &o)
 {
 	m_baseLuaObj = std::shared_ptr<luabind::object>(new luabind::object(o));
 }
+void LuaShader::Initialize(unirender::NodeManager &nodeManager,BaseEntity *ent,Material &mat)
+{
+	Shader::Initialize(nodeManager,ent,mat);
+	CallLuaMember<void>("Initialize");
+}
 std::shared_ptr<unirender::GroupNodeDesc> LuaShader::InitializeCombinedPass()
 {
 	auto desc = unirender::GroupNodeDesc::Create(*m_nodeManager);
