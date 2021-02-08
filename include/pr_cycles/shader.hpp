@@ -53,6 +53,7 @@ namespace pragma::modules::cycles
 		ShaderManager &operator=(const ShaderManager&)=delete;
 
 		void RegisterShader(const std::string &name,luabind::object oClass);
+		bool IsShaderRegistered(const std::string &name) const {return m_shaders.find(name) != m_shaders.end();}
 		std::shared_ptr<Shader> CreateShader(unirender::NodeManager &nodeManager,const std::string &name,BaseEntity *ent,Material &mat);
 	private:
 		ShaderManager()=default;

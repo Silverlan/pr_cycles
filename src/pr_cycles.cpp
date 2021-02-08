@@ -234,7 +234,7 @@ static void initialize_cycles_geometry(
 			return true;
 		if(renderC->ShouldDraw() == false)
 			return false;
-		auto sphere = renderC->GetAbsoluteRenderSphere();
+		auto sphere = renderC->GetUpdatedAbsoluteRenderSphere();
 		if(umath::intersection::sphere_in_plane_mesh(sphere.pos,sphere.radius,planes,true) == umath::intersection::Intersect::Outside)
 			return false;
 		return true;
@@ -886,11 +886,13 @@ extern "C"
 				unirender::PRenderer renderer = nullptr;
 				if(rendererIdentifier == "luxcorerender")
 				{
+					auto moduleLocation = util::Path::CreatePath(util::get_program_path());
+					moduleLocation += "modules/unirender/luxcorerender/";
 					// TODO: Implement this properly!
 					std::vector<std::string> additionalSearchDirectories;
-					additionalSearchDirectories.push_back("E:/projects/pragma/build_winx64/output/modules/unirender/luxcorerender/");
+					additionalSearchDirectories.push_back(moduleLocation.GetString());
 					std::string err;
-					static auto lib = util::Library::Load("E:/projects/pragma/build_winx64/output/modules/unirender/luxcorerender/UniRender_LuxCoreRender",additionalSearchDirectories,&err);
+					static auto lib = util::Library::Load(moduleLocation.GetString() +"UniRender_LuxCoreRender",additionalSearchDirectories,&err);
 					if(lib == nullptr)
 					{
 						std::cout<<"Err: "<<err<<std::endl;

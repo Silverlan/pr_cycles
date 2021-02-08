@@ -351,6 +351,7 @@ std::vector<std::shared_ptr<pragma::modules::cycles::Cache::MeshData>> pragma::m
 	auto mdl = mdlC ? mdlC->GetModel() : nullptr;
 	if(mdl == nullptr)
 		return {};
+	mdlC->UpdateLOD(0u);
 	auto animC = ent.GetComponent<CAnimatedComponent>();
 
 	unirender::PMesh mesh = nullptr;
