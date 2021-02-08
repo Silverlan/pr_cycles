@@ -18,7 +18,7 @@ namespace pragma::asset {class WorldData; class EntityData;};
 #include <pragma/game/c_game.h>
 #include <datasystem_vector.h>
 
-extern DLLCENGINE CEngine *c_engine;
+extern DLLCLIENT CEngine *c_engine;
 extern DLLCLIENT CGame *c_game;
 
 using namespace pragma::modules;

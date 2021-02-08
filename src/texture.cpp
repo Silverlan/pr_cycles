@@ -20,7 +20,7 @@
 #include <pragma/rendering/shaders/particles/c_shader_particle.hpp>
 #include <util_texture_info.hpp>
 
-extern DLLCENGINE CEngine *c_engine;
+extern DLLCLIENT CEngine *c_engine;
 extern DLLCLIENT ClientState *client;
 extern DLLCLIENT CGame *c_game;
 

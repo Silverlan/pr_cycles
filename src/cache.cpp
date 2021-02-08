@@ -36,7 +36,7 @@
 #include <util_texture_info.hpp>
 
 #pragma optimize("",off)
-extern DLLCENGINE CEngine *c_engine;
+extern DLLCLIENT CEngine *c_engine;
 extern DLLCLIENT ClientState *client;
 extern DLLCLIENT CGame *c_game;
 

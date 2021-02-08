@@ -65,7 +65,7 @@ using namespace pragma::modules;
 
 #pragma optimize("",off)
 
-extern DLLCENGINE CEngine *c_engine;
+extern DLLCLIENT CEngine *c_engine;
 extern DLLCLIENT CGame *c_game;
 
 cycles::Scene::Scene(unirender::Scene &rtScene)
