@@ -192,7 +192,7 @@ void cycles::Scene::BuildLightMapObject()
 	if(m_lightMapTargets.empty())
 		return;
 	std::vector<ModelSubMesh*> targetMeshes {};
-	std::vector<std::shared_ptr<pragma::modules::cycles::Cache::MeshData>> meshDatas;
+	std::vector<std::shared_ptr<unirender::MeshData>> meshDatas;
 	for(auto &hEnt : m_lightMapTargets)
 	{
 		if(hEnt.IsValid() == false || hEnt->GetModel() == nullptr)
@@ -230,21 +230,14 @@ void cycles::Scene::BuildLightMapObject()
 	size_t uvOffset = 0;
 	for(auto *subMesh : targetMeshes)
 	{
-		auto &tris = subMesh->GetTriangles();
+		auto &verts = subMesh->GetVertices();
 		auto *uvSet = subMesh->GetUVSet("lightmap");
 		if(uvSet)
 		{
-			for(auto i=decltype(tris.size()){0u};i<tris.size();i+=3)
-			{
-				auto idx0 = tris.at(i);
-				auto idx1 = tris.at(i +1);
-				auto idx2 = tris.at(i +2);
-				cclLightmapUvs.at(uvOffset +i) = uvSet->at(idx0);
-				cclLightmapUvs.at(uvOffset +i +1) = uvSet->at(idx1);
-				cclLightmapUvs.at(uvOffset +i +2) = uvSet->at(idx2);
-			}
+			for(auto i=decltype(verts.size()){0u};i<verts.size();++i)
+				cclLightmapUvs.at(uvOffset +i) = uvSet->at(i);
 		}
-		uvOffset += tris.size();
+		uvOffset += verts.size();
 	}
 	mesh->SetLightmapUVs(std::move(cclLightmapUvs));
 	m_rtScene->SetAOBakeTarget(*o);

@@ -52,6 +52,7 @@ namespace pragma::asset {class WorldData; class EntityData;};
 #include <pragma/lua/classes/ldef_entity.h>
 #include <pragma/lua/libraries/lfile.h>
 #include <pragma/lua/c_lentity_handles.hpp>
+#include <pragma/rendering/raytracing/cycles.hpp>
 #include <util_image_buffer.hpp>
 #include <pragma/entities/components/c_scene_component.hpp>
 
@@ -168,7 +169,7 @@ pragma::modules::cycles::ShaderManager &pragma::modules::cycles::get_shader_mana
 	return *g_shaderManager;
 }
 static std::shared_ptr<cycles::Scene> setup_scene(
-	unirender::Scene::RenderMode renderMode,uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,unirender::Scene::DenoiseMode denoiseMode,
+	unirender::Scene::RenderMode renderMode,uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,unirender::Scene::DenoiseMode denoiseMode,const std::optional<std::string> &renderer,
 	unirender::Scene::DeviceType deviceType=unirender::Scene::DeviceType::CPU,float exposure=1.f,const std::optional<unirender::Scene::ColorTransformInfo> &colorTransform={}
 )
 {
@@ -179,6 +180,8 @@ static std::shared_ptr<cycles::Scene> setup_scene(
 	createInfo.deviceType = deviceType;
 	createInfo.colorTransform = colorTransform;
 	createInfo.exposure = exposure;
+	if(renderer.has_value())
+		createInfo.renderer = *renderer;
 	auto scene = unirender::Scene::Create(pragma::modules::cycles::get_node_manager(),renderMode,createInfo);
 	if(scene == nullptr)
 		return nullptr;
@@ -210,7 +213,7 @@ struct CameraData
 };
 static void initialize_cycles_geometry(
 	pragma::CSceneComponent &gameScene,pragma::modules::cycles::Cache &cache,const std::optional<CameraData> &camData,SceneFlags sceneFlags,
-	const std::function<bool(BaseEntity&)> &entFilter=nullptr,const std::function<bool(BaseEntity&)> &lightFilter=nullptr
+	const std::function<bool(BaseEntity&)> &entFilter=nullptr,const std::function<bool(BaseEntity&)> &lightFilter=nullptr,const std::vector<BaseEntity*> *entityList=nullptr
 )
 {
 	auto enableFrustumCulling = umath::is_flag_set(sceneFlags,SceneFlags::CullObjectsOutsideCameraFrustum);
@@ -265,17 +268,10 @@ static void initialize_cycles_geometry(
 		}
 	}
 
-	// All entities
-	EntityIterator entIt {*c_game};
-	entIt.AttachFilter<TEntityIteratorFilterComponent<pragma::CRenderComponent>>();
-	entIt.AttachFilter<TEntityIteratorFilterComponent<pragma::CModelComponent>>();
-	entIt.AttachFilter<EntityIteratorFilterUser>(entSceneFilter);
-	for(auto *ent : entIt)
-	{
+	auto fAddEntity = [enableFrustumCulling,&planes,node,&bspTree,&cache](BaseEntity *ent) {
 		auto renderC = ent->GetComponent<pragma::CRenderComponent>();
-		auto renderMode = renderC->GetRenderMode();
-		if((renderMode != RenderMode::World && renderMode != RenderMode::Skybox) || (camData.has_value() && renderC->ShouldDraw() == false) || (entFilter && entFilter(*ent) == false))
-			continue;
+		if(renderC.expired())
+			return;
 		std::function<bool(ModelMesh&,const umath::ScaledTransform&)> meshFilter = nullptr;
 		if(renderC->IsExemptFromOcclusionCulling() == false)
 		{
@@ -335,6 +331,28 @@ static void initialize_cycles_geometry(
 			}
 		}
 		cache.AddEntity(*ent,nullptr,meshFilter);
+	};
+
+	if(entityList)
+	{
+		for(auto *ent : *entityList)
+			fAddEntity(ent);
+	}
+	else
+	{
+		// All entities
+		EntityIterator entIt {*c_game};
+		entIt.AttachFilter<TEntityIteratorFilterComponent<pragma::CRenderComponent>>();
+		entIt.AttachFilter<TEntityIteratorFilterComponent<pragma::CModelComponent>>();
+		entIt.AttachFilter<EntityIteratorFilterUser>(entSceneFilter);
+		for(auto *ent : entIt)
+		{
+			auto renderC = ent->GetComponent<pragma::CRenderComponent>();
+			auto renderMode = renderC->GetRenderMode();
+			if((renderMode != RenderMode::World && renderMode != RenderMode::Skybox) || (camData.has_value() && renderC->ShouldDraw() == false) || (entFilter && entFilter(*ent) == false))
+				continue;
+			fAddEntity(ent);
+		}
 	}
 
 	// Particle Systems
@@ -352,7 +370,7 @@ static void initialize_cycles_geometry(
 
 static void initialize_cycles_scene_from_game_scene(
 	pragma::CSceneComponent &gameScene,pragma::modules::cycles::Scene &scene,const Vector3 &camPos,const Quat &camRot,bool equirect,const Mat4 &vp,float nearZ,float farZ,float fov,float aspectRatio,SceneFlags sceneFlags,
-	const std::function<bool(BaseEntity&)> &entFilter=nullptr,const std::function<bool(BaseEntity&)> &lightFilter=nullptr
+	const std::function<bool(BaseEntity&)> &entFilter=nullptr,const std::function<bool(BaseEntity&)> &lightFilter=nullptr,const std::vector<BaseEntity*> *entityList=nullptr
 )
 {
 	CameraData camData {};
@@ -363,7 +381,7 @@ static void initialize_cycles_scene_from_game_scene(
 	camData.farZ = farZ;
 	camData.fov = fov;
 	camData.aspectRatio = aspectRatio;
-	initialize_cycles_geometry(gameScene,scene.GetCache(),camData,sceneFlags,entFilter,lightFilter);
+	initialize_cycles_geometry(gameScene,scene.GetCache(),camData,sceneFlags,entFilter,lightFilter,entityList);
 	setup_light_sources(scene,[&gameScene,&lightFilter](BaseEntity &ent) -> bool {
 		if(static_cast<CBaseEntity&>(ent).IsInScene(gameScene) == false)
 			return false;
@@ -373,8 +391,8 @@ static void initialize_cycles_scene_from_game_scene(
 	auto &cam = scene->GetCamera();
 	cam.SetPos(camPos);
 	cam.SetRotation(camRot);
-	cam.SetNearZ(unirender::Scene::ToCyclesLength(nearZ));
-	cam.SetFarZ(unirender::Scene::ToCyclesLength(farZ));
+	cam.SetNearZ(util::pragma::units_to_metres(nearZ));
+	cam.SetFarZ(util::pragma::units_to_metres(farZ));
 	cam.SetFOV(fov);
 
 	if(equirect)
@@ -671,38 +689,59 @@ static unirender::Socket socket_to_vector(unirender::GroupNodeDesc &node,unirend
 	return node.CombineRGB(socket,socket,socket);
 }
 
+static std::shared_ptr<cycles::Scene> setup_scene(unirender::Scene::RenderMode renderMode,const pragma::rendering::cycles::SceneInfo &renderImageSettings)
+{
+	std::optional<unirender::Scene::ColorTransformInfo> colorTransform {};
+	if(renderImageSettings.colorTransform.has_value())
+	{
+		colorTransform = unirender::Scene::ColorTransformInfo{};
+		colorTransform->config = renderImageSettings.colorTransform->config;
+		colorTransform->lookName = renderImageSettings.colorTransform->look;
+	}
+	auto eDeviceType = (renderImageSettings.device == pragma::rendering::cycles::SceneInfo::DeviceType::GPU) ? unirender::Scene::DeviceType::GPU : unirender::Scene::DeviceType::CPU;
+	auto scene = setup_scene(
+		renderMode,renderImageSettings.width,renderImageSettings.height,
+		renderImageSettings.samples,renderImageSettings.hdrOutput,renderImageSettings.denoise ? unirender::Scene::DenoiseMode::Detailed : unirender::Scene::DenoiseMode::None,
+		renderImageSettings.renderer,eDeviceType,renderImageSettings.exposure,colorTransform
+	);
+	if(scene == nullptr)
+		return nullptr;
+	(*scene)->SetLightIntensityFactor(renderImageSettings.globalLightIntensityFactor);
+	if(renderImageSettings.sky.empty() == false)
+		(*scene)->SetSky(renderImageSettings.sky);
+	(*scene)->SetSkyAngles(renderImageSettings.skyAngles);
+	(*scene)->SetSkyStrength(renderImageSettings.skyStrength);
+	return scene;
+}
+
 extern "C"
 {
 	PRAGMA_EXPORT void pr_cycles_render_image(
-		uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,bool denoise,
-		const Vector3 &camPos,const Quat &camRot,bool equirect,const Mat4 &vp,float nearZ,float farZ,umath::Degree fov,
-		SceneFlags sceneFlags,std::string skyOverride,EulerAngles skyAngles,float skyStrength,
-		float maxTransparencyBounces,const std::function<bool(BaseEntity&)> &entFilter,util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> &outJob
+		const pragma::rendering::cycles::SceneInfo &renderImageSettings,const pragma::rendering::cycles::RenderImageInfo &renderImageInfo,const std::function<bool(BaseEntity&)> &entFilter,util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> &outJob
 	)
 	{
 		outJob = {};
-		auto scene = setup_scene(unirender::Scene::RenderMode::RenderImage,width,height,sampleCount,hdrOutput,denoise ? unirender::Scene::DenoiseMode::Detailed : unirender::Scene::DenoiseMode::None);
+		auto scene = setup_scene(unirender::Scene::RenderMode::RenderImage,renderImageSettings);
 		if(scene == nullptr)
 			return;
-		auto aspectRatio = width /static_cast<float>(height);
-		initialize_cycles_scene_from_game_scene(*c_game->GetScene(),*scene,camPos,camRot,equirect,vp,nearZ,farZ,fov,aspectRatio,sceneFlags,entFilter);
+		auto aspectRatio = renderImageSettings.width /static_cast<float>(renderImageSettings.height);
+		initialize_cycles_scene_from_game_scene(
+			*c_game->GetScene(),*scene,renderImageInfo.camPose.GetOrigin(),renderImageInfo.camPose.GetRotation(),
+			renderImageInfo.equirectPanorama,renderImageInfo.viewProjectionMatrix,renderImageInfo.nearZ,renderImageInfo.farZ,renderImageInfo.fov,aspectRatio,static_cast<SceneFlags>(renderImageSettings.sceneFlags),entFilter,
+			nullptr,renderImageInfo.entityList
+		);
 		scene->Finalize();
-		if(skyOverride.empty() == false)
-			(*scene)->SetSky(skyOverride);
-		(*scene)->SetSkyAngles(skyAngles);
-		(*scene)->SetSkyStrength(skyStrength);
-		auto renderer = unirender::cycles::Renderer::Create(**scene);
+		auto renderer = unirender::Renderer::Create(**scene,renderImageSettings.renderer);
 		if(renderer == nullptr)
 			return;
 		outJob = renderer->StartRender();
 	}
 	PRAGMA_EXPORT void pr_cycles_bake_ao(
-		Model &mdl,uint32_t materialIndex,uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,bool denoise,const std::string &deviceType,util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> &outJob
+		const pragma::rendering::cycles::SceneInfo &renderImageSettings,Model &mdl,uint32_t materialIndex,util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> &outJob
 	)
 	{
 		outJob = {};
-		auto eDeviceType = ustring::compare(deviceType,"gpu",false) ? unirender::Scene::DeviceType::GPU : unirender::Scene::DeviceType::CPU;
-		auto scene = setup_scene(unirender::Scene::RenderMode::BakeAmbientOcclusion,width,height,sampleCount,hdrOutput,denoise ? unirender::Scene::DenoiseMode::Detailed : unirender::Scene::DenoiseMode::None,eDeviceType);
+		auto scene = setup_scene(unirender::Scene::RenderMode::BakeAmbientOcclusion,renderImageSettings);
 		if(scene == nullptr)
 			return;
 		scene->SetAOBakeTarget(mdl,materialIndex);
@@ -726,12 +765,11 @@ extern "C"
 		outJob = renderer->StartRender();
 	}
 	PRAGMA_EXPORT void pr_cycles_bake_ao_ent(
-		BaseEntity &ent,uint32_t materialIndex,uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,bool denoise,const std::string &deviceType,util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> &outJob
+		const pragma::rendering::cycles::SceneInfo &renderImageSettings,BaseEntity &ent,uint32_t materialIndex,util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> &outJob
 	)
 	{
 		outJob = {};
-		auto eDeviceType = ustring::compare(deviceType,"gpu",false) ? unirender::Scene::DeviceType::GPU : unirender::Scene::DeviceType::CPU;
-		auto scene = setup_scene(unirender::Scene::RenderMode::BakeAmbientOcclusion,width,height,sampleCount,hdrOutput,denoise ? unirender::Scene::DenoiseMode::Detailed : unirender::Scene::DenoiseMode::None,eDeviceType);
+		auto scene = setup_scene(unirender::Scene::RenderMode::BakeAmbientOcclusion,renderImageSettings);
 		if(scene == nullptr)
 			return;
 		scene->SetAOBakeTarget(ent,materialIndex);
@@ -741,24 +779,10 @@ extern "C"
 			return;
 		outJob = renderer->StartRender();
 	}
-	PRAGMA_EXPORT void pr_cycles_bake_lightmaps(
-		uint32_t width,uint32_t height,uint32_t sampleCount,bool hdrOutput,bool denoise,
-		std::string skyOverride,EulerAngles skyAngles,float skyStrength,bool externalJob,
-		float exposure,const std::optional<std::string> &colorTransformConfig,const std::optional<std::string> &colorTransformLook,util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> &outJob
-	)
+	PRAGMA_EXPORT void pr_cycles_bake_lightmaps(const pragma::rendering::cycles::SceneInfo &renderImageSettings,util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> &outJob)
 	{
 		outJob = {};
-		std::optional<unirender::Scene::ColorTransformInfo> colorTransform {};
-		if(colorTransformConfig.has_value() && colorTransformLook.has_value())
-		{
-			colorTransform = unirender::Scene::ColorTransformInfo{};
-			colorTransform->config = *colorTransformConfig;
-			colorTransform->lookName = *colorTransformLook;
-		}
-		auto scene = setup_scene(
-			unirender::Scene::RenderMode::BakeDiffuseLighting,width,height,sampleCount,hdrOutput,denoise ? unirender::Scene::DenoiseMode::Detailed : unirender::Scene::DenoiseMode::None,
-			unirender::Scene::DeviceType::GPU,exposure,colorTransform
-		);
+		auto scene = setup_scene(unirender::Scene::RenderMode::BakeDiffuseLighting,renderImageSettings);
 		if(scene == nullptr)
 			return;
 		auto &gameScene = *c_game->GetScene();
@@ -769,13 +793,9 @@ extern "C"
 		entIt.AttachFilter<TEntityIteratorFilterComponent<pragma::CLightMapReceiverComponent>>();
 		for(auto *ent : entIt)
 			scene->AddLightmapBakeTarget(*ent);
-		if(skyOverride.empty() == false)
-			(*scene)->SetSky(skyOverride);
-		(*scene)->SetSkyAngles(skyAngles);
-		(*scene)->SetSkyStrength(skyStrength);
 		scene->Finalize();
 		
-		if(externalJob)
+		if(renderImageSettings.renderJob)
 		{
 			std::string path = "render/lightmaps/";
 			auto fileName = path +"lightmap.prt";
@@ -794,7 +814,7 @@ extern "C"
 		}
 		else
 		{
-			auto renderer = unirender::cycles::Renderer::Create(**scene);
+			auto renderer = unirender::Renderer::Create(**scene,renderImageSettings.renderer);
 			if(renderer == nullptr)
 				return;
 #if ENABLE_BAKE_DEBUGGING_INTERFACE == 1
@@ -817,6 +837,7 @@ extern "C"
 	bool PRAGMA_EXPORT pragma_attach(std::string &errMsg)
 	{
 		unirender::Scene::SetKernelPath(util::get_program_path() +"/modules/cycles");
+		unirender::set_module_lookup_location("modules/unirender/");
 		return true;
 	}
 
@@ -860,7 +881,7 @@ extern "C"
 					deviceType = static_cast<unirender::Scene::DeviceType>(Lua::CheckInt(l,6));
 				auto hdrOutput = false;
 				auto denoise = true;
-				auto scene = setup_scene(unirender::Scene::RenderMode::BakeAmbientOcclusion,width,height,sampleCount,hdrOutput,denoise ? unirender::Scene::DenoiseMode::Detailed : unirender::Scene::DenoiseMode::None,deviceType);
+				auto scene = setup_scene(unirender::Scene::RenderMode::BakeAmbientOcclusion,width,height,sampleCount,hdrOutput,denoise ? unirender::Scene::DenoiseMode::Detailed : unirender::Scene::DenoiseMode::None,{},deviceType);
 				if(scene == nullptr)
 					return 0;
 				scene->SetAOBakeTarget(mdl,materialIndex);
@@ -883,30 +904,34 @@ extern "C"
 			{"create_renderer",static_cast<int32_t(*)(lua_State*)>([](lua_State *l) -> int32_t {
 				auto &scene = Lua::Check<cycles::Scene>(l,1);
 				std::string rendererIdentifier = Lua::CheckString(l,2);
-				unirender::PRenderer renderer = nullptr;
-				if(rendererIdentifier == "luxcorerender")
-				{
-					auto moduleLocation = util::Path::CreatePath(util::get_program_path());
-					moduleLocation += "modules/unirender/luxcorerender/";
-					// TODO: Implement this properly!
-					std::vector<std::string> additionalSearchDirectories;
-					additionalSearchDirectories.push_back(moduleLocation.GetString());
-					std::string err;
-					static auto lib = util::Library::Load(moduleLocation.GetString() +"UniRender_LuxCoreRender",additionalSearchDirectories,&err);
-					if(lib == nullptr)
-					{
-						std::cout<<"Err: "<<err<<std::endl;
-						return 0;
-					}
-					auto *func = lib->FindSymbolAddress<std::shared_ptr<unirender::Renderer>(*)(const unirender::Scene&)>("test_luxcorerender");
-					renderer = func(*scene);
-				}
-				else
-					renderer = unirender::cycles::Renderer::Create(*scene);
+				auto renderer = unirender::Renderer::Create(*scene,rendererIdentifier);
 				if(renderer == nullptr)
 					return 0;
 				Lua::Push<std::shared_ptr<pragma::modules::cycles::Renderer>>(l,std::make_shared<pragma::modules::cycles::Renderer>(scene,*renderer));
 				return 1;
+			})},
+			{"get_texture_path",static_cast<int32_t(*)(lua_State*)>([](lua_State *l) -> int32_t {
+				std::string texturePath = Lua::CheckString(l,1);
+				auto res = pragma::modules::cycles::prepare_texture(texturePath);
+				auto o = res.has_value() ? luabind::object{l,*res} : luabind::object{};
+				o.push(l);
+				return 1;
+			})},
+			{"get_texture_path",static_cast<int32_t(*)(lua_State*)>([](lua_State *l) -> int32_t {
+				std::string texturePath = Lua::CheckString(l,1);
+				std::string defaultTexture = Lua::CheckString(l,2);
+				auto res = pragma::modules::cycles::prepare_texture(texturePath,defaultTexture);
+				auto o = res.has_value() ? luabind::object{l,*res} : luabind::object{};
+				o.push(l);
+				return 1;
+			})},
+			{"set_log_enabled",static_cast<int32_t(*)(lua_State*)>([](lua_State *l) -> int32_t {
+				auto enabled = Lua::CheckBool(l,1);
+				if(enabled)
+					unirender::set_log_handler([](const std::string &msg) {Con::cout<<"Unirender: "<<msg<<Con::endl;});
+				else
+					unirender::set_log_handler();
+				return 0;
 			})},
 #if 0
 			{"apply_color_transform",static_cast<int32_t(*)(lua_State*)>([](lua_State *l) -> int32_t {
@@ -1335,6 +1360,7 @@ extern "C"
 			{"NODE_GEOMETRY",unirender::NODE_GEOMETRY},
 			{"NODE_CAMERA_INFO",unirender::NODE_CAMERA_INFO},
 			{"NODE_IMAGE_TEXTURE",unirender::NODE_IMAGE_TEXTURE},
+			{"NODE_NORMAL_TEXTURE",unirender::NODE_NORMAL_TEXTURE},
 			{"NODE_ENVIRONMENT_TEXTURE",unirender::NODE_ENVIRONMENT_TEXTURE},
 			{"NODE_MIX_CLOSURE",unirender::NODE_MIX_CLOSURE},
 			{"NODE_ADD_CLOSURE",unirender::NODE_ADD_CLOSURE},
@@ -1362,7 +1388,7 @@ extern "C"
 			{"NODE_RGB_RAMP",unirender::NODE_RGB_RAMP},
 			{"NODE_LAYER_WEIGHT",unirender::NODE_LAYER_WEIGHT}
 		};
-		static_assert(unirender::NODE_COUNT == 35,"Increase this number if new node types are added!");
+		static_assert(unirender::NODE_COUNT == 36,"Increase this number if new node types are added!");
 		Lua::RegisterLibraryValues<std::string>(l.GetState(),"unirender",nodeTypes);
 
 		Lua::RegisterLibraryValues<uint32_t>(l.GetState(),"unirender",{
@@ -1493,6 +1519,11 @@ extern "C"
 		t["TEXTURE_TYPE_NON_COLOR_IMAGE"] = umath::to_integral(unirender::TextureType::NonColorImage);
 		t["TEXTURE_TYPE_NORMAL_MAP"] = umath::to_integral(unirender::TextureType::NormalMap);
 		static_assert(umath::to_integral(unirender::TextureType::Count) == 4);
+		
+		t = nodeTypeEnums[unirender::NODE_NORMAL_TEXTURE] = luabind::newtable(l.GetState());
+		t["IN_FILENAME"] = unirender::nodes::normal_texture::IN_FILENAME;
+		t["IN_STRENGTH"] = unirender::nodes::normal_texture::IN_STRENGTH;
+		t["OUT_NORMAL"] = unirender::nodes::normal_texture::OUT_NORMAL;
 		
 		t = nodeTypeEnums[unirender::NODE_ENVIRONMENT_TEXTURE] = luabind::newtable(l.GetState());
 		t["IN_FILENAME"] = unirender::nodes::environment_texture::IN_FILENAME;
@@ -1739,7 +1770,7 @@ extern "C"
 		t["OUT_FRESNEL"] = unirender::nodes::layer_weight::OUT_FRESNEL;
 		t["OUT_FACING"] = unirender::nodes::layer_weight::OUT_FACING;
 
-		static_assert(unirender::NODE_COUNT == 35,"Increase this number if new node types are added!");
+		static_assert(unirender::NODE_COUNT == 36,"Increase this number if new node types are added!");
 		Lua::RegisterLibraryValues<luabind::object>(l.GetState(),"unirender.Node",nodeTypeEnums);
 
 		auto defShader = luabind::class_<pragma::modules::cycles::LuaShader>("Shader");
@@ -1757,14 +1788,6 @@ extern "C"
 		}));
 		defShader.def("GetMaterial",static_cast<Material*(*)(lua_State*,pragma::modules::cycles::LuaShader&)>([](lua_State *l,pragma::modules::cycles::LuaShader &shader) -> Material* {
 			return shader.GetMaterial();
-		}));
-		defShader.def("PrepareTexture",static_cast<luabind::object(*)(lua_State*,pragma::modules::cycles::LuaShader&,const std::string&)>([](lua_State *l,pragma::modules::cycles::LuaShader &shader,const std::string &texturePath) -> luabind::object {
-			auto res = pragma::modules::cycles::prepare_texture(texturePath);
-			return res.has_value() ? luabind::object{l,*res} : luabind::object{};
-		}));
-		defShader.def("PrepareTexture",static_cast<luabind::object(*)(lua_State*,pragma::modules::cycles::LuaShader&,const std::string&,const std::string&)>([](lua_State *l,pragma::modules::cycles::LuaShader &shader,const std::string &texturePath,const std::string &defaultTexture) -> luabind::object {
-			auto res = pragma::modules::cycles::prepare_texture(texturePath,defaultTexture);
-			return res.has_value() ? luabind::object{l,*res} : luabind::object{};
 		}));
 		defShader.def("ClearHairConfig",static_cast<void(*)(lua_State*,pragma::modules::cycles::LuaShader&)>([](lua_State *l,pragma::modules::cycles::LuaShader &shader) {
 			shader.ClearHairConfig();
@@ -1855,7 +1878,6 @@ extern "C"
 		defSocket.add_static_constant("TYPE_COLOR_ARRAY",umath::to_integral(unirender::SocketType::ColorArray));
 		defSocket.add_static_constant("TYPE_COUNT",umath::to_integral(unirender::SocketType::Count));
 		static_assert(umath::to_integral(unirender::SocketType::Count) == 16);
-		defSocket.def(tostring(luabind::self));
 		defSocket.def("GetNode",static_cast<luabind::object(*)(lua_State*,unirender::Socket&)>([](lua_State *l,unirender::Socket &socket) -> luabind::object {
 			auto *node = socket.GetNode();
 			if(node == nullptr)
@@ -2181,6 +2203,31 @@ extern "C"
 		defScene.add_static_constant("RENDER_MODE_NORMALS",umath::to_integral(unirender::Scene::RenderMode::SceneNormals));
 		defScene.add_static_constant("RENDER_MODE_DEPTH",umath::to_integral(unirender::Scene::RenderMode::SceneDepth));
 
+		defScene.add_static_constant("RENDER_MODE_ALPHA",umath::to_integral(unirender::Scene::RenderMode::Alpha));
+		defScene.add_static_constant("RENDER_MODE_GEOMETRY_NORMAL",umath::to_integral(unirender::Scene::RenderMode::GeometryNormal));
+		defScene.add_static_constant("RENDER_MODE_SHADING_NORMAL",umath::to_integral(unirender::Scene::RenderMode::ShadingNormal));
+		defScene.add_static_constant("RENDER_MODE_DIRECT_DIFFUSE",umath::to_integral(unirender::Scene::RenderMode::DirectDiffuse));
+		defScene.add_static_constant("RENDER_MODE_DIRECT_DIFFUSE_REFLECT",umath::to_integral(unirender::Scene::RenderMode::DirectDiffuseReflect));
+		defScene.add_static_constant("RENDER_MODE_DIRECT_DIFFUSE_TRANSMIT",umath::to_integral(unirender::Scene::RenderMode::DirectDiffuseTransmit));
+		defScene.add_static_constant("RENDER_MODE_DIRECT_GLOSSY",umath::to_integral(unirender::Scene::RenderMode::DirectGlossy));
+		defScene.add_static_constant("RENDER_MODE_DIRECT_GLOSSY_REFLECT",umath::to_integral(unirender::Scene::RenderMode::DirectGlossyReflect));
+		defScene.add_static_constant("RENDER_MODE_DIRECT_GLOSSY_TRANSMIT",umath::to_integral(unirender::Scene::RenderMode::DirectGlossyTransmit));
+		defScene.add_static_constant("RENDER_MODE_EMISSION",umath::to_integral(unirender::Scene::RenderMode::Emission));
+		defScene.add_static_constant("RENDER_MODE_INDIRECT_DIFFUSE",umath::to_integral(unirender::Scene::RenderMode::IndirectDiffuse));
+		defScene.add_static_constant("RENDER_MODE_INDIRECT_DIFFUSE_REFLECT",umath::to_integral(unirender::Scene::RenderMode::IndirectDiffuseReflect));
+		defScene.add_static_constant("RENDER_MODE_INDIRECT_DIFFUSE_TRANSMIT",umath::to_integral(unirender::Scene::RenderMode::IndirectDiffuseTransmit));
+		defScene.add_static_constant("RENDER_MODE_INDIRECT_GLOSSY",umath::to_integral(unirender::Scene::RenderMode::IndirectGlossy));
+		defScene.add_static_constant("RENDER_MODE_INDIRECT_GLOSSY_REFLECT",umath::to_integral(unirender::Scene::RenderMode::IndirectGlossyReflect));
+		defScene.add_static_constant("RENDER_MODE_INDIRECT_GLOSSY_TRANSMIT",umath::to_integral(unirender::Scene::RenderMode::IndirectGlossyTransmit));
+		defScene.add_static_constant("RENDER_MODE_INDIRECT_SPECULAR",umath::to_integral(unirender::Scene::RenderMode::IndirectSpecular));
+		defScene.add_static_constant("RENDER_MODE_INDIRECT_SPECULAR_REFLECT",umath::to_integral(unirender::Scene::RenderMode::IndirectSpecularReflect));
+		defScene.add_static_constant("RENDER_MODE_INDIRECT_SPECULAR_TRANSMIT",umath::to_integral(unirender::Scene::RenderMode::IndirectSpecularTransmit));
+		defScene.add_static_constant("RENDER_MODE_UV",umath::to_integral(unirender::Scene::RenderMode::Uv));
+		defScene.add_static_constant("RENDER_MODE_IRRADIANCE",umath::to_integral(unirender::Scene::RenderMode::Irradiance));
+		defScene.add_static_constant("RENDER_MODE_NOISE",umath::to_integral(unirender::Scene::RenderMode::Noise));
+		defScene.add_static_constant("RENDER_MODE_CAUSTIC",umath::to_integral(unirender::Scene::RenderMode::Caustic));
+		defScene.add_static_constant("RENDER_MODE_COUNT",umath::to_integral(unirender::Scene::RenderMode::Count));
+
 		defScene.add_static_constant("DEVICE_TYPE_CPU",umath::to_integral(unirender::Scene::DeviceType::CPU));
 		defScene.add_static_constant("DEVICE_TYPE_GPU",umath::to_integral(unirender::Scene::DeviceType::GPU));
 
@@ -2206,6 +2253,9 @@ extern "C"
 		}));
 		defScene.def("SetSky",static_cast<void(*)(lua_State*,cycles::Scene&,const std::string&)>([](lua_State *l,cycles::Scene &scene,const std::string &skyPath) {
 			scene->SetSky(skyPath);
+		}));
+		defScene.def("SetSkyTransparent",static_cast<void(*)(lua_State*,cycles::Scene&,bool)>([](lua_State *l,cycles::Scene &scene,bool transparent) {
+			scene->GetSceneInfo().transparentSky = transparent;
 		}));
 		defScene.def("SetSkyAngles",static_cast<void(*)(lua_State*,cycles::Scene&,const EulerAngles&)>([](lua_State *l,cycles::Scene &scene,const EulerAngles &skyAngles) {
 			scene->SetSkyAngles(skyAngles);
@@ -2285,6 +2335,7 @@ extern "C"
 		defSceneCreateInfo.def_readwrite("progressive",&unirender::Scene::CreateInfo::progressive);
 		defSceneCreateInfo.def_readwrite("progressiveRefine",&unirender::Scene::CreateInfo::progressiveRefine);
 		defSceneCreateInfo.def_readwrite("hdrOutput",&unirender::Scene::CreateInfo::hdrOutput);
+		defSceneCreateInfo.def_readwrite("renderer",&unirender::Scene::CreateInfo::renderer);
 		defSceneCreateInfo.def_readwrite("denoiseMode",reinterpret_cast<uint8_t unirender::Scene::CreateInfo::*>(&unirender::Scene::CreateInfo::denoiseMode));
 		defSceneCreateInfo.def_readwrite("deviceType",reinterpret_cast<uint32_t unirender::Scene::CreateInfo::*>(&unirender::Scene::CreateInfo::deviceType));
 		defSceneCreateInfo.def("SetSamplesPerPixel",static_cast<void(*)(lua_State*,unirender::Scene::CreateInfo&,uint32_t)>([](lua_State *l,unirender::Scene::CreateInfo &createInfo,uint32_t samples) {

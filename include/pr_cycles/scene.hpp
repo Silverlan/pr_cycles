@@ -38,6 +38,7 @@ namespace umath {class Transform; class ScaledTransform;};
 namespace unirender
 {
 	class Scene;
+	struct MeshData;
 };
 namespace util::bsp {struct LightMapInfo;};
 namespace uimg {class ImageBuffer;};
@@ -54,16 +55,6 @@ namespace pragma::modules::cycles
 	class Cache
 	{
 	public:
-		struct MeshData
-		{
-			std::vector<Vertex> vertices;
-			std::vector<int32_t> triangles;
-
-			std::optional<std::vector<float>> alphas {};
-			std::optional<std::vector<float>> wrinkles {};
-
-			unirender::PShader shader = nullptr;
-		};
 		Cache(unirender::Scene::RenderMode renderMode);
 		void AddParticleSystem(pragma::CParticleSystemComponent &ptc,const Vector3 &camPos,const Mat4 &vp,float nearZ,float farZ);
 		unirender::PObject AddEntity(
@@ -71,26 +62,26 @@ namespace pragma::modules::cycles
 			const std::function<bool(ModelMesh&,const umath::ScaledTransform&)> &meshFilter=nullptr,const std::function<bool(ModelSubMesh&,const umath::ScaledTransform&)> &subMeshFilter=nullptr,
 			const std::string &nameSuffix=""
 		);
-		std::vector<std::shared_ptr<MeshData>> AddEntityMesh(
+		std::vector<std::shared_ptr<unirender::MeshData>> AddEntityMesh(
 			BaseEntity &ent,std::vector<ModelSubMesh*> *optOutTargetMeshes=nullptr,
 			const std::function<bool(ModelMesh&,const umath::ScaledTransform&)> &meshFilter=nullptr,const std::function<bool(ModelSubMesh&,const umath::ScaledTransform&)> &subMeshFilter=nullptr,
 			const std::string &nameSuffix="",const std::optional<umath::ScaledTransform> &pose={}
 		);
-		std::vector<std::shared_ptr<MeshData>> AddModel(
+		std::vector<std::shared_ptr<unirender::MeshData>> AddModel(
 			Model &mdl,const std::string &meshName,BaseEntity *optEnt=nullptr,const std::optional<umath::ScaledTransform> &pose={},uint32_t skinId=0,
 			CModelComponent *optMdlC=nullptr,CAnimatedComponent *optAnimC=nullptr,
 			const std::function<bool(ModelMesh&,const umath::ScaledTransform&)> &optMeshFilter=nullptr,
 			const std::function<bool(ModelSubMesh&,const umath::ScaledTransform&)> &optSubMeshFilter=nullptr,
 			const std::function<void(ModelSubMesh&)> &optOnMeshAdded=nullptr
 		);
-		std::vector<std::shared_ptr<MeshData>> AddMeshList(
+		std::vector<std::shared_ptr<unirender::MeshData>> AddMeshList(
 			Model &mdl,const std::vector<std::shared_ptr<ModelMesh>> &meshList,const std::string &meshName,BaseEntity *optEnt=nullptr,const std::optional<umath::ScaledTransform> &pose={},uint32_t skinId=0,
 			CModelComponent *optMdlC=nullptr,CAnimatedComponent *optAnimC=nullptr,
 			const std::function<bool(ModelMesh&,const umath::ScaledTransform&)> &optMeshFilter=nullptr,
 			const std::function<bool(ModelSubMesh&,const umath::ScaledTransform&)> &optSubMeshFilter=nullptr,
 			const std::function<void(ModelSubMesh&)> &optOnMeshAdded=nullptr
 		);
-		unirender::PMesh BuildMesh(const std::string &meshName,const std::vector<std::shared_ptr<MeshData>> &meshDatas,const std::optional<umath::ScaledTransform> &pose={}) const;
+		unirender::PMesh BuildMesh(const std::string &meshName,const std::vector<std::shared_ptr<unirender::MeshData>> &meshDatas,const std::optional<umath::ScaledTransform> &pose={}) const;
 		void AddAOBakeTarget(BaseEntity &ent,uint32_t matIndex,std::shared_ptr<unirender::Object> &oAo,std::shared_ptr<unirender::Object> &oEnv);
 		void AddAOBakeTarget(Model &mdl,uint32_t matIndex,std::shared_ptr<unirender::Object> &oAo,std::shared_ptr<unirender::Object> &oEnv);
 		unirender::ModelCache &GetModelCache() const {return *m_mdlCache;}
@@ -115,10 +106,9 @@ namespace pragma::modules::cycles
 		Material *GetMaterial(Model &mdl,ModelSubMesh &subMesh,uint32_t skinId) const;
 		Material *GetMaterial(pragma::CModelComponent &mdlC,ModelSubMesh &subMesh,uint32_t skinId) const;
 		Material *GetMaterial(BaseEntity &ent,ModelSubMesh &subMesh,uint32_t skinId) const;
-		void AddMeshDataToMesh(unirender::Mesh &mesh,const MeshData &meshData,const std::optional<umath::ScaledTransform> &pose={}) const;
 		void AddMesh(Model &mdl,unirender::Mesh &mesh,ModelSubMesh &mdlMesh,pragma::CModelComponent *optMdlC=nullptr,pragma::CAnimatedComponent *optAnimC=nullptr);
 		std::string GetUniqueName() {return "internal" +std::to_string(m_uniqueNameIndex++);};
-		std::shared_ptr<MeshData> CalcMeshData(Model &mdl,ModelSubMesh &mdlMesh,bool includeAlphas,bool includeWrinkles,pragma::CModelComponent *optMdlC=nullptr,pragma::CAnimatedComponent *optAnimC=nullptr);
+		std::shared_ptr<unirender::MeshData> CalcMeshData(Model &mdl,ModelSubMesh &mdlMesh,bool includeAlphas,bool includeWrinkles,pragma::CModelComponent *optMdlC=nullptr,pragma::CAnimatedComponent *optAnimC=nullptr);
 		unirender::PShader CreateShader(Material &mat,const std::string &meshName,const ShaderInfo &shaderInfo={}) const;
 		unirender::PShader CreateShader(const std::string &meshName,Model &mdl,ModelSubMesh &subMesh,BaseEntity *optEnt=nullptr,uint32_t skinId=0) const;
 		uint32_t m_uniqueNameIndex = 0;

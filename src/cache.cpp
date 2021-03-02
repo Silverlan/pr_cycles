@@ -280,7 +280,7 @@ pragma::modules::cycles::Cache::Cache(unirender::Scene::RenderMode renderMode)
 	m_mdlCache->AddChunk(*m_shaderCache);
 }
 
-std::vector<std::shared_ptr<pragma::modules::cycles::Cache::MeshData>> pragma::modules::cycles::Cache::AddMeshList(
+std::vector<std::shared_ptr<unirender::MeshData>> pragma::modules::cycles::Cache::AddMeshList(
 	Model &mdl,const std::vector<std::shared_ptr<ModelMesh>> &meshList,const std::string &meshName,BaseEntity *optEnt,const std::optional<umath::ScaledTransform> &opose,uint32_t skinId,
 	pragma::CModelComponent *optMdlC,pragma::CAnimatedComponent *optAnimC,
 	const std::function<bool(ModelMesh&,const umath::ScaledTransform&)> &optMeshFilter,
@@ -291,7 +291,7 @@ std::vector<std::shared_ptr<pragma::modules::cycles::Cache::MeshData>> pragma::m
 	auto pose = opose.has_value() ? *opose : umath::ScaledTransform{};
 	auto hasAlphas = false;
 	auto hasWrinkles = (mdl.GetVertexAnimations().empty() == false); // TODO: Not the best way to determine if the entity uses wrinkles
-	std::vector<std::shared_ptr<MeshData>> meshDatas {};
+	std::vector<std::shared_ptr<unirender::MeshData>> meshDatas {};
 	meshDatas.reserve(meshList.size());
 	for(auto &mesh : meshList)
 	{
@@ -306,8 +306,8 @@ std::vector<std::shared_ptr<pragma::modules::cycles::Cache::MeshData>> pragma::m
 			auto meshData = CalcMeshData(mdl,*subMesh,hasAlphas,hasWrinkles,optMdlC,optAnimC);
 			if(opose.has_value())
 			{
-				for(auto &v : meshData->vertices)
-					v.position = *opose *v.position;
+				for(auto &v : meshData->positions)
+					v = *opose *v;
 			}
 			meshData->shader = CreateShader(GetUniqueName(),mdl,*subMesh,optEnt,skinId);
 			if(meshData->shader)
@@ -320,7 +320,7 @@ std::vector<std::shared_ptr<pragma::modules::cycles::Cache::MeshData>> pragma::m
 	return meshDatas;
 }
 
-std::vector<std::shared_ptr<pragma::modules::cycles::Cache::MeshData>> pragma::modules::cycles::Cache::AddModel(
+std::vector<std::shared_ptr<unirender::MeshData>> pragma::modules::cycles::Cache::AddModel(
 	Model &mdl,const std::string &meshName,BaseEntity *optEnt,const std::optional<umath::ScaledTransform> &pose,uint32_t skinId,
 	pragma::CModelComponent *optMdlC,pragma::CAnimatedComponent *optAnimC,
 	const std::function<bool(ModelMesh&,const umath::ScaledTransform&)> &optMeshFilter,const std::function<bool(ModelSubMesh&,const umath::ScaledTransform&)> &optSubMeshFilter,
@@ -334,7 +334,7 @@ std::vector<std::shared_ptr<pragma::modules::cycles::Cache::MeshData>> pragma::m
 	return AddMeshList(mdl,lodMeshes,meshName,optEnt,pose,skinId,optMdlC,optAnimC,optMeshFilter,optSubMeshFilter,optOnMeshAdded);
 }
 
-std::vector<std::shared_ptr<pragma::modules::cycles::Cache::MeshData>> pragma::modules::cycles::Cache::AddEntityMesh(
+std::vector<std::shared_ptr<unirender::MeshData>> pragma::modules::cycles::Cache::AddEntityMesh(
 	BaseEntity &ent,std::vector<ModelSubMesh*> *optOutTargetMeshes,
 	const std::function<bool(ModelMesh&,const umath::ScaledTransform&)> &meshFilter,const std::function<bool(ModelSubMesh&,const umath::ScaledTransform&)> &subMeshFilter,
 	const std::string &nameSuffix,const std::optional<umath::ScaledTransform> &pose
@@ -377,7 +377,7 @@ std::vector<std::shared_ptr<pragma::modules::cycles::Cache::MeshData>> pragma::m
 				mesh = itInstance->mesh;
 		}
 	}
-	std::vector<std::shared_ptr<MeshData>> meshDatas;
+	std::vector<std::shared_ptr<unirender::MeshData>> meshDatas;
 	if(mesh == nullptr)
 	{
 		std::string name = "ent" +nameSuffix +"_" +std::to_string(ent.GetLocalIndex());
@@ -482,9 +482,9 @@ unirender::PObject pragma::modules::cycles::Cache::AddEntity(
 	return o;
 }
 
-std::shared_ptr<pragma::modules::cycles::Cache::MeshData> pragma::modules::cycles::Cache::CalcMeshData(Model &mdl,ModelSubMesh &mdlMesh,bool includeAlphas,bool includeWrinkles,pragma::CModelComponent *optMdlC,pragma::CAnimatedComponent *optAnimC)
+std::shared_ptr<unirender::MeshData> pragma::modules::cycles::Cache::CalcMeshData(Model &mdl,ModelSubMesh &mdlMesh,bool includeAlphas,bool includeWrinkles,pragma::CModelComponent *optMdlC,pragma::CAnimatedComponent *optAnimC)
 {
-	auto meshData = std::make_shared<MeshData>();
+	auto meshData = std::make_shared<unirender::MeshData>();
 	auto &meshVerts = mdlMesh.GetVertices();
 	auto &meshAlphas = mdlMesh.GetAlphas();
 
@@ -555,7 +555,7 @@ std::shared_ptr<pragma::modules::cycles::Cache::MeshData> pragma::modules::cycle
 		if(includeAlphas)
 		{
 			auto alpha = (vertIdx < meshAlphas.size()) ? meshAlphas.at(vertIdx).x : 0.f;
-			meshData->alphas->push_back(alpha);
+			meshData->alphas.push_back(alpha);
 		}
 	}
 
@@ -585,7 +585,7 @@ std::shared_ptr<pragma::modules::cycles::Cache::MeshData> pragma::modules::cycle
 			},[&perFaceAlphaData](uint32_t numFaces) {
 				perFaceAlphaData.resize(numFaces *3);
 			});
-			alphaData->ReserveBuffer(meshData->vertices.size());
+			alphaData->ReserveBuffer(meshData->positions.size());
 
 			for(auto alpha : *alphas)
 				alphaData->buffer.push_back(alpha);
@@ -600,7 +600,7 @@ std::shared_ptr<pragma::modules::cycles::Cache::MeshData> pragma::modules::cycle
 			},[&perFaceWrinkleData](uint32_t numFaces) {
 				perFaceWrinkleData.resize(numFaces *3);
 			});
-			wrinkleData->ReserveBuffer(meshData->vertices.size());
+			wrinkleData->ReserveBuffer(meshData->positions.size());
 
 			for(auto wrinkle : *wrinkles)
 				wrinkleData->buffer.push_back(wrinkle);
@@ -611,28 +611,28 @@ std::shared_ptr<pragma::modules::cycles::Cache::MeshData> pragma::modules::cycle
 		if(alphas.has_value())
 		{
 			meshData->alphas = std::vector<float>{};
-			meshData->alphas->resize(meshData->vertices.size());
-			for(auto i=decltype(meshData->triangles.size()){0u};i<meshData->triangles.size();++i)
+			meshData->alphas.resize(meshData->positions.size());
+			for(auto i=decltype(meshData->indices.size()){0u};i<meshData->indices.size();++i)
 			{
-				auto idx = meshData->triangles.at(i);
-				meshData->alphas->at(idx) = perFaceAlphaData.at(i);
+				auto idx = meshData->indices.at(i);
+				meshData->alphas.at(idx) = perFaceAlphaData.at(i);
 			}
 		}
 		if(wrinkles.has_value())
 		{
 			meshData->wrinkles = std::vector<float>{};
-			meshData->wrinkles->resize(meshData->vertices.size());
-			for(auto i=decltype(meshData->triangles.size()){0u};i<meshData->triangles.size();++i)
+			meshData->wrinkles.resize(meshData->indices.size());
+			for(auto i=decltype(meshData->indices.size()){0u};i<meshData->indices.size();++i)
 			{
-				auto idx = meshData->triangles.at(i);
-				meshData->wrinkles->at(idx) = perFaceWrinkleData.at(i);
+				auto idx = meshData->indices.at(i);
+				meshData->wrinkles.at(idx) = perFaceWrinkleData.at(i);
 			}
 		}
 	}
 	else
 	{
 		meshData->vertices = std::move(transformedVerts);
-		meshData->triangles = std::move(indices);
+		meshData->indices = std::move(indices);
 		if(alphas.has_value())
 			meshData->alphas = std::move(*alphas);
 		if(wrinkles.has_value())
@@ -682,10 +682,10 @@ void pragma::modules::cycles::Cache::AddMesh(Model &mdl,unirender::Mesh &mesh,Mo
 	auto meshData = CalcMeshData(mdl,mdlMesh,mesh.HasAlphas(),mesh.HasWrinkles(),optMdlC,optAnimC);
 	if(meshData == nullptr)
 		return;
-	AddMeshDataToMesh(mesh,*meshData);
+	mesh.SetMeshData(*meshData);
 }
 
-unirender::PMesh pragma::modules::cycles::Cache::BuildMesh(const std::string &meshName,const std::vector<std::shared_ptr<MeshData>> &meshDatas,const std::optional<umath::ScaledTransform> &pose) const
+unirender::PMesh pragma::modules::cycles::Cache::BuildMesh(const std::string &meshName,const std::vector<std::shared_ptr<unirender::MeshData>> &meshDatas,const std::optional<umath::ScaledTransform> &pose) const
 {
 	uint64_t numVerts = 0;
 	uint64_t numTris = 0;
@@ -693,10 +693,10 @@ unirender::PMesh pragma::modules::cycles::Cache::BuildMesh(const std::string &me
 	auto hasWrinkles = false;
 	for(auto &meshData : meshDatas)
 	{
-		numVerts += meshData->vertices.size();
-		numTris += meshData->triangles.size();
-		hasAlphas = hasAlphas || meshData->alphas.has_value();
-		hasWrinkles = hasWrinkles || meshData->wrinkles.has_value();
+		numVerts += meshData->positions.size();
+		numTris += meshData->indices.size();
+		hasAlphas = hasAlphas || !meshData->alphas.empty();
+		hasWrinkles = hasWrinkles || !meshData->wrinkles.empty();
 	}
 
 	auto flags = unirender::Mesh::Flags::None;
@@ -711,37 +711,10 @@ unirender::PMesh pragma::modules::cycles::Cache::BuildMesh(const std::string &me
 	return mesh;
 }
 
-void pragma::modules::cycles::Cache::AddMeshDataToMesh(unirender::Mesh &mesh,const MeshData &meshData,const std::optional<umath::ScaledTransform> &pose) const
-{
-	auto triIndexVertexOffset = mesh.GetVertexOffset();
-	auto shaderIdx = mesh.AddSubMeshShader(*meshData.shader);
-	for(auto &v : meshData.vertices)
-	{
-		auto pos = v.position;
-		if(pose.has_value())
-			pos = *pose *pos;
-		mesh.AddVertex(pos,v.normal,v.tangent,v.uv);
-	}
-	
-	for(auto i=decltype(meshData.triangles.size()){0u};i<meshData.triangles.size();i+=3)
-		mesh.AddTriangle(triIndexVertexOffset +meshData.triangles.at(i),triIndexVertexOffset +meshData.triangles.at(i +1),triIndexVertexOffset +meshData.triangles.at(i +2),shaderIdx);
-
-	if(meshData.wrinkles.has_value())
-	{
-		for(auto wrinkle : *meshData.wrinkles)
-			mesh.AddWrinkleFactor(wrinkle);
-	}
-	if(meshData.alphas.has_value())
-	{
-		for(auto alpha : *meshData.alphas)
-			mesh.AddAlpha(alpha);
-	}
-}
-
 void pragma::modules::cycles::Cache::AddAOBakeTarget(BaseEntity *optEnt,Model &mdl,uint32_t matIndex,std::shared_ptr<unirender::Object> &oAo,std::shared_ptr<unirender::Object> &oEnv)
 {
-	std::vector<std::shared_ptr<MeshData>> materialMeshes;
-	std::vector<std::shared_ptr<MeshData>> envMeshes;
+	std::vector<std::shared_ptr<unirender::MeshData>> materialMeshes;
+	std::vector<std::shared_ptr<unirender::MeshData>> envMeshes;
 	auto fFilterMeshes = [this,matIndex,&materialMeshes,&envMeshes,&mdl](ModelSubMesh &mesh,const umath::ScaledTransform &pose) -> bool {
 		auto meshData = CalcMeshData(mdl,mesh,false,false);
 		meshData->shader = CreateShader(GetUniqueName(),mdl,mesh);
