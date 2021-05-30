@@ -100,7 +100,7 @@ void ProgressiveTexture::Initialize(unirender::Renderer &renderer)
 	prosper::util::ImageCreateInfo imgCreateInfo {};
 	imgCreateInfo.width = res.x;
 	imgCreateInfo.height = res.y;
-	imgCreateInfo.format = prosper::Format::R16G16B16A16_SFloat;
+	imgCreateInfo.format = renderer.ShouldUseProgressiveFloatFormat() ? prosper::Format::R32G32B32A32_SFloat : prosper::Format::R16G16B16A16_SFloat;
 	imgCreateInfo.usage = prosper::ImageUsageFlags::SampledBit/* | prosper::ImageUsageFlags::ColorAttachmentBit*/ | prosper::ImageUsageFlags::TransferSrcBit | prosper::ImageUsageFlags::TransferDstBit;
 	imgCreateInfo.memoryFeatures = prosper::MemoryFeatureFlags::HostAccessable | prosper::MemoryFeatureFlags::HostCached;
 	imgCreateInfo.tiling = prosper::ImageTiling::Linear;

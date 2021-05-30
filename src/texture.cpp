@@ -28,7 +28,7 @@ static std::optional<std::string> get_abs_error_texture_path()
 {
 	std::string errTexPath = "materials\\error.dds";
 	std::string absPath;
-	if(FileManager::FindAbsolutePath(errTexPath,absPath) == false)
+	if(FileManager::FindAbsolutePath(errTexPath,absPath))
 		return absPath;
 	return {};
 }
@@ -222,7 +222,7 @@ static std::optional<std::string> prepare_texture(
 	auto success = false;
 	auto converted = false;
 	auto result = prepare_texture(texInfo,success,converted,inFlags,optOutFlags,defaultTexture);
-	if(success == false)
+	if(success == false && texInfo->GetName() != "error")
 	{
 		Con::cwar<<"WARNING: Unable to prepare texture '";
 		if(texInfo)

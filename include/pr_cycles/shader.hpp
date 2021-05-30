@@ -28,16 +28,16 @@ namespace pragma::modules::cycles
 		virtual std::shared_ptr<unirender::GroupNodeDesc> InitializeNormalPass();
 		virtual std::shared_ptr<unirender::GroupNodeDesc> InitializeDepthPass();
 
-		void SetHairConfig(const unirender::HairConfig &hairConfig) {m_hairConfig = hairConfig;}
+		void SetHairConfig(const util::HairConfig &hairConfig) {m_hairConfig = hairConfig;}
 		void ClearHairConfig() {m_hairConfig = {};}
-		const std::optional<unirender::HairConfig> &GetHairConfig() const {return m_hairConfig;}
+		const std::optional<util::HairConfig> &GetHairConfig() const {return m_hairConfig;}
 
 		BaseEntity *GetEntity() const;
 		Material *GetMaterial() const;
 	protected:
 		Shader()=default;
 		unirender::NodeManager *m_nodeManager = nullptr;
-		std::optional<unirender::HairConfig> m_hairConfig {};
+		std::optional<util::HairConfig> m_hairConfig {};
 	private:
 		mutable EntityHandle m_hEntity {};
 		mutable MaterialHandle m_hMaterial {};
