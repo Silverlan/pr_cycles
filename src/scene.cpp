@@ -63,8 +63,6 @@
 
 using namespace pragma::modules;
 
-#pragma optimize("",off)
-
 extern DLLCLIENT CEngine *c_engine;
 extern DLLCLIENT CGame *c_game;
 
@@ -675,4 +673,3 @@ unirender::PShader cycles::Cache::CreateShader(Material &mat,const std::string &
 #endif
 	return nullptr;
 }
-#pragma optimize("",on)

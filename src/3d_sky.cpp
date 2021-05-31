@@ -17,7 +17,6 @@
 
 using namespace pragma::modules;
 
-#pragma optimize("",off)
 void cycles::Scene::Add3DSkybox(pragma::CSkyCameraComponent &skyCam,const Vector3 &camPos)
 {
 	// TODO
@@ -48,4 +47,3 @@ void cycles::Scene::Add3DSkybox(pragma::CSkyCameraComponent &skyCam,const Vector
 	}
 #endif
 }
-#pragma optimize("",on)

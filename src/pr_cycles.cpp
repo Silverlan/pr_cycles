@@ -86,8 +86,6 @@ namespace pragma::asset {class WorldData; class EntityData;};
 #include <wgui/types/wirect.h>
 #endif
 
-#pragma optimize("",off)
-
 extern DLLCLIENT CGame *c_game;
 
 using namespace pragma::modules;
@@ -2618,4 +2616,3 @@ extern "C"
 #endif
 	}
 };
-#pragma optimize("",on)

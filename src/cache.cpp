@@ -35,7 +35,6 @@
 #include <sharedutils/util_string.h>
 #include <util_texture_info.hpp>
 
-#pragma optimize("",off)
 extern DLLCLIENT CEngine *c_engine;
 extern DLLCLIENT ClientState *client;
 extern DLLCLIENT CGame *c_game;
@@ -788,4 +787,3 @@ void pragma::modules::cycles::Cache::AddAOBakeTarget(BaseEntity &ent,uint32_t ma
 }
 
 void pragma::modules::cycles::Cache::AddAOBakeTarget(Model &mdl,uint32_t matIndex,std::shared_ptr<unirender::Object> &oAo,std::shared_ptr<unirender::Object> &oEnv) {AddAOBakeTarget(nullptr,mdl,matIndex,oAo,oEnv);}
-#pragma optimize("",on)

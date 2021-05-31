@@ -10,7 +10,7 @@
 #include <mathutil/umath.h>
 
 #pragma comment(lib,"E:/projects/OpenSubdiv/build_winx64/lib/RelWithDebInfo/osdCPU.lib")
-#pragma optimize("",off)
+
 struct OsdVertexWeight
 {
 	OsdVertexWeight()
@@ -254,6 +254,5 @@ void pragma::modules::cycles::subdivide_mesh(
 	}
 #endif
 }
-#pragma optimize("",on)
 
 #endif

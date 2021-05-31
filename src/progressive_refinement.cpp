@@ -15,7 +15,6 @@ extern DLLCLIENT CEngine *c_engine;
 
 using namespace pragma::modules::cycles;
 
-#pragma optimize("",off)
 DenoiseTexture::DenoiseTexture(uint32_t w,uint32_t h)
 {
 	m_inputImage = uimg::ImageBuffer::Create(w,h,uimg::ImageBuffer::Format::RGB_FLOAT);
@@ -160,4 +159,3 @@ void ProgressiveTexture::Update()
 		}
 	}*/
 }
-#pragma optimize("",on)

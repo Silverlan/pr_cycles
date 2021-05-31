@@ -23,7 +23,6 @@ extern DLLCLIENT CGame *c_game;
 
 using namespace pragma::modules;
 
-#pragma optimize("",off)
 static float get_particle_extent(float radius) {return sqrt(umath::pow2(radius) *2.0);}
 static Mat4 get_rotation_matrix(Vector3 axis,float angle)
 {
@@ -213,4 +212,3 @@ void cycles::Cache::AddParticleSystem(pragma::CParticleSystemComponent &ptc,cons
 #endif
 	}
 }
-#pragma optimize("",on)
