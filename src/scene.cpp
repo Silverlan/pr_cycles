@@ -5,8 +5,6 @@
 * Copyright (c) 2020 Florian Weischer
 */
 
-#include "pr_cycles/scene.hpp"
-#include "pr_cycles/shader.hpp"
 #include <render/buffers.h>
 #include <render/scene.h>
 #include <render/session.h>
@@ -23,6 +21,8 @@
 #include <render/bake.h>
 #include <render/particles.h>
 #include <render/image.h>
+#include "pr_cycles/scene.hpp"
+#include "pr_cycles/shader.hpp"
 #include <pragma/c_engine.h>
 #include <prosper_context.hpp>
 #include <buffers/prosper_uniform_resizable_buffer.hpp>
@@ -46,7 +46,6 @@
 #include <util_texture_info.hpp>
 #include <util_raytracing/scene.hpp>
 #include <util_raytracing/shader.hpp>
-#include <util_raytracing/ccl_shader.hpp>
 #include <util_raytracing/mesh.hpp>
 #include <util_raytracing/object.hpp>
 #include <util_raytracing/camera.hpp>
@@ -135,6 +134,23 @@ void cycles::Scene::Finalize()
 {
 	BuildLightMapObject();
 	m_rtScene->AddModelsFromCache(m_cache->GetModelCache());
+}
+
+unirender::Object *cycles::Scene::FindObject(const std::string &name)
+{
+	auto &cache = GetCache();
+	auto &mdlCache = cache.GetModelCache();
+	for(auto &chunk : mdlCache.GetChunks())
+	{
+		auto &objs = chunk.GetObjects();
+		auto it = std::find_if(objs.begin(),objs.end(),[&name](const unirender::PObject &obj) {
+			return obj->GetName() == name;
+		});
+		if(it == objs.end())
+			continue;
+		return it->get();
+	}
+	return nullptr;
 }
 
 cycles::Renderer::Renderer(Scene &scene,unirender::Renderer &renderer)
@@ -270,6 +286,10 @@ unirender::PShader cycles::Cache::CreateShader(Material &mat,const std::string &
 	auto &hairConfig = shader->GetHairConfig();
 	if(hairConfig.has_value())
 		rtShader->SetHairConfig(*hairConfig);
+
+	auto &subdivSettings = shader->GetSubdivisionSettings();
+	if(subdivSettings.has_value())
+		rtShader->SetSubdivisionSettings(*subdivSettings);
 
 	rtShader->combinedPass = shader->InitializeCombinedPass();
 	rtShader->albedoPass = shader->InitializeAlbedoPass();

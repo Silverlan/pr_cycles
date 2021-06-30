@@ -143,6 +143,9 @@ namespace pragma::modules::cycles
 		void AddLightmapBakeTarget(BaseEntity &ent);
 		void Finalize();
 
+		unirender::Object *FindObject(const std::string &name);
+		const unirender::Object *FindObject(const std::string &name) const {return const_cast<Scene*>(this)->FindObject(name);}
+
 		Cache &GetCache();
 
 		unirender::Scene &operator*() {return *m_rtScene;};

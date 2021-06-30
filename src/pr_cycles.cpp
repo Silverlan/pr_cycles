@@ -5,11 +5,6 @@
 * Copyright (c) 2020 Florian Weischer
 */
 
-#include "pr_cycles/pr_cycles.hpp"
-#include "pr_cycles/shader.hpp"
-#include "pr_cycles/texture.hpp"
-#include "pr_cycles/progressive_refinement.hpp"
-#include <util_raytracing/cycles/renderer.hpp>
 #include <render/buffers.h>
 #include <render/scene.h>
 #include <render/session.h>
@@ -22,6 +17,11 @@
 #include <render/object.h>
 #include <render/background.h>
 #include <render/svm.h>
+#include "pr_cycles/pr_cycles.hpp"
+#include "pr_cycles/shader.hpp"
+#include "pr_cycles/texture.hpp"
+#include "pr_cycles/progressive_refinement.hpp"
+#include <util_raytracing/renderer.hpp>
 
 namespace pragma::asset {class WorldData; class EntityData;};
 #include <pragma/lua/luaapi.h>
@@ -73,7 +73,7 @@ namespace pragma::asset {class WorldData; class EntityData;};
 #include <util_raytracing/light.hpp>
 #include <util_raytracing/mesh.hpp>
 #include <util_raytracing/object.hpp>
-#include <util_raytracing/ccl_shader.hpp>
+#include <util_raytracing/shader.hpp>
 #include <util_raytracing/exception.hpp>
 #include <util_raytracing/model_cache.hpp>
 #include <util_raytracing/color_management.hpp>
@@ -517,7 +517,6 @@ namespace luabind
 	unirender::Socket operator*(float f,const unirender::Socket &socket) {return unirender::Socket{f} *socket;}
 	unirender::Socket operator/(float f,const unirender::Socket &socket) {return unirender::Socket{f} /socket;}
 	unirender::Socket operator%(float f,const unirender::Socket &socket) {return unirender::Socket{f} %socket;}
-	unirender::Socket operator^(float f,const unirender::Socket &socket) {return unirender::Socket{f} ^socket;}
 	
 	unirender::Socket operator<(float f,const unirender::Socket &socket) {return unirender::Socket{f} < socket;}
 	unirender::Socket operator<=(float f,const unirender::Socket &socket) {return unirender::Socket{f} <= socket;}
@@ -527,6 +526,21 @@ namespace luabind
 	unirender::Socket operator*(const Vector3 &v,const unirender::Socket &socket) {return unirender::Socket{v} *socket;}
 	unirender::Socket operator/(const Vector3 &v,const unirender::Socket &socket) {return unirender::Socket{v} /socket;}
 	unirender::Socket operator%(const Vector3 &v,const unirender::Socket &socket) {return unirender::Socket{v} %socket;}
+};
+
+namespace unirender
+{
+	// These have to be in the unirender namespace for whatever reason
+	unirender::Socket operator^(float f,const unirender::Socket &socket) {return unirender::Socket{f} ^socket;}
+	
+	std::ostream &operator<<(std::ostream &os,const unirender::Socket &socket)
+	{
+		return ::operator<<(os,socket);
+	}
+	std::ostream &operator<<(std::ostream &os,const unirender::NodeDesc &socket)
+	{
+		return ::operator<<(os,socket);
+	}
 };
 
 static unirender::Socket get_socket(const luabind::object &o)
@@ -666,17 +680,17 @@ template<unirender::nodes::vector_math::MathType type,bool useVectorOutput=true>
 	return result.GetOutputSocket(unirender::nodes::vector_math::OUT_VALUE);
 }
 
-static std::array<unirender::Socket*,3> socket_to_xyz(lua_State *l,unirender::Socket &socket)
+static std::array<unirender::Socket,3> socket_to_xyz(lua_State *l,unirender::Socket &socket)
 {
 	auto &node = get_socket_node(l,socket);
-	std::array<unirender::Socket*,3> socketXyz;
+	std::array<unirender::Socket,3> socketXyz;
 	if(unirender::is_vector_type(socket.GetType()))
 	{
 		auto &nodeXyz = node.SeparateRGB(socket);
-		socketXyz = {&nodeXyz.GetOutputSocket(unirender::nodes::separate_rgb::OUT_R),&nodeXyz.GetOutputSocket(unirender::nodes::separate_rgb::OUT_G),&nodeXyz.GetOutputSocket(unirender::nodes::separate_rgb::OUT_B)};
+		socketXyz = {nodeXyz.GetOutputSocket(unirender::nodes::separate_rgb::OUT_R),nodeXyz.GetOutputSocket(unirender::nodes::separate_rgb::OUT_G),nodeXyz.GetOutputSocket(unirender::nodes::separate_rgb::OUT_B)};
 	}
 	else
-		socketXyz = {&socket,&socket,&socket};
+		socketXyz = {socket,socket,socket};
 	return socketXyz;
 }
 
@@ -744,7 +758,7 @@ extern "C"
 			return;
 		scene->SetAOBakeTarget(mdl,materialIndex);
 		scene->Finalize();
-		auto renderer = unirender::cycles::Renderer::Create(**scene,unirender::Renderer::Flags::None);
+		auto renderer = unirender::Renderer::Create(**scene,"cycles",unirender::Renderer::Flags::None);
 		if(renderer == nullptr)
 			return;
 #if ENABLE_BAKE_DEBUGGING_INTERFACE == 1
@@ -772,7 +786,7 @@ extern "C"
 			return;
 		scene->SetAOBakeTarget(ent,materialIndex);
 		scene->Finalize();
-		auto renderer = unirender::cycles::Renderer::Create(**scene,unirender::Renderer::Flags::None);
+		auto renderer = unirender::Renderer::Create(**scene,"cycles",unirender::Renderer::Flags::None);
 		if(renderer == nullptr)
 			return;
 		outJob = renderer->StartRender();
@@ -834,7 +848,6 @@ extern "C"
 
 	bool PRAGMA_EXPORT pragma_attach(std::string &errMsg)
 	{
-		unirender::Scene::SetKernelPath(util::get_program_path() +"/modules/cycles");
 		unirender::set_module_lookup_location("modules/unirender/");
 		return true;
 	}
@@ -883,7 +896,7 @@ extern "C"
 				if(scene == nullptr)
 					return 0;
 				scene->SetAOBakeTarget(mdl,materialIndex);
-				auto renderer = unirender::cycles::Renderer::Create(**scene,unirender::Renderer::Flags::None);
+				auto renderer = unirender::Renderer::Create(**scene,"cycles",unirender::Renderer::Flags::None);
 				if(renderer == nullptr)
 					return 0;
 				auto job = renderer->StartRender();
@@ -1400,9 +1413,13 @@ extern "C"
 			{"NODE_RGB_TO_BW",unirender::NODE_RGB_TO_BW},
 			{"NODE_VECTOR_TRANSFORM",unirender::NODE_VECTOR_TRANSFORM},
 			{"NODE_RGB_RAMP",unirender::NODE_RGB_RAMP},
-			{"NODE_LAYER_WEIGHT",unirender::NODE_LAYER_WEIGHT}
+			{"NODE_LAYER_WEIGHT",unirender::NODE_LAYER_WEIGHT},
+
+			{"NODE_VOLUME_CLEAR",unirender::NODE_VOLUME_CLEAR},
+			{"NODE_VOLUME_HOMOGENEOUS",unirender::NODE_VOLUME_HOMOGENEOUS},
+			{"NODE_VOLUME_HETEROGENEOUS",unirender::NODE_VOLUME_HETEROGENEOUS}
 		};
-		static_assert(unirender::NODE_COUNT == 36,"Increase this number if new node types are added!");
+		static_assert(unirender::NODE_COUNT == 39,"Increase this number if new node types are added!");
 		Lua::RegisterLibraryValues<std::string>(l.GetState(),"unirender",nodeTypes);
 
 		Lua::RegisterLibraryValues<uint32_t>(l.GetState(),"unirender",{
@@ -1783,8 +1800,42 @@ extern "C"
 		t["IN_BLEND"] = unirender::nodes::layer_weight::IN_BLEND;
 		t["OUT_FRESNEL"] = unirender::nodes::layer_weight::OUT_FRESNEL;
 		t["OUT_FACING"] = unirender::nodes::layer_weight::OUT_FACING;
+		
+		t = nodeTypeEnums[unirender::NODE_VOLUME_CLEAR] = luabind::newtable(l.GetState());
+		t["IN_PRIORITY"] = unirender::nodes::volume_clear::IN_PRIORITY;
+		t["IN_IOR"] = unirender::nodes::volume_clear::IN_IOR;
+		t["IN_ABSORPTION"] = unirender::nodes::volume_clear::IN_ABSORPTION;
+		t["IN_EMISSION"] = unirender::nodes::volume_clear::IN_EMISSION;
+		t["OUT_VOLUME"] = unirender::nodes::volume_clear::OUT_VOLUME;
+		
+		t = nodeTypeEnums[unirender::NODE_VOLUME_HOMOGENEOUS] = luabind::newtable(l.GetState());
+		t["IN_PRIORITY"] = unirender::nodes::volume_homogeneous::IN_PRIORITY;
+		t["IN_IOR"] = unirender::nodes::volume_homogeneous::IN_IOR;
+		t["IN_ABSORPTION"] = unirender::nodes::volume_homogeneous::IN_ABSORPTION;
+		t["IN_EMISSION"] = unirender::nodes::volume_homogeneous::IN_EMISSION;
 
-		static_assert(unirender::NODE_COUNT == 36,"Increase this number if new node types are added!");
+		t["IN_SCATTERING"] = unirender::nodes::volume_homogeneous::IN_SCATTERING;
+		t["IN_ASYMMETRY"] = unirender::nodes::volume_homogeneous::IN_ASYMMETRY;
+		t["IN_MULTI_SCATTERING"] = unirender::nodes::volume_homogeneous::IN_MULTI_SCATTERING;
+
+		t["OUT_VOLUME"] = unirender::nodes::volume_homogeneous::OUT_VOLUME;
+		
+		t = nodeTypeEnums[unirender::NODE_VOLUME_HETEROGENEOUS] = luabind::newtable(l.GetState());
+		t["IN_PRIORITY"] = unirender::nodes::volume_heterogeneous::IN_PRIORITY;
+		t["IN_IOR"] = unirender::nodes::volume_heterogeneous::IN_IOR;
+		t["IN_ABSORPTION"] = unirender::nodes::volume_heterogeneous::IN_ABSORPTION;
+		t["IN_EMISSION"] = unirender::nodes::volume_heterogeneous::IN_EMISSION;
+
+		t["IN_SCATTERING"] = unirender::nodes::volume_heterogeneous::IN_SCATTERING;
+		t["IN_ASYMMETRY"] = unirender::nodes::volume_heterogeneous::IN_ASYMMETRY;
+		t["IN_MULTI_SCATTERING"] = unirender::nodes::volume_heterogeneous::IN_MULTI_SCATTERING;
+
+		t["IN_STEP_SIZE"] = unirender::nodes::volume_heterogeneous::IN_STEP_SIZE;
+		t["IN_STEP_MAX_COUNT"] = unirender::nodes::volume_heterogeneous::IN_STEP_MAX_COUNT;
+
+		t["OUT_VOLUME"] = unirender::nodes::volume_heterogeneous::OUT_VOLUME;
+
+		static_assert(unirender::NODE_COUNT == 39,"Increase this number if new node types are added!");
 		Lua::RegisterLibraryValues<luabind::object>(l.GetState(),"unirender.Node",nodeTypeEnums);
 
 		auto defShader = luabind::class_<pragma::modules::cycles::LuaShader>("Shader");
@@ -1807,13 +1858,25 @@ extern "C"
 			shader.ClearHairConfig();
 		}));
 		defShader.def("GetHairConfig",static_cast<luabind::object(*)(lua_State*,pragma::modules::cycles::LuaShader&)>([](lua_State *l,pragma::modules::cycles::LuaShader &shader) -> luabind::object {
-			auto hairConfig = shader.GetHairConfig();
+			auto &hairConfig = shader.GetHairConfig();
 			if(hairConfig.has_value() == false)
 				return {};
 			return luabind::object{l,*hairConfig};
 		}));
 		defShader.def("SetHairConfig",static_cast<void(*)(lua_State*,pragma::modules::cycles::LuaShader&,const util::HairConfig&)>([](lua_State *l,pragma::modules::cycles::LuaShader &shader,const util::HairConfig &hairConfig) {
 			shader.SetHairConfig(hairConfig);
+		}));
+		defShader.def("ClearSubdivisionSettings",static_cast<void(*)(lua_State*,pragma::modules::cycles::LuaShader&)>([](lua_State *l,pragma::modules::cycles::LuaShader &shader) {
+			shader.ClearSubdivisionSettings();
+		}));
+		defShader.def("GetSubdivisionSettings",static_cast<luabind::object(*)(lua_State*,pragma::modules::cycles::LuaShader&)>([](lua_State *l,pragma::modules::cycles::LuaShader &shader) -> luabind::object {
+			auto &subdivSettings = shader.GetSubdivisionSettings();
+			if(subdivSettings.has_value() == false)
+				return {};
+			return luabind::object{l,*subdivSettings};
+		}));
+		defShader.def("SetSubdivisionSettings",static_cast<void(*)(lua_State*,pragma::modules::cycles::LuaShader&,const unirender::SubdivisionSettings&)>([](lua_State *l,pragma::modules::cycles::LuaShader &shader,const unirender::SubdivisionSettings &subdivSettings) {
+			shader.SetSubdivisionSettings(subdivSettings);
 		}));
 
 		auto defHairConfig = luabind::class_<util::HairConfig>("HairConfig");
@@ -1826,6 +1889,12 @@ extern "C"
 		defHairConfig.def_readwrite("randomHairLengthFactor",&util::HairConfig::randomHairLengthFactor);
 		defHairConfig.def_readwrite("curvature",&util::HairConfig::curvature);
 		defShader.scope[defHairConfig];
+
+		auto defSubdivSettings = luabind::class_<unirender::SubdivisionSettings>("SubdivisionSettings");
+		defSubdivSettings.def(luabind::constructor<>());
+		defSubdivSettings.def_readwrite("maxLevel",&unirender::SubdivisionSettings::maxLevel);
+		defSubdivSettings.def_readwrite("maxEdgeScreenSize",&unirender::SubdivisionSettings::maxEdgeScreenSize);
+		defShader.scope[defSubdivSettings];
 
 		modCycles[defShader];
 
@@ -2046,7 +2115,8 @@ extern "C"
 		}));
 		defSocket.def("Clamp",static_cast<unirender::Socket(*)(lua_State*,unirender::Socket&,luabind::object,luabind::object)>([](lua_State *l,unirender::Socket &socket,luabind::object min,luabind::object max) -> unirender::Socket {
 			auto *node = find_socket_node(l,socket);
-			return socket_math_op<unirender::nodes::math::MathType::Maximum>(l,socket_math_op<unirender::nodes::math::MathType::Minimum>(l,socket,min),max);
+			auto sockMin = socket_math_op<unirender::nodes::math::MathType::Minimum>(l,socket,min);
+			return socket_math_op<unirender::nodes::math::MathType::Maximum>(l,sockMin,max);
 		}));
 
 		// Vector operations
@@ -2203,6 +2273,15 @@ extern "C"
 		}));
 		modCycles[defCache];
 
+		auto defObj = luabind::class_<unirender::Object>("Object");
+		defObj.def("SetSubdivisionEnabled",static_cast<void(*)(lua_State*,unirender::Object&,bool)>([](lua_State *l,unirender::Object &o,bool enabled) {
+			o.SetSubdivisionEnabled(enabled);
+		}));
+		defObj.def("IsSubdivisionEnabled",static_cast<bool(*)(lua_State*,unirender::Object&)>([](lua_State *l,unirender::Object &o) {
+			return o.IsSubdivisionEnabled();
+		}));
+		modCycles[defObj];
+
 		auto defScene = luabind::class_<cycles::Scene>("Scene");
 
 		auto defSerializationData = luabind::class_<unirender::Scene::SerializationData>("SerializationData");
@@ -2265,6 +2344,9 @@ extern "C"
 		defScene.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,cycles::Scene&,CSceneHandle&,const Vector3&,const Quat&,const Mat4&,float,float,float,uint32_t)>([](lua_State *l,cycles::Scene &scene,CSceneHandle &gameScene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,uint32_t sceneFlags) {
 			pragma::Lua::check_component(l,gameScene);
 			initialize_from_game_scene(l,*gameScene,scene,camPos,camRot,vp,nearZ,farZ,fov,static_cast<SceneFlags>(sceneFlags),nullptr,nullptr);
+		}));
+		defScene.def("FindObjectByName",static_cast<unirender::Object*(*)(lua_State*,cycles::Scene&,const std::string&)>([](lua_State *l,cycles::Scene &scene,const std::string &name) -> unirender::Object* {
+			return scene.FindObject(name);
 		}));
 		defScene.def("SetSky",static_cast<void(*)(lua_State*,cycles::Scene&,const std::string&)>([](lua_State *l,cycles::Scene &scene,const std::string &skyPath) {
 			scene->SetSky(skyPath);
@@ -2351,6 +2433,7 @@ extern "C"
 		defSceneCreateInfo.def_readwrite("progressiveRefine",&unirender::Scene::CreateInfo::progressiveRefine);
 		defSceneCreateInfo.def_readwrite("hdrOutput",&unirender::Scene::CreateInfo::hdrOutput);
 		defSceneCreateInfo.def_readwrite("renderer",&unirender::Scene::CreateInfo::renderer);
+		defSceneCreateInfo.def_readwrite("preCalculateLight",&unirender::Scene::CreateInfo::preCalculateLight);
 		defSceneCreateInfo.def_readwrite("denoiseMode",reinterpret_cast<uint8_t unirender::Scene::CreateInfo::*>(&unirender::Scene::CreateInfo::denoiseMode));
 		defSceneCreateInfo.def_readwrite("deviceType",reinterpret_cast<uint32_t unirender::Scene::CreateInfo::*>(&unirender::Scene::CreateInfo::deviceType));
 		defSceneCreateInfo.def("SetSamplesPerPixel",static_cast<void(*)(lua_State*,unirender::Scene::CreateInfo&,uint32_t)>([](lua_State *l,unirender::Scene::CreateInfo &createInfo,uint32_t samples) {

@@ -8,7 +8,7 @@
 #include <pragma/entities/baseentity_handle.h>
 #include <pragma/entities/baseentity.h>
 #include <util_raytracing/shader_nodes.hpp>
-#include <util_raytracing/ccl_shader.hpp>
+#include <util_raytracing/shader.hpp>
 #include <pragma/lua/luaobjectbase.h>
 #include <material.h>
 
@@ -32,12 +32,17 @@ namespace pragma::modules::cycles
 		void ClearHairConfig() {m_hairConfig = {};}
 		const std::optional<util::HairConfig> &GetHairConfig() const {return m_hairConfig;}
 
+		void SetSubdivisionSettings(const unirender::SubdivisionSettings &subdivSettings) {m_subdivSettings = subdivSettings;}
+		void ClearSubdivisionSettings() {m_subdivSettings = {};}
+		const std::optional<unirender::SubdivisionSettings> &GetSubdivisionSettings() const {return m_subdivSettings;}
+
 		BaseEntity *GetEntity() const;
 		Material *GetMaterial() const;
 	protected:
 		Shader()=default;
 		unirender::NodeManager *m_nodeManager = nullptr;
 		std::optional<util::HairConfig> m_hairConfig {};
+		std::optional<unirender::SubdivisionSettings> m_subdivSettings {};
 	private:
 		mutable EntityHandle m_hEntity {};
 		mutable MaterialHandle m_hMaterial {};
