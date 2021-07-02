@@ -263,9 +263,12 @@ unirender::PShader cycles::Cache::CreateShader(Material &mat,const std::string &
 	auto it = m_materialToShader.find(&mat);
 	if(it != m_materialToShader.end())
 		return m_shaderCache->GetShader(it->second);
+	auto &matShader = mat.GetShaderIdentifier();
+	if(ustring::compare(matShader,"nodraw",false))
+		return nullptr;
 	std::string cyclesShader = "pbr";
 	auto &dataBlock = mat.GetDataBlock();
-	auto cyclesBlock = dataBlock->GetBlock("cycles");
+	auto cyclesBlock = dataBlock->GetBlock("unirender");
 	auto &shaderManager = get_shader_manager();
 	if(cyclesBlock)
 		cyclesShader = cyclesBlock->GetString("shader","pbr");
@@ -276,6 +279,8 @@ unirender::PShader cycles::Cache::CreateShader(Material &mat,const std::string &
 		if(shaderManager.IsShaderRegistered(matShader))
 			cyclesShader = matShader;
 	}
+	if(ustring::compare(cyclesShader,"nodraw",false))
+		return nullptr;
 	
 	auto shader = shaderManager.CreateShader(get_node_manager(),cyclesShader,shaderInfo.entity.has_value() ? *shaderInfo.entity : nullptr,mat);
 	if(shader == nullptr)
