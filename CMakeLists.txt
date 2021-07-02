@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.12)
 
 include("../CMakeShared.txt")
 
-set(PROJ_NAME pr_cycles)
+set(PROJ_NAME pr_unirender)
 
 project(${PROJ_NAME} CXX)
 
@@ -73,7 +73,7 @@ register_pragma_module(${PROJ_NAME})
 
 target_include_directories(${PROJ_NAME} PRIVATE "${CMAKE_CURRENT_LIST_DIR}/../pr_dds/include")
 
-target_link_libraries(pr_cycles
+target_link_libraries(pr_unirender
 	opengl32
 	glu32
 )
@@ -92,14 +92,14 @@ if(WIN32)
 	set(DEPENDENCY_CYCLES_CUEW_LIBRARY ${DEPENDENCY_CYCLES_LIBRARY_LOCATION}/extern_cuew.lib CACHE PATH "Path to library." FORCE)
 	set(DEPENDENCY_CYCLES_NUMAAPI_LIBRARY ${DEPENDENCY_CYCLES_LIBRARY_LOCATION}/extern_numaapi.lib CACHE PATH "Path to library." FORCE)
 
-	set(DEPENDENCY_OPENEXR_HALF_LIBRARY ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/Half-2_3_static.lib CACHE PATH "Path to library." FORCE)
-	set(DEPENDENCY_OPENEXR_IEX_LIBRARY ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/Iex-2_3_static.lib CACHE PATH "Path to library." FORCE)
-	set(DEPENDENCY_OPENEXR_IEX_MATH_LIBRARY ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/IexMath-2_3_static.lib CACHE PATH "Path to library." FORCE)
-	set(DEPENDENCY_OPENEXR_ILM_IMF_LIBRARY ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/IlmImf-2_3_static.lib CACHE PATH "Path to library." FORCE)
-	set(DEPENDENCY_OPENEXR_ILM_IMF_UTIL ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/IlmImfUtil-2_3_static.lib CACHE PATH "Path to library." FORCE)
-	set(DEPENDENCY_OPENEXR_ILM_THREAD ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/IlmThread-2_3_static.lib CACHE PATH "Path to library." FORCE)
-	set(DEPENDENCY_OPENEXR_IMATH ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/Imath-2_3_static.lib CACHE PATH "Path to library." FORCE)
-	target_link_libraries(pr_cycles
+	# set(DEPENDENCY_OPENEXR_HALF_LIBRARY ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/Half-2_5.lib CACHE PATH "Path to library." FORCE)
+	# set(DEPENDENCY_OPENEXR_IEX_LIBRARY ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/Iex-2_5.lib CACHE PATH "Path to library." FORCE)
+	# set(DEPENDENCY_OPENEXR_IEX_MATH_LIBRARY ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/IexMath-2_5.lib CACHE PATH "Path to library." FORCE)
+	# set(DEPENDENCY_OPENEXR_ILM_IMF_LIBRARY ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/IlmImf-2_5.lib CACHE PATH "Path to library." FORCE)
+	# set(DEPENDENCY_OPENEXR_ILM_IMF_UTIL ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/IlmImfUtil-2_5.lib CACHE PATH "Path to library." FORCE)
+	# set(DEPENDENCY_OPENEXR_ILM_THREAD ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/IlmThread-2_5.lib CACHE PATH "Path to library." FORCE)
+	# set(DEPENDENCY_OPENEXR_IMATH ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/Imath-2_3_static.lib CACHE PATH "Path to library." FORCE)
+	target_link_libraries(pr_unirender
 		${DEPENDENCY_CYCLES_UTIL_LIBRARY}
 		${DEPENDENCY_CYCLES_DEVICE_LIBRARY}
 		${DEPENDENCY_CYCLES_RENDER_LIBRARY}
@@ -125,3 +125,12 @@ if(WIN32)
 		${DEPENDENCY_BOOST_LIBRARY_LOCATION}/libboost_regex-vc142-mt-x64-1_76.lib
 	)
 endif()
+
+add_subdirectory(external_libs/cycles)
+add_subdirectory(external_libs/luxcorerender)
+
+set_target_properties(pr_unirender PROPERTIES FOLDER modules/offline_render/unirender)
+set_target_properties(UniRender_Cycles PROPERTIES FOLDER modules/offline_render/unirender)
+set_target_properties(UniRender_LuxCoreRender PROPERTIES FOLDER modules/offline_render/unirender)
+
+set_property(GLOBAL PROPERTY PRAGMA_MODULE_SKIP_TARGET_PROPERTY_FOLDER 1)
