@@ -1,0 +1,6 @@
+[submodule "external_libs/cycles"]
+	path = external_libs/cycles
+	url = https://github.com/Silverlan/UniRender_Cycles.git
+[submodule "external_libs/luxcorerender"]
+	path = external_libs/luxcorerender
+	url = https://github.com/Silverlan/UniRender_LuxCoreRender.git
