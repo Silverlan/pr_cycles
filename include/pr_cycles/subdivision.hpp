@@ -7,7 +7,7 @@
 
 #ifdef RT_ENABLE_SUBDIVISION
 #include <iostream>
-#include <pragma/model/vertex.h>
+#include <mathutil/vertex.hpp>
 #include <mathutil/uvec.h>
 #include <vector>
 #include <functional>
@@ -19,7 +19,7 @@ namespace pragma::modules::cycles
 	using FaceVertexIndex = uint32_t;
 	struct BaseChannelData
 	{
-		BaseChannelData(const std::function<void(BaseChannelData&,FaceVertexIndex,Vertex&,int)> &fApply,const std::function<void(uint32_t)> &prepareResultData=nullptr)
+		BaseChannelData(const std::function<void(BaseChannelData&,FaceVertexIndex,umath::Vertex&,int)> &fApply,const std::function<void(uint32_t)> &prepareResultData=nullptr)
 			: m_apply{fApply},m_prepareResultData{prepareResultData}
 		{}
 		virtual void ResizeBuffer(size_t size)=0;
@@ -28,7 +28,7 @@ namespace pragma::modules::cycles
 		void *GetElementPtr(uint32_t idx) {return static_cast<uint8_t*>(GetDataPtr()) +(idx *GetElementSize());}
 		virtual uint32_t GetElementSize() const=0;
 		virtual void Interpolate(OpenSubdiv::Far::PrimvarRefiner &primvarRefiner,int32_t level,void *src,void *dst,int channel)=0;
-		void Apply(FaceVertexIndex face,Vertex &v,int idx)
+		void Apply(FaceVertexIndex face,umath::Vertex &v,int idx)
 		{
 			if(m_apply)
 				m_apply(*this,face,v,idx);
@@ -39,7 +39,7 @@ namespace pragma::modules::cycles
 				m_prepareResultData(numFaces);
 		}
 	private:
-		std::function<void(BaseChannelData&,FaceVertexIndex,Vertex&,int)> m_apply = nullptr;
+		std::function<void(BaseChannelData&,FaceVertexIndex,umath::Vertex&,int)> m_apply = nullptr;
 		std::function<void(uint32_t)> m_prepareResultData = nullptr;
 	};
 
@@ -70,7 +70,7 @@ namespace pragma::modules::cycles
 		struct ChannelData
 			: public BaseChannelData
 	{
-		ChannelData(const std::function<void(BaseChannelData&,FaceVertexIndex,Vertex&,int)> &fApply,const std::function<void(uint32_t)> &prepareResultData=nullptr)
+		ChannelData(const std::function<void(BaseChannelData&,FaceVertexIndex,umath::Vertex&,int)> &fApply,const std::function<void(uint32_t)> &prepareResultData=nullptr)
 			: BaseChannelData{fApply,prepareResultData}
 		{}
 		virtual void ResizeBuffer(size_t size) override {buffer.resize(size);}
@@ -92,7 +92,7 @@ namespace pragma::modules::cycles
 	using OsdUV = OsdGenericAttribute<Vector2>;
 	using OsdFloatAttr = OsdGenericAttribute<float>;
 	void subdivide_mesh(
-		const std::vector<Vertex> &verts,const std::vector<int32_t> &tris,std::vector<Vertex> &outVerts,std::vector<int32_t> &outTris,uint32_t subDivLevel,
+		const std::vector<umath::Vertex> &verts,const std::vector<int32_t> &tris,std::vector<umath::Vertex> &outVerts,std::vector<int32_t> &outTris,uint32_t subDivLevel,
 		const std::vector<std::shared_ptr<BaseChannelData>> &miscAttributes={}
 	);
 };

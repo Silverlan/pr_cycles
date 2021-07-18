@@ -20,7 +20,7 @@
 #include <atomic>
 #include <thread>
 #include <pragma/entities/baseentity_handle.h>
-#include <pragma/model/vertex.h>
+#include <mathutil/vertex.hpp>
 
 #define ENABLE_TEST_AMBIENT_OCCLUSION
 
@@ -56,7 +56,7 @@ namespace pragma::modules::cycles
 	public:
 		struct MeshData
 		{
-			std::vector<Vertex> vertices;
+			std::vector<umath::Vertex> vertices;
 			std::vector<int32_t> triangles;
 
 			std::optional<std::vector<float>> alphas {};

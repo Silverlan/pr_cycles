@@ -31,24 +31,24 @@ struct OsdVertexWeight
 	{
 		// ??
 	}
-	VertexWeight vw {};
+	umath::VertexWeight vw {};
 };
 
 void pragma::modules::cycles::subdivide_mesh(
-	const std::vector<Vertex> &verts,const std::vector<int32_t> &tris,std::vector<Vertex> &outVerts,std::vector<int32_t> &outTris,uint32_t subDivLevel,
+	const std::vector<umath::Vertex> &verts,const std::vector<int32_t> &tris,std::vector<umath::Vertex> &outVerts,std::vector<int32_t> &outTris,uint32_t subDivLevel,
 	const std::vector<std::shared_ptr<BaseChannelData>> &miscAttributes
 )
 {
 	std::vector<std::shared_ptr<BaseChannelData>> vertexAttributes {};
 	vertexAttributes.reserve(miscAttributes.size() +3);
-	auto vertexData = std::make_shared<ChannelData<OsdVertex>>([](BaseChannelData &cd,FaceVertexIndex faceVertexIndex,Vertex &v,int idx) {v.position = static_cast<OsdVertex*>(cd.GetElementPtr(idx))->value;});
+	auto vertexData = std::make_shared<ChannelData<OsdVertex>>([](BaseChannelData &cd,FaceVertexIndex faceVertexIndex,umath::Vertex &v,int idx) {v.position = static_cast<OsdVertex*>(cd.GetElementPtr(idx))->value;});
 	vertexAttributes.push_back(vertexData);
 
-	auto uvData = std::make_shared<ChannelData<OsdUV>>([](BaseChannelData &cd,FaceVertexIndex faceVertexIndex,Vertex &v,int idx) {v.uv = static_cast<OsdUV*>(cd.GetElementPtr(idx))->value;});
+	auto uvData = std::make_shared<ChannelData<OsdUV>>([](BaseChannelData &cd,FaceVertexIndex faceVertexIndex,umath::Vertex &v,int idx) {v.uv = static_cast<OsdUV*>(cd.GetElementPtr(idx))->value;});
 	vertexAttributes.push_back(uvData);
 	uvData->ReserveBuffer(verts.size());
 
-	auto normData = std::make_shared<ChannelData<OsdVertex>>([](BaseChannelData &cd,FaceVertexIndex faceVertexIndex,Vertex &v,int idx) {v.normal = static_cast<OsdVertex*>(cd.GetElementPtr(idx))->value;});
+	auto normData = std::make_shared<ChannelData<OsdVertex>>([](BaseChannelData &cd,FaceVertexIndex faceVertexIndex,umath::Vertex &v,int idx) {v.normal = static_cast<OsdVertex*>(cd.GetElementPtr(idx))->value;});
 	vertexAttributes.push_back(normData);
 	normData->ReserveBuffer(verts.size());
 
@@ -175,14 +175,14 @@ void pragma::modules::cycles::subdivide_mesh(
 
 		for(uint8_t i=0;i<3;++i)
 		{
-			Vertex v {};
+			umath::Vertex v {};
 			for(auto j=decltype(numResultAttrs.size()){0u};j<numResultAttrs.size();++j)
 			{
 				auto &attr = vertexAttributes.at(j);
 				auto idx = firstOfLastAttrs.at(j) +attrIndices.at(j)[i];
 				attr->Apply(face *3 +i,v,idx);
 			}
-			auto it = std::find_if(outVerts.begin(),outVerts.end(),[&v,VERTEX_EPSILON](const Vertex &vOther) {
+			auto it = std::find_if(outVerts.begin(),outVerts.end(),[&v,VERTEX_EPSILON](const umath::Vertex &vOther) {
 				return vOther.Equal(v,VERTEX_EPSILON);
 			});
 			if(it == outVerts.end())

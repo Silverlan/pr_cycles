@@ -488,7 +488,7 @@ std::shared_ptr<pragma::modules::cycles::Cache::MeshData> pragma::modules::cycle
 	auto &meshVerts = mdlMesh.GetVertices();
 	auto &meshAlphas = mdlMesh.GetAlphas();
 
-	std::vector<Vertex> transformedVerts {};
+	std::vector<umath::Vertex> transformedVerts {};
 	transformedVerts.reserve(meshVerts.size());
 	
 	std::optional<std::vector<float>> alphas {};
@@ -580,7 +580,7 @@ std::shared_ptr<pragma::modules::cycles::Cache::MeshData> pragma::modules::cycle
 		std::vector<float> perFaceAlphaData {};
 		if(alphas.has_value())
 		{
-			auto alphaData = std::make_shared<ChannelData<OsdFloatAttr>>([&perFaceAlphaData](BaseChannelData &cd,FaceVertexIndex faceVertexIndex,Vertex &v,int idx) {
+			auto alphaData = std::make_shared<ChannelData<OsdFloatAttr>>([&perFaceAlphaData](BaseChannelData &cd,FaceVertexIndex faceVertexIndex,umath::Vertex &v,int idx) {
 				perFaceAlphaData.at(faceVertexIndex) = static_cast<OsdFloatAttr*>(cd.GetElementPtr(idx))->value;
 			},[&perFaceAlphaData](uint32_t numFaces) {
 				perFaceAlphaData.resize(numFaces *3);
@@ -595,7 +595,7 @@ std::shared_ptr<pragma::modules::cycles::Cache::MeshData> pragma::modules::cycle
 		std::vector<float> perFaceWrinkleData {};
 		if(wrinkles.has_value())
 		{
-			auto wrinkleData = std::make_shared<ChannelData<OsdFloatAttr>>([&perFaceWrinkleData](BaseChannelData &cd,FaceVertexIndex faceVertexIndex,Vertex &v,int idx) {
+			auto wrinkleData = std::make_shared<ChannelData<OsdFloatAttr>>([&perFaceWrinkleData](BaseChannelData &cd,FaceVertexIndex faceVertexIndex,umath::Vertex &v,int idx) {
 				perFaceWrinkleData.at(faceVertexIndex) = static_cast<OsdFloatAttr*>(cd.GetElementPtr(idx))->value;
 			},[&perFaceWrinkleData](uint32_t numFaces) {
 				perFaceWrinkleData.resize(numFaces *3);
