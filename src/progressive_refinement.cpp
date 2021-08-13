@@ -17,9 +17,9 @@ using namespace pragma::modules::cycles;
 
 DenoiseTexture::DenoiseTexture(uint32_t w,uint32_t h)
 {
-	m_inputImage = uimg::ImageBuffer::Create(w,h,uimg::ImageBuffer::Format::RGB_FLOAT);
-	m_denoisedImage = uimg::ImageBuffer::Create(w,h,uimg::ImageBuffer::Format::RGB_FLOAT);
-	m_outputImage = uimg::ImageBuffer::Create(w,h,uimg::ImageBuffer::Format::RGBA_HDR);
+	m_inputImage = uimg::ImageBuffer::Create(w,h,uimg::Format::RGB_FLOAT);
+	m_denoisedImage = uimg::ImageBuffer::Create(w,h,uimg::Format::RGB_FLOAT);
+	m_outputImage = uimg::ImageBuffer::Create(w,h,uimg::Format::RGBA_HDR);
 	m_running = true;
 	m_thread = std::thread{[this]() {
 		while(m_running)

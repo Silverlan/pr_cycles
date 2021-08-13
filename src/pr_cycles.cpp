@@ -704,6 +704,43 @@ static unirender::Socket socket_to_vector(unirender::GroupNodeDesc &node,unirend
 	return node.CombineRGB(socket,socket,socket);
 }
 
+static luabind::object data_value_to_lua_object(lua_State *l,const unirender::DataValue &dataValue)
+{
+	switch(dataValue.type)
+	{
+	case unirender::SocketType::Bool:
+		return luabind::object{l,*static_cast<unirender::STBool*>(dataValue.value.get())};
+	case unirender::SocketType::Float:
+		return luabind::object{l,*static_cast<unirender::STFloat*>(dataValue.value.get())};
+	case unirender::SocketType::Int:
+		return luabind::object{l,*static_cast<unirender::STInt*>(dataValue.value.get())};
+	case unirender::SocketType::UInt:
+		return luabind::object{l,*static_cast<unirender::STUInt*>(dataValue.value.get())};
+	case unirender::SocketType::Color:
+		return luabind::object{l,*static_cast<unirender::STColor*>(dataValue.value.get())};
+	case unirender::SocketType::Vector:
+		return luabind::object{l,*static_cast<unirender::STVector*>(dataValue.value.get())};
+	case unirender::SocketType::Point:
+		return luabind::object{l,*static_cast<unirender::STPoint*>(dataValue.value.get())};
+	case unirender::SocketType::Normal:
+		return luabind::object{l,*static_cast<unirender::STNormal*>(dataValue.value.get())};
+	case unirender::SocketType::Point2:
+		return luabind::object{l,*static_cast<unirender::STPoint2*>(dataValue.value.get())};
+	case unirender::SocketType::String:
+		return luabind::object{l,*static_cast<unirender::STString*>(dataValue.value.get())};
+	case unirender::SocketType::Enum:
+		return luabind::object{l,*static_cast<unirender::STEnum*>(dataValue.value.get())};
+	case unirender::SocketType::Transform:
+		return luabind::object{l,*static_cast<unirender::STTransform*>(dataValue.value.get())};
+	case unirender::SocketType::FloatArray:
+		return Lua::vector_to_table<unirender::STFloat>(l,*static_cast<unirender::STFloatArray*>(dataValue.value.get()));
+	case unirender::SocketType::ColorArray:
+		return Lua::vector_to_table<unirender::STColor>(l,*static_cast<unirender::STColorArray*>(dataValue.value.get()));
+	}
+	static_assert(umath::to_integral(unirender::SocketType::Count) == 16);
+	return {};
+}
+
 static std::shared_ptr<cycles::Scene> setup_scene(unirender::Scene::RenderMode renderMode,const pragma::rendering::cycles::SceneInfo &renderImageSettings)
 {
 	std::optional<unirender::Scene::ColorTransformInfo> colorTransform {};
@@ -1084,39 +1121,7 @@ extern "C"
 				desc = node.FindInputSocketDesc(socketName);
 			if(desc == nullptr || desc->dataValue.value == nullptr)
 				return {};
-			switch(desc->dataValue.type)
-			{
-			case unirender::SocketType::Bool:
-				return luabind::object{l,*static_cast<unirender::STBool*>(desc->dataValue.value.get())};
-			case unirender::SocketType::Float:
-				return luabind::object{l,*static_cast<unirender::STFloat*>(desc->dataValue.value.get())};
-			case unirender::SocketType::Int:
-				return luabind::object{l,*static_cast<unirender::STInt*>(desc->dataValue.value.get())};
-			case unirender::SocketType::UInt:
-				return luabind::object{l,*static_cast<unirender::STUInt*>(desc->dataValue.value.get())};
-			case unirender::SocketType::Color:
-				return luabind::object{l,*static_cast<unirender::STColor*>(desc->dataValue.value.get())};
-			case unirender::SocketType::Vector:
-				return luabind::object{l,*static_cast<unirender::STVector*>(desc->dataValue.value.get())};
-			case unirender::SocketType::Point:
-				return luabind::object{l,*static_cast<unirender::STPoint*>(desc->dataValue.value.get())};
-			case unirender::SocketType::Normal:
-				return luabind::object{l,*static_cast<unirender::STNormal*>(desc->dataValue.value.get())};
-			case unirender::SocketType::Point2:
-				return luabind::object{l,*static_cast<unirender::STPoint2*>(desc->dataValue.value.get())};
-			case unirender::SocketType::String:
-				return luabind::object{l,*static_cast<unirender::STString*>(desc->dataValue.value.get())};
-			case unirender::SocketType::Enum:
-				return luabind::object{l,*static_cast<unirender::STEnum*>(desc->dataValue.value.get())};
-			case unirender::SocketType::Transform:
-				return luabind::object{l,*static_cast<unirender::STTransform*>(desc->dataValue.value.get())};
-			case unirender::SocketType::FloatArray:
-				return Lua::vector_to_table<unirender::STFloat>(l,*static_cast<unirender::STFloatArray*>(desc->dataValue.value.get()));
-			case unirender::SocketType::ColorArray:
-				return Lua::vector_to_table<unirender::STColor>(l,*static_cast<unirender::STColorArray*>(desc->dataValue.value.get()));
-			}
-			static_assert(umath::to_integral(unirender::SocketType::Count) == 16);
-			return {};
+			return data_value_to_lua_object(l,desc->dataValue);
 		}));
 		defNode.def("SetProperty",static_cast<void(unirender::NodeDesc::*)(const std::string&,const bool&)>(&unirender::NodeDesc::SetProperty));
 		defNode.def("SetProperty",static_cast<void(unirender::NodeDesc::*)(const std::string&,const float&)>(&unirender::NodeDesc::SetProperty));
