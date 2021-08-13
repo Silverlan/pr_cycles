@@ -12,6 +12,12 @@
 
 using namespace pragma::modules::cycles;
 
+// For some reason client.dll exports these, even though it shouldn't, which causes a multiple defined symbol issue. The code below is a work-around.
+// TODO: Find out where the symbols are exported in client.dll and remove them!
+extern template class util::TWeakSharedHandle<BaseEntity>;
+template __declspec(dllimport) util::TWeakSharedHandle<BaseEntity>::~TWeakSharedHandle();
+//
+
 void Shader::Initialize(unirender::NodeManager &nodeManager,BaseEntity *ent,Material &mat)
 {
 	m_nodeManager = &nodeManager;

@@ -38,7 +38,7 @@
 extern DLLCLIENT CEngine *c_engine;
 extern DLLCLIENT ClientState *client;
 extern DLLCLIENT CGame *c_game;
-
+#pragma optimize("",off)
 enum class PreparedTextureInputFlags : uint8_t
 {
 	None = 0u,
@@ -399,7 +399,7 @@ std::vector<std::shared_ptr<pragma::modules::cycles::Cache::MeshData>> pragma::m
 			std::optional<std::string> skyboxTexture {};
 			for(auto &mesh : *targetMeshes)
 			{
-				auto *mat = mdlC->GetRenderMaterial(mesh->GetSkinTextureIndex());
+				auto *mat = mdlC->GetRenderMaterial(mesh->GetSkinTextureIndex(),ent.GetSkin());
 				if(mat == nullptr || (ustring::compare(mat->GetShaderIdentifier(),"skybox",false) == false && ustring::compare(mat->GetShaderIdentifier(),"skybox_equirect",false) == false))
 					continue;
 				auto *diffuseMap = mat->GetTextureInfo("skybox");
@@ -658,8 +658,8 @@ Material *pragma::modules::cycles::Cache::GetMaterial(pragma::CModelComponent &m
 	auto mdl = mdlC.GetModel();
 	if(mdl == nullptr)
 		return nullptr;
-	auto texIdx = mdl->GetMaterialIndex(subMesh,skinId);
-	return texIdx.has_value() ? mdlC.GetRenderMaterial(*texIdx) : nullptr;
+	auto texIdx = mdl->GetMaterialIndex(subMesh);
+	return texIdx.has_value() ? mdlC.GetRenderMaterial(*texIdx,skinId) : nullptr;
 }
 
 unirender::PShader pragma::modules::cycles::Cache::CreateShader(const std::string &meshName,Model &mdl,ModelSubMesh &subMesh,BaseEntity *optEnt,uint32_t skinId) const
@@ -788,3 +788,4 @@ void pragma::modules::cycles::Cache::AddAOBakeTarget(BaseEntity &ent,uint32_t ma
 }
 
 void pragma::modules::cycles::Cache::AddAOBakeTarget(Model &mdl,uint32_t matIndex,std::shared_ptr<unirender::Object> &oAo,std::shared_ptr<unirender::Object> &oEnv) {AddAOBakeTarget(nullptr,mdl,matIndex,oAo,oEnv);}
+#pragma optimize("",on)

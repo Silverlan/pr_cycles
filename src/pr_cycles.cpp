@@ -52,15 +52,17 @@ namespace pragma::asset {class WorldData; class EntityData;};
 #include <pragma/lua/classes/ldef_entity.h>
 #include <pragma/lua/libraries/lfile.h>
 #include <pragma/lua/c_lentity_handles.hpp>
+#include <pragma/lua/policies/shared_from_this_policy.hpp>
 #include <pragma/rendering/raytracing/cycles.hpp>
 #include <util_image_buffer.hpp>
 #include <pragma/entities/components/c_scene_component.hpp>
+#include <pragma/lua/converters/game_type_converters_t.hpp>
+#include <pragma/lua/converters/optional_converter_t.hpp>
 
 #include <luainterface.hpp>
 #include <pragma/lua/lua_entity_component.hpp>
 #include <pragma/lua/lua_call.hpp>
 
-// Already defined b
 #undef __UTIL_STRING_H__
 #include <sharedutils/util_string.h>
 
@@ -78,6 +80,7 @@ namespace pragma::asset {class WorldData; class EntityData;};
 #include <util_raytracing/model_cache.hpp>
 #include <util_raytracing/color_management.hpp>
 #include <sharedutils/util_path.hpp>
+#include <luabind/copy_policy.hpp>
 
 #define ENABLE_BAKE_DEBUGGING_INTERFACE 1
 
@@ -89,7 +92,7 @@ namespace pragma::asset {class WorldData; class EntityData;};
 extern DLLCLIENT CGame *c_game;
 
 using namespace pragma::modules;
-
+#pragma optimize("",off)
 static void setup_light_sources(cycles::Scene &scene,const std::function<bool(BaseEntity&)> &lightFilter=nullptr)
 {
 	EntityIterator entIt {*c_game};
@@ -418,7 +421,7 @@ inline std::function<bool(BaseEntity&)> to_entity_filter(lua_State *l,luabind::o
 		auto r = Lua::CallFunction(l,[optEntFilter,&ent](lua_State *l) {
 			optEntFilter->push(l);
 
-			ent.GetLuaObject()->push(l);
+			ent.GetLuaObject().push(l);
 			return Lua::StatusCode::Ok;
 			},1);
 		if(r == Lua::StatusCode::Ok)
@@ -1068,39 +1071,13 @@ extern "C"
 		defNode.def(luabind::const_self ^unirender::Socket{});
 		// defNode.def(luabind::const_self <unirender::Socket{});
 		// defNode.def(luabind::const_self <=unirender::Socket{});
-		defNode.def("GetName",static_cast<std::string(*)(unirender::NodeDesc&)>([](unirender::NodeDesc &node) -> std::string {
-			return node.GetName();
-		}));
-		defNode.def("GetTypeName",static_cast<std::string(*)(unirender::NodeDesc&)>([](unirender::NodeDesc &node) -> std::string {
-			return node.GetTypeName();
-		}));
-		defNode.def("IsGroupNode",static_cast<bool(*)(unirender::NodeDesc&)>([](unirender::NodeDesc &node) -> bool {
-			return node.IsGroupNode();
-		}));
-		defNode.def("GetParent",static_cast<luabind::object(*)(lua_State*,unirender::NodeDesc&)>([](lua_State *l,unirender::NodeDesc &node) -> luabind::object {
-			auto *parent = node.GetParent();
-			if(parent == nullptr)
-				return {};
-			return luabind::object{l,parent->shared_from_this()};
-		}));
-		defNode.def("GetInputSocket",static_cast<luabind::object(*)(lua_State*,unirender::NodeDesc&,const std::string&)>([](lua_State *l,unirender::NodeDesc &node,const std::string &socketName) -> luabind::object {
-			auto socket = node.FindInputSocket(socketName);
-			if(socket.has_value() == false)
-				return {};
-			return luabind::object{l,*socket};
-		}));
-		defNode.def("GetOutputSocket",static_cast<luabind::object(*)(lua_State*,unirender::NodeDesc&,const std::string&)>([](lua_State *l,unirender::NodeDesc &node,const std::string &socketName) -> luabind::object {
-			auto socket = node.FindOutputSocket(socketName);
-			if(socket.has_value() == false)
-				return {};
-			return luabind::object{l,*socket};
-		}));
-		defNode.def("GetPropertySocket",static_cast<luabind::object(*)(lua_State*,unirender::NodeDesc&,const std::string&)>([](lua_State *l,unirender::NodeDesc &node,const std::string &socketName) -> luabind::object {
-			auto socket = node.FindProperty(socketName);
-			if(socket.has_value() == false)
-				return {};
-			return luabind::object{l,*socket};
-		}));
+		defNode.def("GetName",&unirender::NodeDesc::GetName);
+		defNode.def("GetTypeName",&unirender::NodeDesc::GetTypeName);
+		defNode.def("IsGroupNode",&unirender::NodeDesc::IsGroupNode);
+		defNode.def("GetParent",&unirender::NodeDesc::GetParent,luabind::shared_from_this_policy<0>{});
+		defNode.def("GetInputSocket",&unirender::NodeDesc::FindInputSocket);
+		defNode.def("GetOutputSocket",&unirender::NodeDesc::FindOutputSocket);
+		defNode.def("GetPropertySocket",&unirender::NodeDesc::FindProperty);
 		defNode.def("GetProperty",static_cast<luabind::object(*)(lua_State*,unirender::NodeDesc&,const std::string&)>([](lua_State *l,unirender::NodeDesc &node,const std::string &socketName) -> luabind::object {
 			auto *desc = node.FindPropertyDesc(socketName);
 			if(desc == nullptr)
@@ -1141,24 +1118,12 @@ extern "C"
 			static_assert(umath::to_integral(unirender::SocketType::Count) == 16);
 			return {};
 		}));
-		defNode.def("SetProperty",static_cast<void(*)(lua_State*,unirender::NodeDesc&,const std::string&,bool)>([](lua_State *l,unirender::NodeDesc &node,const std::string &propertyName,bool value) {
-			node.SetProperty(propertyName,value);
-		}));
-		defNode.def("SetProperty",static_cast<void(*)(lua_State*,unirender::NodeDesc&,const std::string&,float)>([](lua_State *l,unirender::NodeDesc &node,const std::string &propertyName,float value) {
-			node.SetProperty(propertyName,value);
-		}));
-		defNode.def("SetProperty",static_cast<void(*)(lua_State*,unirender::NodeDesc&,const std::string&,const Vector3&)>([](lua_State *l,unirender::NodeDesc &node,const std::string &propertyName,const Vector3 &value) {
-			node.SetProperty(propertyName,value);
-		}));
-		defNode.def("SetProperty",static_cast<void(*)(lua_State*,unirender::NodeDesc&,const std::string&,const Vector2&)>([](lua_State *l,unirender::NodeDesc &node,const std::string &propertyName,const Vector2 &value) {
-			node.SetProperty(propertyName,value);
-		}));
-		defNode.def("SetProperty",static_cast<void(*)(lua_State*,unirender::NodeDesc&,const std::string&,const std::string&)>([](lua_State *l,unirender::NodeDesc &node,const std::string &propertyName,const std::string &value) {
-			node.SetProperty(propertyName,value);
-		}));
-		defNode.def("SetProperty",static_cast<void(*)(lua_State*,unirender::NodeDesc&,const std::string&,const Mat4x3&)>([](lua_State *l,unirender::NodeDesc &node,const std::string &propertyName,const Mat4x3 &value) {
-			node.SetProperty(propertyName,value);
-		}));
+		defNode.def("SetProperty",static_cast<void(unirender::NodeDesc::*)(const std::string&,const bool&)>(&unirender::NodeDesc::SetProperty));
+		defNode.def("SetProperty",static_cast<void(unirender::NodeDesc::*)(const std::string&,const float&)>(&unirender::NodeDesc::SetProperty));
+		defNode.def("SetProperty",static_cast<void(unirender::NodeDesc::*)(const std::string&,const Vector3&)>(&unirender::NodeDesc::SetProperty));
+		defNode.def("SetProperty",static_cast<void(unirender::NodeDesc::*)(const std::string&,const Vector2&)>(&unirender::NodeDesc::SetProperty));
+		defNode.def("SetProperty",static_cast<void(unirender::NodeDesc::*)(const std::string&,const std::string&)>(&unirender::NodeDesc::SetProperty));
+		defNode.def("SetProperty",static_cast<void(unirender::NodeDesc::*)(const std::string&,const Mat4x3&)>(&unirender::NodeDesc::SetProperty));
 		defNode.def("SetProperty",static_cast<void(*)(lua_State*,unirender::NodeDesc&,const std::string&,luabind::table<>)>([](lua_State *l,unirender::NodeDesc &node,const std::string &propertyName,luabind::table<> value) {
 			auto it = luabind::iterator{value};
 			if(it == luabind::iterator{})
@@ -1184,12 +1149,7 @@ extern "C"
 				node.SetProperty(propertyName,Lua::table_to_vector<unirender::STFloat>(l,value,3));
 			}
 		}));
-		defNode.def("GetPrimaryOutputSocket",static_cast<luabind::object(*)(lua_State*,unirender::NodeDesc&)>([](lua_State *l,unirender::NodeDesc &node) -> luabind::object {
-			auto socket = node.GetPrimaryOutputSocket();
-			if(socket.has_value() == false)
-				return {};
-			return luabind::object{l,*socket};
-		}));
+		defNode.def("GetPrimaryOutputSocket",&unirender::NodeDesc::GetPrimaryOutputSocket);
 		defNode.def("LessThan",static_cast<unirender::Socket(*)(unirender::NodeDesc&,const unirender::NodeDesc&)>([](unirender::NodeDesc &node,const unirender::NodeDesc &nodeOther) -> unirender::Socket {
 			return node < nodeOther;
 		}));
@@ -1364,9 +1324,7 @@ extern "C"
 			catch(const unirender::Exception &e) {std::rethrow_exception(std::current_exception());}
 			return {};
 		}));
-		defGroupNode.def("SetPrimaryOutputSocket",static_cast<void(*)(lua_State*,unirender::GroupNodeDesc&,const std::string&)>([](lua_State *l,unirender::GroupNodeDesc &node,const std::string &name) {
-			node.RegisterPrimaryOutputSocket(name);
-		}));
+		defGroupNode.def("SetPrimaryOutputSocket",&unirender::GroupNodeDesc::RegisterPrimaryOutputSocket);
 		defGroupNode.def("SetPrimaryOutputSocket",static_cast<void(*)(lua_State*,unirender::GroupNodeDesc&,const unirender::Socket&)>([](lua_State *l,unirender::GroupNodeDesc &node,const unirender::Socket &socket) {
 			std::string name;
 			socket.GetNode(name);
@@ -1860,39 +1818,14 @@ extern "C"
 		defShader.def("InitializeAlbedoPass",&pragma::modules::cycles::LuaShader::Lua_InitializeAlbedoPass,&pragma::modules::cycles::LuaShader::Lua_default_InitializeAlbedoPass);
 		defShader.def("InitializeNormalPass",&pragma::modules::cycles::LuaShader::Lua_InitializeNormalPass,&pragma::modules::cycles::LuaShader::Lua_default_InitializeNormalPass);
 		defShader.def("InitializeDepthPass",&pragma::modules::cycles::LuaShader::Lua_InitializeDepthPass,&pragma::modules::cycles::LuaShader::Lua_default_InitializeDepthPass);
-		defShader.def("GetEntity",static_cast<luabind::object(*)(lua_State*,pragma::modules::cycles::LuaShader&)>([](lua_State *l,pragma::modules::cycles::LuaShader &shader) -> luabind::object {
-			auto *ent = shader.GetEntity();
-			if(ent == nullptr)
-				return {};
-			return *ent->GetLuaObject();
-		}));
-		defShader.def("GetMaterial",static_cast<Material*(*)(lua_State*,pragma::modules::cycles::LuaShader&)>([](lua_State *l,pragma::modules::cycles::LuaShader &shader) -> Material* {
-			return shader.GetMaterial();
-		}));
-		defShader.def("ClearHairConfig",static_cast<void(*)(lua_State*,pragma::modules::cycles::LuaShader&)>([](lua_State *l,pragma::modules::cycles::LuaShader &shader) {
-			shader.ClearHairConfig();
-		}));
-		defShader.def("GetHairConfig",static_cast<luabind::object(*)(lua_State*,pragma::modules::cycles::LuaShader&)>([](lua_State *l,pragma::modules::cycles::LuaShader &shader) -> luabind::object {
-			auto &hairConfig = shader.GetHairConfig();
-			if(hairConfig.has_value() == false)
-				return {};
-			return luabind::object{l,*hairConfig};
-		}));
-		defShader.def("SetHairConfig",static_cast<void(*)(lua_State*,pragma::modules::cycles::LuaShader&,const util::HairConfig&)>([](lua_State *l,pragma::modules::cycles::LuaShader &shader,const util::HairConfig &hairConfig) {
-			shader.SetHairConfig(hairConfig);
-		}));
-		defShader.def("ClearSubdivisionSettings",static_cast<void(*)(lua_State*,pragma::modules::cycles::LuaShader&)>([](lua_State *l,pragma::modules::cycles::LuaShader &shader) {
-			shader.ClearSubdivisionSettings();
-		}));
-		defShader.def("GetSubdivisionSettings",static_cast<luabind::object(*)(lua_State*,pragma::modules::cycles::LuaShader&)>([](lua_State *l,pragma::modules::cycles::LuaShader &shader) -> luabind::object {
-			auto &subdivSettings = shader.GetSubdivisionSettings();
-			if(subdivSettings.has_value() == false)
-				return {};
-			return luabind::object{l,*subdivSettings};
-		}));
-		defShader.def("SetSubdivisionSettings",static_cast<void(*)(lua_State*,pragma::modules::cycles::LuaShader&,const unirender::SubdivisionSettings&)>([](lua_State *l,pragma::modules::cycles::LuaShader &shader,const unirender::SubdivisionSettings &subdivSettings) {
-			shader.SetSubdivisionSettings(subdivSettings);
-		}));
+		defShader.def("GetEntity",&pragma::modules::cycles::LuaShader::GetEntity);
+		defShader.def("GetMaterial",&pragma::modules::cycles::LuaShader::GetMaterial);
+		defShader.def("ClearHairConfig",&pragma::modules::cycles::LuaShader::ClearHairConfig);
+		defShader.def("GetHairConfig",&pragma::modules::cycles::LuaShader::GetHairConfig);
+		defShader.def("SetHairConfig",&pragma::modules::cycles::LuaShader::SetHairConfig);
+		defShader.def("ClearSubdivisionSettings",&pragma::modules::cycles::LuaShader::ClearSubdivisionSettings);
+		defShader.def("GetSubdivisionSettings",&pragma::modules::cycles::LuaShader::GetSubdivisionSettings);
+		defShader.def("SetSubdivisionSettings",&pragma::modules::cycles::LuaShader::SetSubdivisionSettings);
 
 		auto defHairConfig = luabind::class_<util::HairConfig>("HairConfig");
 		defHairConfig.def(luabind::constructor<>());
@@ -1977,12 +1910,7 @@ extern "C"
 		defSocket.add_static_constant("TYPE_COLOR_ARRAY",umath::to_integral(unirender::SocketType::ColorArray));
 		defSocket.add_static_constant("TYPE_COUNT",umath::to_integral(unirender::SocketType::Count));
 		static_assert(umath::to_integral(unirender::SocketType::Count) == 16);
-		defSocket.def("GetNode",static_cast<luabind::object(*)(lua_State*,unirender::Socket&)>([](lua_State *l,unirender::Socket &socket) -> luabind::object {
-			auto *node = socket.GetNode();
-			if(node == nullptr)
-				return {};
-			return luabind::object{l,node};
-		}));
+		defSocket.def("GetNode",static_cast<unirender::NodeDesc*(unirender::Socket::*)() const>(&unirender::Socket::GetNode));
 		defSocket.def("GetSocketName",static_cast<luabind::object(*)(lua_State*,unirender::Socket&)>([](lua_State *l,unirender::Socket &socket) -> luabind::object {
 			std::string socketName;
 			auto *node = socket.GetNode(socketName);
@@ -1990,15 +1918,9 @@ extern "C"
 				return {};
 			return luabind::object{l,socketName};
 		}));
-		defSocket.def("IsConcreteValue",static_cast<bool(*)(lua_State*,unirender::Socket&)>([](lua_State *l,unirender::Socket &socket) -> bool {
-			return socket.IsConcreteValue();
-		}));
-		defSocket.def("IsNodeSocket",static_cast<bool(*)(lua_State*,unirender::Socket&)>([](lua_State *l,unirender::Socket &socket) -> bool {
-			return socket.IsNodeSocket();
-		}));
-		defSocket.def("IsOutputSocket",static_cast<bool(*)(lua_State*,unirender::Socket&)>([](lua_State *l,unirender::Socket &socket) -> bool {
-			return socket.IsOutputSocket();
-		}));
+		defSocket.def("IsConcreteValue",&unirender::Socket::IsConcreteValue);
+		defSocket.def("IsNodeSocket",&unirender::Socket::IsNodeSocket);
+		defSocket.def("IsOutputSocket",&unirender::Socket::IsOutputSocket);
 		defSocket.def("Link",static_cast<void(*)(lua_State*,unirender::Socket&,const unirender::Socket&)>(
 			[](lua_State *l,unirender::Socket &socket,const unirender::Socket &toSocket) {
 			try {socket.Link(toSocket);}
@@ -2159,30 +2081,18 @@ extern "C"
 		modCycles[defSocket];
 
 		auto defSceneObject = luabind::class_<unirender::SceneObject>("SceneObject");
-		defSceneObject.def("GetScene",static_cast<void(*)(lua_State*,unirender::SceneObject&)>([](lua_State *l,unirender::SceneObject &sceneObject) {
-			Lua::Push(l,sceneObject.GetScene().shared_from_this());
-		}));
+		defSceneObject.def("GetScene",&unirender::SceneObject::GetScene,luabind::shared_from_this_policy<0>{});
 		defSceneObject.def("Finalize",static_cast<void(*)(lua_State*,unirender::SceneObject&,cycles::Scene&)>([](lua_State *l,unirender::SceneObject &sceneObject,cycles::Scene &scene) {
 			sceneObject.Finalize(*scene,true);
 		}));
 		modCycles[defSceneObject];
 
 		auto defWorldObject = luabind::class_<unirender::WorldObject>("WorldObject");
-		defWorldObject.def("SetPos",static_cast<void(*)(lua_State*,unirender::WorldObject&,const Vector3&)>([](lua_State *l,unirender::WorldObject &worldObject,const Vector3 &pos) {
-			worldObject.SetPos(pos);
-			}));
-		defWorldObject.def("GetPos",static_cast<void(*)(lua_State*,unirender::WorldObject&)>([](lua_State *l,unirender::WorldObject &worldObject) {
-			Lua::Push<Vector3>(l,worldObject.GetPos());
-			}));
-		defWorldObject.def("SetRotation",static_cast<void(*)(lua_State*,unirender::WorldObject&,const Quat&)>([](lua_State *l,unirender::WorldObject &worldObject,const Quat &rot) {
-			worldObject.SetRotation(rot);
-			}));
-		defWorldObject.def("GetRotation",static_cast<void(*)(lua_State*,unirender::WorldObject&)>([](lua_State *l,unirender::WorldObject &worldObject) {
-			Lua::Push<Quat>(l,worldObject.GetRotation());
-			}));
-		defWorldObject.def("GetPose",static_cast<void(*)(lua_State*,unirender::WorldObject&)>([](lua_State *l,unirender::WorldObject &worldObject) {
-			Lua::Push<umath::Transform>(l,worldObject.GetPose());
-			}));
+		defWorldObject.def("SetPos",&unirender::WorldObject::SetPos);
+		defWorldObject.def("GetPos",&unirender::WorldObject::GetPos);
+		defWorldObject.def("SetRotation",&unirender::WorldObject::SetRotation);
+		defWorldObject.def("GetRotation",&unirender::WorldObject::GetRotation);
+		defWorldObject.def("GetPose",static_cast<const umath::ScaledTransform&(unirender::WorldObject::*)() const>(&unirender::WorldObject::GetPose),luabind::copy_policy<0>{});
 		modCycles[defWorldObject];
 
 		auto defCamera = luabind::class_<unirender::Camera,luabind::bases<unirender::WorldObject,unirender::SceneObject>>("Camera");
@@ -2194,107 +2104,47 @@ extern "C"
 		defCamera.add_static_constant("PANORAMA_TYPE_FISHEYE_EQUIDISTANT",umath::to_integral(unirender::Camera::PanoramaType::FisheyeEquidistant));
 		defCamera.add_static_constant("PANORAMA_TYPE_FISHEYE_EQUISOLID",umath::to_integral(unirender::Camera::PanoramaType::FisheyeEquisolid));
 		defCamera.add_static_constant("PANORAMA_TYPE_MIRRORBALL",umath::to_integral(unirender::Camera::PanoramaType::Mirrorball));
-		defCamera.def("SetInterocularDistance",static_cast<void(*)(lua_State*,util::WeakHandle<unirender::Camera>&,float)>([](lua_State *l,util::WeakHandle<unirender::Camera> &cam,float interocularDistance) {
-			pragma::Lua::check_component(l,cam);
-			cam->SetInterocularDistance(interocularDistance);
+		defCamera.def("SetInterocularDistance",&unirender::Camera::SetInterocularDistance);
+		defCamera.def("SetEquirectangularHorizontalRange",&unirender::Camera::SetEquirectangularHorizontalRange);
+		defCamera.def("SetEquirectangularVerticalRange",&unirender::Camera::SetEquirectangularVerticalRange);
+		defCamera.def("SetStereoscopic",&unirender::Camera::SetStereoscopic);
+		defCamera.def("SetResolution",&unirender::Camera::SetResolution);
+		defCamera.def("SetFarZ",&unirender::Camera::SetFarZ);
+		defCamera.def("SetNearZ",&unirender::Camera::SetNearZ);
+		defCamera.def("SetFOV",static_cast<void(*)(lua_State*,unirender::Camera&,float)>([](lua_State *l,unirender::Camera &cam,float fov) {
+			cam.SetFOV(umath::deg_to_rad(fov));
 		}));
-		defCamera.def("SetEquirectangularHorizontalRange",static_cast<void(*)(lua_State*,util::WeakHandle<unirender::Camera>&,float)>([](lua_State *l,util::WeakHandle<unirender::Camera> &cam,float range) {
-			pragma::Lua::check_component(l,cam);
-			cam->SetEquirectangularHorizontalRange(range);
-		}));
-		defCamera.def("SetEquirectangularVerticalRange",static_cast<void(*)(lua_State*,util::WeakHandle<unirender::Camera>&,float)>([](lua_State *l,util::WeakHandle<unirender::Camera> &cam,float range) {
-			pragma::Lua::check_component(l,cam);
-			cam->SetEquirectangularVerticalRange(range);
-		}));
-		defCamera.def("SetStereoscopic",static_cast<void(*)(lua_State*,util::WeakHandle<unirender::Camera>&,bool)>([](lua_State *l,util::WeakHandle<unirender::Camera> &cam,bool stereoscopic) {
-			pragma::Lua::check_component(l,cam);
-			cam->SetStereoscopic(stereoscopic);
-		}));
-		defCamera.def("SetResolution",static_cast<void(*)(lua_State*,util::WeakHandle<unirender::Camera>&,uint32_t,uint32_t)>([](lua_State *l,util::WeakHandle<unirender::Camera> &cam,uint32_t width,uint32_t height) {
-			pragma::Lua::check_component(l,cam);
-			cam->SetResolution(width,height);
-		}));
-		defCamera.def("SetFarZ",static_cast<void(*)(lua_State*,util::WeakHandle<unirender::Camera>&,float)>([](lua_State *l,util::WeakHandle<unirender::Camera> &cam,float farZ) {
-			pragma::Lua::check_component(l,cam);
-			cam->SetFarZ(farZ);
-		}));
-		defCamera.def("SetNearZ",static_cast<void(*)(lua_State*,util::WeakHandle<unirender::Camera>&,float)>([](lua_State *l,util::WeakHandle<unirender::Camera> &cam,float nearZ) {
-			pragma::Lua::check_component(l,cam);
-			cam->SetNearZ(nearZ);
-		}));
-		defCamera.def("SetFOV",static_cast<void(*)(lua_State*,util::WeakHandle<unirender::Camera>&,float)>([](lua_State *l,util::WeakHandle<unirender::Camera> &cam,float fov) {
-			pragma::Lua::check_component(l,cam);
-			cam->SetFOV(umath::deg_to_rad(fov));
-		}));
-		defCamera.def("SetCameraType",static_cast<void(*)(lua_State*,util::WeakHandle<unirender::Camera>&,uint32_t)>([](lua_State *l,util::WeakHandle<unirender::Camera> &cam,uint32_t camType) {
-			pragma::Lua::check_component(l,cam);
-			cam->SetCameraType(static_cast<unirender::Camera::CameraType>(camType));
-		}));
-		defCamera.def("SetPanoramaType",static_cast<void(*)(lua_State*,util::WeakHandle<unirender::Camera>&,uint32_t)>([](lua_State *l,util::WeakHandle<unirender::Camera> &cam,uint32_t panoramaType) {
-			pragma::Lua::check_component(l,cam);
-			cam->SetPanoramaType(static_cast<unirender::Camera::PanoramaType>(panoramaType));
-		}));
-		defCamera.def("SetFocalDistance",static_cast<void(*)(lua_State*,util::WeakHandle<unirender::Camera>&,float)>([](lua_State *l,util::WeakHandle<unirender::Camera> &cam,float focalDistance) {
-			pragma::Lua::check_component(l,cam);
-			cam->SetFocalDistance(focalDistance);
-		}));
-		defCamera.def("SetApertureSize",static_cast<void(*)(lua_State*,util::WeakHandle<unirender::Camera>&,float)>([](lua_State *l,util::WeakHandle<unirender::Camera> &cam,float size) {
-			pragma::Lua::check_component(l,cam);
-			cam->SetApertureSize(size);
-		}));
-		defCamera.def("SetApertureSizeFromFStop",static_cast<void(*)(lua_State*,util::WeakHandle<unirender::Camera>&,float,umath::Millimeter)>([](lua_State *l,util::WeakHandle<unirender::Camera> &cam,float fstop,umath::Millimeter focalLength) {
-			pragma::Lua::check_component(l,cam);
-			cam->SetApertureSizeFromFStop(fstop,focalLength);
-		}));
-		defCamera.def("SetFOVFromFocalLength",static_cast<void(*)(lua_State*,util::WeakHandle<unirender::Camera>&,umath::Millimeter,umath::Millimeter)>([](lua_State *l,util::WeakHandle<unirender::Camera> &cam,umath::Millimeter focalLength,umath::Millimeter sensorSize) {
-			pragma::Lua::check_component(l,cam);
-			cam->SetFOVFromFocalLength(focalLength,sensorSize);
-		}));
-		defCamera.def("SetBokehRatio",static_cast<void(*)(lua_State*,util::WeakHandle<unirender::Camera>&,float)>([](lua_State *l,util::WeakHandle<unirender::Camera> &cam,float ratio) {
-			pragma::Lua::check_component(l,cam);
-			cam->SetBokehRatio(ratio);
-		}));
-		defCamera.def("SetBladeCount",static_cast<void(*)(lua_State*,util::WeakHandle<unirender::Camera>&,uint32_t)>([](lua_State *l,util::WeakHandle<unirender::Camera> &cam,uint32_t numBlades) {
-			pragma::Lua::check_component(l,cam);
-			cam->SetBladeCount(numBlades);
-		}));
-		defCamera.def("SetBladesRotation",static_cast<void(*)(lua_State*,util::WeakHandle<unirender::Camera>&,float)>([](lua_State *l,util::WeakHandle<unirender::Camera> &cam,float rotation) {
-			pragma::Lua::check_component(l,cam);
-			cam->SetBladesRotation(rotation);
-		}));
-		defCamera.def("SetDepthOfFieldEnabled",static_cast<void(*)(lua_State*,util::WeakHandle<unirender::Camera>&,bool)>([](lua_State *l,util::WeakHandle<unirender::Camera> &cam,bool enabled) {
-			pragma::Lua::check_component(l,cam);
-			cam->SetDepthOfFieldEnabled(enabled);
-		}));
+		defCamera.def("SetCameraType",&unirender::Camera::SetCameraType);
+		defCamera.def("SetPanoramaType",&unirender::Camera::SetPanoramaType);
+		defCamera.def("SetFocalDistance",&unirender::Camera::SetFocalDistance);
+		defCamera.def("SetApertureSize",&unirender::Camera::SetApertureSize);
+		defCamera.def("SetApertureSizeFromFStop",&unirender::Camera::SetApertureSizeFromFStop);
+		defCamera.def("SetFOVFromFocalLength",&unirender::Camera::SetFOVFromFocalLength);
+		defCamera.def("SetBokehRatio",&unirender::Camera::SetBokehRatio);
+		defCamera.def("SetBladeCount",&unirender::Camera::SetBladeCount);
+		defCamera.def("SetBladesRotation",&unirender::Camera::SetBladesRotation);
+		defCamera.def("SetDepthOfFieldEnabled",&unirender::Camera::SetDepthOfFieldEnabled);
 		modCycles[defCamera];
 
 		auto defProgressiveRefine = luabind::class_<pragma::modules::cycles::ProgressiveTexture>("ProgressiveTexture");
-		defProgressiveRefine.def("GetTexture",static_cast<std::shared_ptr<prosper::Texture>(*)(pragma::modules::cycles::ProgressiveTexture&)>([](pragma::modules::cycles::ProgressiveTexture &prt) -> std::shared_ptr<prosper::Texture> {
-			return prt.GetTexture();
-		}));
+		defProgressiveRefine.def("GetTexture",&pragma::modules::cycles::ProgressiveTexture::GetTexture);
 		modCycles[defProgressiveRefine];
 
 		auto defCache = luabind::class_<pragma::modules::cycles::Cache>("Cache");
 		/*defCache.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,pragma::modules::cycles::Cache&,Scene&,luabind::object,luabind::object)>([](lua_State *l,pragma::modules::cycles::Cache &cache,Scene &gameScene,luabind::object entFilter,luabind::object lightFilter) {
 			initialize_cycles_geometry(const_cast<Scene&>(gameScene),cache,{},SceneFlags::None,to_entity_filter(l,&entFilter,3),to_entity_filter(l,&entFilter,4));
 		}));*/
-		defCache.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,pragma::modules::cycles::Cache&,CSceneHandle&,luabind::object)>([](lua_State *l,pragma::modules::cycles::Cache &cache,CSceneHandle &gameScene,luabind::object entFilter) {
-			pragma::Lua::check_component(l,gameScene);
-			initialize_cycles_geometry(*gameScene,cache,{},SceneFlags::None,to_entity_filter(l,&entFilter,3),nullptr);
+		defCache.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,pragma::modules::cycles::Cache&,pragma::CSceneComponent&,luabind::object)>([](lua_State *l,pragma::modules::cycles::Cache &cache,pragma::CSceneComponent &gameScene,luabind::object entFilter) {
+			initialize_cycles_geometry(gameScene,cache,{},SceneFlags::None,to_entity_filter(l,&entFilter,3),nullptr);
 		}));
-		defCache.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,pragma::modules::cycles::Cache&,CSceneHandle&)>([](lua_State *l,pragma::modules::cycles::Cache &cache,CSceneHandle &gameScene) {
-			pragma::Lua::check_component(l,gameScene);
-			initialize_cycles_geometry(*gameScene,cache,{},SceneFlags::None,nullptr,nullptr);
+		defCache.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,pragma::modules::cycles::Cache&,pragma::CSceneComponent&)>([](lua_State *l,pragma::modules::cycles::Cache &cache,pragma::CSceneComponent &gameScene) {
+			initialize_cycles_geometry(gameScene,cache,{},SceneFlags::None,nullptr,nullptr);
 		}));
 		modCycles[defCache];
 
 		auto defObj = luabind::class_<unirender::Object>("Object");
-		defObj.def("SetSubdivisionEnabled",static_cast<void(*)(lua_State*,unirender::Object&,bool)>([](lua_State *l,unirender::Object &o,bool enabled) {
-			o.SetSubdivisionEnabled(enabled);
-		}));
-		defObj.def("IsSubdivisionEnabled",static_cast<bool(*)(lua_State*,unirender::Object&)>([](lua_State *l,unirender::Object &o) {
-			return o.IsSubdivisionEnabled();
-		}));
+		defObj.def("SetSubdivisionEnabled",&unirender::Object::SetSubdivisionEnabled);
+		defObj.def("IsSubdivisionEnabled",&unirender::Object::IsSubdivisionEnabled);
 		modCycles[defObj];
 
 		auto defScene = luabind::class_<cycles::Scene>("Scene");
@@ -2348,21 +2198,16 @@ extern "C"
 		defScene.add_static_constant("DENOISE_MODE_FAST",umath::to_integral(unirender::Scene::DenoiseMode::Fast));
 		defScene.add_static_constant("DENOISE_MODE_DETAILED",umath::to_integral(unirender::Scene::DenoiseMode::Detailed));
 
-		defScene.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,cycles::Scene&,CSceneHandle&,const Vector3&,const Quat&,const Mat4&,float,float,float,uint32_t,luabind::object,luabind::object)>([](lua_State *l,cycles::Scene &scene,CSceneHandle &gameScene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,uint32_t sceneFlags,luabind::object entFilter,luabind::object lightFilter) {
-			pragma::Lua::check_component(l,gameScene);
-			initialize_from_game_scene(l,*gameScene,scene,camPos,camRot,vp,nearZ,farZ,fov,static_cast<SceneFlags>(sceneFlags),&entFilter,&lightFilter);
+		defScene.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,cycles::Scene&,pragma::CSceneComponent&,const Vector3&,const Quat&,const Mat4&,float,float,float,uint32_t,luabind::object,luabind::object)>([](lua_State *l,cycles::Scene &scene,pragma::CSceneComponent &gameScene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,uint32_t sceneFlags,luabind::object entFilter,luabind::object lightFilter) {
+			initialize_from_game_scene(l,gameScene,scene,camPos,camRot,vp,nearZ,farZ,fov,static_cast<SceneFlags>(sceneFlags),&entFilter,&lightFilter);
 		}));
-		defScene.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,cycles::Scene&,CSceneHandle&,const Vector3&,const Quat&,const Mat4&,float,float,float,uint32_t,luabind::object)>([](lua_State *l,cycles::Scene &scene,CSceneHandle &gameScene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,uint32_t sceneFlags,luabind::object entFilter) {
-			pragma::Lua::check_component(l,gameScene);
-			initialize_from_game_scene(l,*gameScene,scene,camPos,camRot,vp,nearZ,farZ,fov,static_cast<SceneFlags>(sceneFlags),&entFilter,nullptr);
+		defScene.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,cycles::Scene&,pragma::CSceneComponent&,const Vector3&,const Quat&,const Mat4&,float,float,float,uint32_t,luabind::object)>([](lua_State *l,cycles::Scene &scene,pragma::CSceneComponent &gameScene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,uint32_t sceneFlags,luabind::object entFilter) {
+			initialize_from_game_scene(l,gameScene,scene,camPos,camRot,vp,nearZ,farZ,fov,static_cast<SceneFlags>(sceneFlags),&entFilter,nullptr);
 		}));
-		defScene.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,cycles::Scene&,CSceneHandle&,const Vector3&,const Quat&,const Mat4&,float,float,float,uint32_t)>([](lua_State *l,cycles::Scene &scene,CSceneHandle &gameScene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,uint32_t sceneFlags) {
-			pragma::Lua::check_component(l,gameScene);
-			initialize_from_game_scene(l,*gameScene,scene,camPos,camRot,vp,nearZ,farZ,fov,static_cast<SceneFlags>(sceneFlags),nullptr,nullptr);
+		defScene.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,cycles::Scene&,pragma::CSceneComponent&,const Vector3&,const Quat&,const Mat4&,float,float,float,uint32_t)>([](lua_State *l,cycles::Scene &scene,pragma::CSceneComponent &gameScene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,uint32_t sceneFlags) {
+			initialize_from_game_scene(l,gameScene,scene,camPos,camRot,vp,nearZ,farZ,fov,static_cast<SceneFlags>(sceneFlags),nullptr,nullptr);
 		}));
-		defScene.def("FindObjectByName",static_cast<unirender::Object*(*)(lua_State*,cycles::Scene&,const std::string&)>([](lua_State *l,cycles::Scene &scene,const std::string &name) -> unirender::Object* {
-			return scene.FindObject(name);
-		}));
+		defScene.def("FindObjectByName",static_cast<unirender::Object*(cycles::Scene::*)(const std::string&)>(&cycles::Scene::FindObject));
 		defScene.def("SetSky",static_cast<void(*)(lua_State*,cycles::Scene&,const std::string&)>([](lua_State *l,cycles::Scene &scene,const std::string &skyPath) {
 			scene->SetSky(skyPath);
 		}));
@@ -2402,8 +2247,8 @@ extern "C"
 		defScene.def("SetResolution",static_cast<void(*)(lua_State*,cycles::Scene&,uint32_t,uint32_t)>([](lua_State *l,cycles::Scene &scene,uint32_t width,uint32_t height) {
 			scene->GetCamera().SetResolution(width,height);
 		}));
-		defScene.def("GetCamera",static_cast<void(*)(lua_State*,cycles::Scene&)>([](lua_State *l,cycles::Scene &scene) {
-			Lua::Push(l,scene->GetCamera().GetHandle());
+		defScene.def("GetCamera",static_cast<unirender::Camera&(*)(lua_State*,cycles::Scene&)>([](lua_State *l,cycles::Scene &scene) -> unirender::Camera& {
+			return scene->GetCamera();
 		}));
 		defScene.def("GetLightSources",static_cast<void(*)(lua_State*,cycles::Scene&)>([](lua_State *l,cycles::Scene &scene) {
 			auto t = Lua::CreateTable(l);
@@ -2552,20 +2397,20 @@ extern "C"
 
 		auto defCamera = luabind::class_<cycles::Camera,luabind::bases<cycles::WorldObject,cycles::SceneObject>>("Camera");
 		defCamera.def("SetResolution",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Camera>&,uint32_t,uint32_t)>([](lua_State *l,util::WeakHandle<cycles::Camera> &cam,uint32_t width,uint32_t height) {
-			pragma::Lua::check_component(l,cam);
-			cam->SetResolution(width,height);
+			
+			cam.SetResolution(width,height);
 		}));
 		defCamera.def("SetFarZ",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Camera>&,float)>([](lua_State *l,util::WeakHandle<cycles::Camera> &cam,float farZ) {
-			pragma::Lua::check_component(l,cam);
-			cam->SetFarZ(farZ);
+			
+			cam.SetFarZ(farZ);
 		}));
 		defCamera.def("SetNearZ",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Camera>&,float)>([](lua_State *l,util::WeakHandle<cycles::Camera> &cam,float nearZ) {
-			pragma::Lua::check_component(l,cam);
-			cam->SetNearZ(nearZ);
+			
+			cam.SetNearZ(nearZ);
 		}));
 		defCamera.def("SetFOV",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Camera>&,float)>([](lua_State *l,util::WeakHandle<cycles::Camera> &cam,float fov) {
-			pragma::Lua::check_component(l,cam);
-			cam->SetFOV(umath::deg_to_rad(fov));
+			
+			cam.SetFOV(umath::deg_to_rad(fov));
 		}));
 		modConvert[defCamera];
 
@@ -2714,3 +2559,4 @@ extern "C"
 #endif
 	}
 };
+#pragma optimize("",on)
