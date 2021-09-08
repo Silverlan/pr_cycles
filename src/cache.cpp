@@ -400,7 +400,7 @@ std::vector<std::shared_ptr<pragma::modules::cycles::Cache::MeshData>> pragma::m
 			for(auto &mesh : *targetMeshes)
 			{
 				auto *mat = mdlC->GetRenderMaterial(mesh->GetSkinTextureIndex(),ent.GetSkin());
-				if(mat == nullptr || (ustring::compare(mat->GetShaderIdentifier(),"skybox",false) == false && ustring::compare(mat->GetShaderIdentifier(),"skybox_equirect",false) == false))
+				if(mat == nullptr || (ustring::compare<std::string>(mat->GetShaderIdentifier(),"skybox",false) == false && ustring::compare<std::string>(mat->GetShaderIdentifier(),"skybox_equirect",false) == false))
 					continue;
 				auto *diffuseMap = mat->GetTextureInfo("skybox");
 				auto tex = diffuseMap ? diffuseMap->texture : nullptr;
