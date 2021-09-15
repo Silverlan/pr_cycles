@@ -658,8 +658,8 @@ Material *pragma::modules::cycles::Cache::GetMaterial(pragma::CModelComponent &m
 	auto mdl = mdlC.GetModel();
 	if(mdl == nullptr)
 		return nullptr;
-	auto texIdx = mdl->GetMaterialIndex(subMesh);
-	return texIdx.has_value() ? mdlC.GetRenderMaterial(*texIdx,skinId) : nullptr;
+	auto baseTexIdx = subMesh.GetSkinTextureIndex();
+	return mdlC.GetRenderMaterial(baseTexIdx,skinId);
 }
 
 unirender::PShader pragma::modules::cycles::Cache::CreateShader(const std::string &meshName,Model &mdl,ModelSubMesh &subMesh,BaseEntity *optEnt,uint32_t skinId) const
