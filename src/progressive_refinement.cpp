@@ -117,6 +117,7 @@ void ProgressiveTexture::Initialize(unirender::Renderer &renderer)
 	samplerCreateInfo.addressModeV = prosper::SamplerAddressMode::ClampToEdge;
 	samplerCreateInfo.addressModeW = prosper::SamplerAddressMode::ClampToEdge;
 	auto tex = context.CreateTexture({},*img,prosper::util::ImageViewCreateInfo{},samplerCreateInfo);
+	tex->SetDebugName("rt_tile_realtime");
 	m_image = img;
 	m_texture = tex;
 

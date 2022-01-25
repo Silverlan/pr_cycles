@@ -45,7 +45,7 @@ namespace pragma::modules::cycles
 		std::optional<unirender::SubdivisionSettings> m_subdivSettings {};
 	private:
 		mutable EntityHandle m_hEntity {};
-		mutable MaterialHandle m_hMaterial {};
+		mutable msys::MaterialHandle m_hMaterial {};
 	};
 
 	class ShaderManager

@@ -92,7 +92,7 @@ namespace pragma::asset {class WorldData; class EntityData;};
 extern DLLCLIENT CGame *c_game;
 
 using namespace pragma::modules;
-#pragma optimize("",off)
+
 static void setup_light_sources(cycles::Scene &scene,const std::function<bool(BaseEntity&)> &lightFilter=nullptr)
 {
 	EntityIterator entIt {*c_game};
@@ -349,8 +349,8 @@ static void initialize_cycles_geometry(
 		for(auto *ent : entIt)
 		{
 			auto renderC = ent->GetComponent<pragma::CRenderComponent>();
-			auto renderMode = renderC->GetRenderMode();
-			if((renderMode != RenderMode::World && renderMode != RenderMode::Skybox) || (camData.has_value() && renderC->ShouldDraw() == false) || (entFilter && entFilter(*ent) == false))
+			auto renderMode = renderC->GetSceneRenderPass();
+			if((renderMode != pragma::rendering::SceneRenderPass::World && renderMode != pragma::rendering::SceneRenderPass::Sky) || (camData.has_value() && renderC->ShouldDraw() == false) || (entFilter && entFilter(*ent) == false))
 				continue;
 			fAddEntity(ent);
 		}
@@ -2564,4 +2564,3 @@ extern "C"
 #endif
 	}
 };
-#pragma optimize("",on)

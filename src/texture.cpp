@@ -15,6 +15,7 @@
 #include <pragma/clientstate/clientstate.h>
 #include <texturemanager/texture.h>
 #include <cmaterialmanager.h>
+#include <cmaterial_manager2.hpp>
 #include <sharedutils/util_file.h>
 #include <pragma/rendering/shaders/c_shader_cubemap_to_equirectangular.hpp>
 #include <pragma/rendering/shaders/particles/c_shader_particle.hpp>
@@ -63,13 +64,12 @@ static std::optional<std::string> prepare_texture(
 		tex = nullptr;
 		if(defaultTexture.has_value())
 		{
-			TextureManager::LoadInfo loadInfo {};
-			loadInfo.flags = TextureLoadFlags::LoadInstantly;
-			std::shared_ptr<void> ptrTex;
-			if(static_cast<CMaterialManager&>(client->GetMaterialManager()).GetTextureManager().Load(c_engine->GetRenderContext(),*defaultTexture,loadInfo,&ptrTex))
+			auto &texManager = static_cast<msys::CMaterialManager&>(client->GetMaterialManager()).GetTextureManager();
+			auto ptrTex = texManager.LoadAsset(*defaultTexture);
+			if(ptrTex != nullptr)
 			{
 				texName = *defaultTexture;
-				tex = std::static_pointer_cast<Texture>(ptrTex);
+				tex = ptrTex;
 				if(tex->IsLoaded() == false)
 					tex = nullptr;
 			}
@@ -257,13 +257,10 @@ static std::optional<std::string> prepare_texture(
 
 std::optional<std::string> pragma::modules::cycles::prepare_texture(const std::string &texPath,const std::optional<std::string> &defaultTexture)
 {
-	auto &texManager = static_cast<CMaterialManager&>(client->GetMaterialManager()).GetTextureManager();
-	TextureManager::LoadInfo loadInfo {};
-	loadInfo.flags = TextureLoadFlags::LoadInstantly;
-	std::shared_ptr<void> ptex = nullptr;
-	auto success = texManager.Load(c_engine->GetRenderContext(),texPath,loadInfo,&ptex);
+	auto &texManager = static_cast<msys::CMaterialManager&>(client->GetMaterialManager()).GetTextureManager();
+	auto ptex = texManager.LoadAsset(texPath);
 	auto flags = PreparedTextureInputFlags::CanBeEnvMap;
 	PreparedTextureOutputFlags retFlags;
-	auto tex = std::static_pointer_cast<Texture>(ptex);
+	auto tex = ptex;
 	return ::prepare_texture(tex,flags,&retFlags,defaultTexture);
 }

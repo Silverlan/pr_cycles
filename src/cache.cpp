@@ -30,6 +30,7 @@
 #include <pragma/entities/c_skybox.h>
 #include <pragma/rendering/shaders/c_shader_cubemap_to_equirectangular.hpp>
 #include <cmaterialmanager.h>
+#include <cmaterial_manager2.hpp>
 #include <sharedutils/util_file.h>
 #undef __UTIL_STRING_H__
 #include <sharedutils/util_string.h>
@@ -38,7 +39,7 @@
 extern DLLCLIENT CEngine *c_engine;
 extern DLLCLIENT ClientState *client;
 extern DLLCLIENT CGame *c_game;
-#pragma optimize("",off)
+
 enum class PreparedTextureInputFlags : uint8_t
 {
 	None = 0u,
@@ -51,7 +52,7 @@ enum class PreparedTextureOutputFlags : uint8_t
 	Envmap = 1u
 };
 REGISTER_BASIC_BITWISE_OPERATORS(PreparedTextureOutputFlags)
-
+#pragma optimize("",off)
 static std::optional<std::string> get_abs_error_texture_path()
 {
 	std::string errTexPath = "materials\\error.dds";
@@ -81,13 +82,12 @@ static std::optional<std::string> prepare_texture(
 		tex = nullptr;
 		if(defaultTexture.has_value())
 		{
-			TextureManager::LoadInfo loadInfo {};
-			loadInfo.flags = TextureLoadFlags::LoadInstantly;
-			std::shared_ptr<void> ptrTex;
-			if(static_cast<CMaterialManager&>(client->GetMaterialManager()).GetTextureManager().Load(c_engine->GetRenderContext(),*defaultTexture,loadInfo,&ptrTex))
+			auto &texManager = static_cast<msys::CMaterialManager&>(client->GetMaterialManager()).GetTextureManager();
+			auto ptrTex = texManager.LoadAsset(*defaultTexture);
+			if(ptrTex != nullptr)
 			{
 				texName = *defaultTexture;
-				tex = std::static_pointer_cast<Texture>(ptrTex);
+				tex = ptrTex;
 				if(tex->IsLoaded() == false)
 					tex = nullptr;
 			}
@@ -280,7 +280,8 @@ pragma::modules::cycles::Cache::Cache(unirender::Scene::RenderMode renderMode)
 }
 
 std::vector<std::shared_ptr<pragma::modules::cycles::Cache::MeshData>> pragma::modules::cycles::Cache::AddMeshList(
-	Model &mdl,const std::vector<std::shared_ptr<ModelMesh>> &meshList,const std::string &meshName,BaseEntity *optEnt,const std::optional<umath::ScaledTransform> &opose,uint32_t skinId,
+	Model &mdl,const std::vector<std::shared_ptr<ModelMesh>> &meshList,const std::string &meshName,BaseEntity *optEnt,
+	const std::optional<umath::ScaledTransform> &opose,uint32_t skinId,
 	pragma::CModelComponent *optMdlC,pragma::CAnimatedComponent *optAnimC,
 	const std::function<bool(ModelMesh&,const umath::ScaledTransform&)> &optMeshFilter,
 	const std::function<bool(ModelSubMesh&,const umath::ScaledTransform&)> &optSubMeshFilter,
@@ -482,7 +483,10 @@ unirender::PObject pragma::modules::cycles::Cache::AddEntity(
 	return o;
 }
 
-std::shared_ptr<pragma::modules::cycles::Cache::MeshData> pragma::modules::cycles::Cache::CalcMeshData(Model &mdl,ModelSubMesh &mdlMesh,bool includeAlphas,bool includeWrinkles,pragma::CModelComponent *optMdlC,pragma::CAnimatedComponent *optAnimC)
+std::shared_ptr<pragma::modules::cycles::Cache::MeshData> pragma::modules::cycles::Cache::CalcMeshData(
+	Model &mdl,ModelSubMesh &mdlMesh,bool includeAlphas,bool includeWrinkles,pragma::CModelComponent *optMdlC,
+	pragma::CAnimatedComponent *optAnimC
+)
 {
 	auto meshData = std::make_shared<MeshData>();
 	auto &meshVerts = mdlMesh.GetVertices();
@@ -559,20 +563,18 @@ std::shared_ptr<pragma::modules::cycles::Cache::MeshData> pragma::modules::cycle
 		}
 	}
 
-	auto &meshTris = mdlMesh.GetTriangles();
 	std::vector<int32_t> indices;
-	indices.reserve(meshTris.size());
-	for(auto idx : meshTris)
-		indices.push_back(idx);
+	indices.reserve(mdlMesh.GetIndexCount());
+	mdlMesh.VisitIndices([this,&indices](auto *indexData,uint32_t numIndices) {
+		for(auto i=decltype(numIndices){0u};i<numIndices;++i)
+			indices.push_back(indexData[i]);
+	});
 
 	// Subdivision
-	auto applySubdivision = true;
-
-	static auto subdivisionEnabled = false;//true;
-	if(subdivisionEnabled == false)
-		applySubdivision = false;
-
-	if(applySubdivision)
+	auto udmExtData = mdl.GetExtensionData();
+	uint32_t subdivLevel = 0;
+	udmExtData["unirender/subdivision/level"](subdivLevel);
+	if(subdivLevel > 0)
 	{
 		std::vector<std::shared_ptr<BaseChannelData>> customAttributes {};
 		customAttributes.reserve(2);
@@ -606,7 +608,7 @@ std::shared_ptr<pragma::modules::cycles::Cache::MeshData> pragma::modules::cycle
 				wrinkleData->buffer.push_back(wrinkle);
 			customAttributes.push_back(wrinkleData);
 		}
-		subdivide_mesh(transformedVerts,indices,meshData->vertices,meshData->triangles,2 /* subDivLevel */,customAttributes);
+		subdivide_mesh(transformedVerts,indices,meshData->vertices,meshData->triangles,subdivLevel,customAttributes);
 
 		if(alphas.has_value())
 		{
@@ -665,7 +667,7 @@ Material *pragma::modules::cycles::Cache::GetMaterial(pragma::CModelComponent &m
 unirender::PShader pragma::modules::cycles::Cache::CreateShader(const std::string &meshName,Model &mdl,ModelSubMesh &subMesh,BaseEntity *optEnt,uint32_t skinId) const
 {
 	// Make sure all textures have finished loading
-	static_cast<CMaterialManager&>(client->GetMaterialManager()).GetTextureManager().WaitForTextures();
+	static_cast<msys::CMaterialManager&>(client->GetMaterialManager()).GetTextureManager().WaitForAllPendingCompleted();
 
 	auto *mat = optEnt ? GetMaterial(*optEnt,subMesh,skinId) : GetMaterial(mdl,subMesh,skinId);
 	if(mat == nullptr)
@@ -677,7 +679,9 @@ unirender::PShader pragma::modules::cycles::Cache::CreateShader(const std::strin
 	return CreateShader(*mat,meshName,shaderInfo);
 }
 
-void pragma::modules::cycles::Cache::AddMesh(Model &mdl,unirender::Mesh &mesh,ModelSubMesh &mdlMesh,pragma::CModelComponent *optMdlC,pragma::CAnimatedComponent *optAnimC)
+void pragma::modules::cycles::Cache::AddMesh(
+	Model &mdl,unirender::Mesh &mesh,ModelSubMesh &mdlMesh,pragma::CModelComponent *optMdlC,pragma::CAnimatedComponent *optAnimC
+)
 {
 	auto meshData = CalcMeshData(mdl,mdlMesh,mesh.HasAlphas(),mesh.HasWrinkles(),optMdlC,optAnimC);
 	if(meshData == nullptr)
@@ -738,7 +742,9 @@ void pragma::modules::cycles::Cache::AddMeshDataToMesh(unirender::Mesh &mesh,con
 	}
 }
 
-void pragma::modules::cycles::Cache::AddAOBakeTarget(BaseEntity *optEnt,Model &mdl,uint32_t matIndex,std::shared_ptr<unirender::Object> &oAo,std::shared_ptr<unirender::Object> &oEnv)
+void pragma::modules::cycles::Cache::AddAOBakeTarget(
+	BaseEntity *optEnt,Model &mdl,uint32_t matIndex,std::shared_ptr<unirender::Object> &oAo,std::shared_ptr<unirender::Object> &oEnv
+)
 {
 	std::vector<std::shared_ptr<MeshData>> materialMeshes;
 	std::vector<std::shared_ptr<MeshData>> envMeshes;

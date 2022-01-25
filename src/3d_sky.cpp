@@ -11,6 +11,7 @@
 #include "util_raytracing/mesh.hpp"
 #include "util_raytracing/object.hpp"
 #include "util_raytracing/shader.hpp"
+#include <prosper_context.hpp>
 #include <sharedutils/functioncallback.h>
 #include <pragma/rendering/c_rendermode.h>
 #include <pragma/entities/environment/c_sky_camera.hpp>
