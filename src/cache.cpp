@@ -573,7 +573,7 @@ std::shared_ptr<pragma::modules::cycles::Cache::MeshData> pragma::modules::cycle
 	// Subdivision
 	auto udmExtData = mdl.GetExtensionData();
 	uint32_t subdivLevel = 0;
-	udmExtData["unirender/subdivision/level"](subdivLevel);
+	udmExtData.GetFromPath("unirender/subdivision/level")(subdivLevel);
 	if(subdivLevel > 0)
 	{
 		std::vector<std::shared_ptr<BaseChannelData>> customAttributes {};
