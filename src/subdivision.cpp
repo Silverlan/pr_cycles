@@ -182,9 +182,9 @@ void pragma::modules::cycles::subdivide_mesh(
 				auto idx = firstOfLastAttrs.at(j) +attrIndices.at(j)[i];
 				attr->Apply(face *3 +i,v,idx);
 			}
-			auto it = std::find_if(outVerts.begin(),outVerts.end(),[&v,VERTEX_EPSILON](const umath::Vertex &vOther) {
+			auto it = outVerts.end();/*std::find_if(outVerts.begin(),outVerts.end(),[&v,VERTEX_EPSILON](const umath::Vertex &vOther) {
 				return vOther.Equal(v,VERTEX_EPSILON);
-			});
+			});*/
 			if(it == outVerts.end())
 			{
 				outVerts.push_back(v);
