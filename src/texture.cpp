@@ -7,7 +7,6 @@
 
 #include "pr_cycles/scene.hpp"
 #include "pr_cycles/texture.hpp"
-#include <render/scene.h>
 #include <pragma/c_engine.h>
 #include <prosper_context.hpp>
 #include <buffers/prosper_uniform_resizable_buffer.hpp>

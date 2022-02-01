@@ -5,18 +5,6 @@
 * Copyright (c) 2020 Florian Weischer
 */
 
-#include <render/buffers.h>
-#include <render/scene.h>
-#include <render/session.h>
-#include <render/shader.h>
-#include <render/camera.h>
-#include <render/light.h>
-#include <render/mesh.h>
-#include <render/graph.h>
-#include <render/nodes.h>
-#include <render/object.h>
-#include <render/background.h>
-#include <render/svm.h>
 #include "pr_cycles/pr_cycles.hpp"
 #include "pr_cycles/shader.hpp"
 #include "pr_cycles/texture.hpp"
@@ -964,6 +952,12 @@ extern "C"
 				Lua::Push<std::shared_ptr<pragma::modules::cycles::Renderer>>(l,std::make_shared<pragma::modules::cycles::Renderer>(scene,*renderer));
 				return 1;
 			})},
+			{"unload_renderer_library",static_cast<int32_t(*)(lua_State*)>([](lua_State *l) -> int32_t {
+				std::string rendererIdentifier = Lua::CheckString(l,1);
+				auto res = unirender::Renderer::UnloadRendererLibrary(rendererIdentifier);
+				Lua::PushBool(l,res);
+				return 1;
+			})},
 			{"get_texture_path",static_cast<int32_t(*)(lua_State*)>([](lua_State *l) -> int32_t {
 				std::string texturePath = Lua::CheckString(l,1);
 				auto res = pragma::modules::cycles::prepare_texture(texturePath);
@@ -1068,6 +1062,9 @@ extern "C"
 		defRenderer.def("ReloadShaders",static_cast<void(*)(lua_State*,pragma::modules::cycles::Renderer&)>([](lua_State *l,pragma::modules::cycles::Renderer &renderer) {
 			renderer.ReloadShaders();
 		}));
+		defRenderer.def("GetApiData",+[](lua_State *l,pragma::modules::cycles::Renderer &renderer) {
+			return renderer->GetApiData();
+		});
 		defRenderer.def("BeginSceneEdit",static_cast<bool(*)(lua_State*,pragma::modules::cycles::Renderer&)>([](lua_State *l,pragma::modules::cycles::Renderer &renderer) -> bool {
 			return renderer->BeginSceneEdit();
 		}));
@@ -1085,7 +1082,11 @@ extern "C"
 		modCycles[defRenderer];
 
 		auto defNode = luabind::class_<unirender::NodeDesc>("Node");
-		defNode.def(tostring(luabind::self));
+		defNode.def("__tostring",+[](unirender::NodeDesc &node) -> std::string {
+			std::stringstream ss;
+			unirender::operator<<(ss,node);
+			return ss.str();
+		});
 		defNode.def(-luabind::const_self);
 		defNode.def(luabind::const_self +float{});
 		defNode.def(luabind::const_self -float{});
@@ -1386,15 +1387,6 @@ extern "C"
 		static_assert(unirender::NODE_COUNT == 40,"Increase this number if new node types are added!");
 		Lua::RegisterLibraryValues<std::string>(l.GetState(),"unirender",nodeTypes);
 
-		Lua::RegisterLibraryValues<uint32_t>(l.GetState(),"unirender",{
-			{"SUBSURFACE_SCATTERING_METHOD_CUBIC",ccl::ClosureType::CLOSURE_BSSRDF_CUBIC_ID},
-			{"SUBSURFACE_SCATTERING_METHOD_GAUSSIAN",ccl::ClosureType::CLOSURE_BSSRDF_GAUSSIAN_ID},
-			{"SUBSURFACE_SCATTERING_METHOD_PRINCIPLED",ccl::ClosureType::CLOSURE_BSSRDF_PRINCIPLED_ID},
-			{"SUBSURFACE_SCATTERING_METHOD_BURLEY",ccl::ClosureType::CLOSURE_BSSRDF_BURLEY_ID},
-			{"SUBSURFACE_SCATTERING_METHOD_RANDOM_WALK",ccl::ClosureType::CLOSURE_BSSRDF_RANDOM_WALK_ID},
-			{"SUBSURFACE_SCATTERING_METHOD_PRINCIPLED_RANDOM_WALK",ccl::ClosureType::CLOSURE_BSSRDF_PRINCIPLED_RANDOM_WALK_ID}
-		});
-
 		std::unordered_map<std::string,luabind::object> nodeTypeEnums;
 		luabind::object t;
 		t = nodeTypeEnums[unirender::NODE_MATH] = luabind::newtable(l.GetState());
@@ -1405,30 +1397,73 @@ extern "C"
 		t["IN_VALUE3"] = unirender::nodes::math::IN_VALUE3;
 		t["OUT_VALUE"] = unirender::nodes::math::OUT_VALUE;
 
-		t["TYPE_ADD"] = ccl::NodeMathType::NODE_MATH_ADD;
-		t["TYPE_SUBTRACT"] = ccl::NodeMathType::NODE_MATH_SUBTRACT;
-		t["TYPE_MULTIPLY"] = ccl::NodeMathType::NODE_MATH_MULTIPLY;
-		t["TYPE_DIVIDE"] = ccl::NodeMathType::NODE_MATH_DIVIDE;
-		t["TYPE_SINE"] = ccl::NodeMathType::NODE_MATH_SINE;
-		t["TYPE_COSINE"] = ccl::NodeMathType::NODE_MATH_COSINE;
-		t["TYPE_TANGENT"] = ccl::NodeMathType::NODE_MATH_TANGENT;
-		t["TYPE_ARCSINE"] = ccl::NodeMathType::NODE_MATH_ARCSINE;
-		t["TYPE_ARCCOSINE"] = ccl::NodeMathType::NODE_MATH_ARCCOSINE;
-		t["TYPE_ARCTANGENT"] = ccl::NodeMathType::NODE_MATH_ARCTANGENT;
-		t["TYPE_POWER"] = ccl::NodeMathType::NODE_MATH_POWER;
-		t["TYPE_LOGARITHM"] = ccl::NodeMathType::NODE_MATH_LOGARITHM;
-		t["TYPE_MINIMUM"] = ccl::NodeMathType::NODE_MATH_MINIMUM;
-		t["TYPE_MAXIMUM"] = ccl::NodeMathType::NODE_MATH_MAXIMUM;
-		t["TYPE_ROUND"] = ccl::NodeMathType::NODE_MATH_ROUND;
-		t["TYPE_LESS_THAN"] = ccl::NodeMathType::NODE_MATH_LESS_THAN;
-		t["TYPE_GREATER_THAN"] = ccl::NodeMathType::NODE_MATH_GREATER_THAN;
-		t["TYPE_MODULO"] = ccl::NodeMathType::NODE_MATH_MODULO;
-		t["TYPE_ABSOLUTE"] = ccl::NodeMathType::NODE_MATH_ABSOLUTE;
-		t["TYPE_ARCTAN2"] = ccl::NodeMathType::NODE_MATH_ARCTAN2;
-		t["TYPE_FLOOR"] = ccl::NodeMathType::NODE_MATH_FLOOR;
-		t["TYPE_CEIL"] = ccl::NodeMathType::NODE_MATH_CEIL;
-		t["TYPE_FRACTION"] = ccl::NodeMathType::NODE_MATH_FRACTION;
-		t["TYPE_SQRT"] = ccl::NodeMathType::NODE_MATH_SQRT;
+		typedef enum NodeMathType {
+		  NODE_MATH_ADD,
+		  NODE_MATH_SUBTRACT,
+		  NODE_MATH_MULTIPLY,
+		  NODE_MATH_DIVIDE,
+		  NODE_MATH_SINE,
+		  NODE_MATH_COSINE,
+		  NODE_MATH_TANGENT,
+		  NODE_MATH_ARCSINE,
+		  NODE_MATH_ARCCOSINE,
+		  NODE_MATH_ARCTANGENT,
+		  NODE_MATH_POWER,
+		  NODE_MATH_LOGARITHM,
+		  NODE_MATH_MINIMUM,
+		  NODE_MATH_MAXIMUM,
+		  NODE_MATH_ROUND,
+		  NODE_MATH_LESS_THAN,
+		  NODE_MATH_GREATER_THAN,
+		  NODE_MATH_MODULO,
+		  NODE_MATH_ABSOLUTE,
+		  NODE_MATH_ARCTAN2,
+		  NODE_MATH_FLOOR,
+		  NODE_MATH_CEIL,
+		  NODE_MATH_FRACTION,
+		  NODE_MATH_SQRT,
+		  NODE_MATH_INV_SQRT,
+		  NODE_MATH_SIGN,
+		  NODE_MATH_EXPONENT,
+		  NODE_MATH_RADIANS,
+		  NODE_MATH_DEGREES,
+		  NODE_MATH_SINH,
+		  NODE_MATH_COSH,
+		  NODE_MATH_TANH,
+		  NODE_MATH_TRUNC,
+		  NODE_MATH_SNAP,
+		  NODE_MATH_WRAP,
+		  NODE_MATH_COMPARE,
+		  NODE_MATH_MULTIPLY_ADD,
+		  NODE_MATH_PINGPONG,
+		  NODE_MATH_SMOOTH_MIN,
+		  NODE_MATH_SMOOTH_MAX,
+		} NodeMathType;
+
+		t["TYPE_ADD"] = NodeMathType::NODE_MATH_ADD;
+		t["TYPE_SUBTRACT"] = NodeMathType::NODE_MATH_SUBTRACT;
+		t["TYPE_MULTIPLY"] = NodeMathType::NODE_MATH_MULTIPLY;
+		t["TYPE_DIVIDE"] = NodeMathType::NODE_MATH_DIVIDE;
+		t["TYPE_SINE"] = NodeMathType::NODE_MATH_SINE;
+		t["TYPE_COSINE"] = NodeMathType::NODE_MATH_COSINE;
+		t["TYPE_TANGENT"] = NodeMathType::NODE_MATH_TANGENT;
+		t["TYPE_ARCSINE"] = NodeMathType::NODE_MATH_ARCSINE;
+		t["TYPE_ARCCOSINE"] = NodeMathType::NODE_MATH_ARCCOSINE;
+		t["TYPE_ARCTANGENT"] = NodeMathType::NODE_MATH_ARCTANGENT;
+		t["TYPE_POWER"] = NodeMathType::NODE_MATH_POWER;
+		t["TYPE_LOGARITHM"] = NodeMathType::NODE_MATH_LOGARITHM;
+		t["TYPE_MINIMUM"] = NodeMathType::NODE_MATH_MINIMUM;
+		t["TYPE_MAXIMUM"] = NodeMathType::NODE_MATH_MAXIMUM;
+		t["TYPE_ROUND"] = NodeMathType::NODE_MATH_ROUND;
+		t["TYPE_LESS_THAN"] = NodeMathType::NODE_MATH_LESS_THAN;
+		t["TYPE_GREATER_THAN"] = NodeMathType::NODE_MATH_GREATER_THAN;
+		t["TYPE_MODULO"] = NodeMathType::NODE_MATH_MODULO;
+		t["TYPE_ABSOLUTE"] = NodeMathType::NODE_MATH_ABSOLUTE;
+		t["TYPE_ARCTAN2"] = NodeMathType::NODE_MATH_ARCTAN2;
+		t["TYPE_FLOOR"] = NodeMathType::NODE_MATH_FLOOR;
+		t["TYPE_CEIL"] = NodeMathType::NODE_MATH_CEIL;
+		t["TYPE_FRACTION"] = NodeMathType::NODE_MATH_FRACTION;
+		t["TYPE_SQRT"] = NodeMathType::NODE_MATH_SQRT;
 #if 0
 		// These were removed from Cycles for some reason?
 		t["TYPE_INV_SQRT"] = ccl::NodeMathType::NODE_MATH_INV_SQRT;
@@ -1688,10 +1723,72 @@ extern "C"
 		t["IN_IOR"] = unirender::nodes::glass_bsdf::IN_IOR;
 		t["OUT_BSDF"] = unirender::nodes::glass_bsdf::OUT_BSDF;
 		
-		t["DISTRIBUTION_SHARP"] = ccl::ClosureType::CLOSURE_BSDF_SHARP_GLASS_ID;
-		t["DISTRIBUTION_BECKMANN"] = ccl::ClosureType::CLOSURE_BSDF_MICROFACET_BECKMANN_GLASS_ID;
-		t["DISTRIBUTION_GGX"] = ccl::ClosureType::CLOSURE_BSDF_MICROFACET_GGX_GLASS_ID;
-		t["DISTRIBUTION_MULTISCATTER_GGX"] = ccl::ClosureType::CLOSURE_BSDF_MICROFACET_MULTI_GGX_GLASS_ID;
+		typedef enum ClosureType {
+		  /* Special type, flags generic node as a non-BSDF. */
+		  CLOSURE_NONE_ID,
+
+		  CLOSURE_BSDF_ID,
+
+		  /* Diffuse */
+		  CLOSURE_BSDF_DIFFUSE_ID,
+		  CLOSURE_BSDF_OREN_NAYAR_ID,
+		  CLOSURE_BSDF_DIFFUSE_RAMP_ID,
+		  CLOSURE_BSDF_PRINCIPLED_DIFFUSE_ID,
+		  CLOSURE_BSDF_PRINCIPLED_SHEEN_ID,
+		  CLOSURE_BSDF_DIFFUSE_TOON_ID,
+		  CLOSURE_BSDF_TRANSLUCENT_ID,
+
+		  /* Glossy */
+		  CLOSURE_BSDF_REFLECTION_ID,
+		  CLOSURE_BSDF_MICROFACET_GGX_ID,
+		  CLOSURE_BSDF_MICROFACET_GGX_FRESNEL_ID,
+		  CLOSURE_BSDF_MICROFACET_GGX_CLEARCOAT_ID,
+		  CLOSURE_BSDF_MICROFACET_BECKMANN_ID,
+		  CLOSURE_BSDF_MICROFACET_MULTI_GGX_ID,
+		  CLOSURE_BSDF_MICROFACET_MULTI_GGX_FRESNEL_ID,
+		  CLOSURE_BSDF_ASHIKHMIN_SHIRLEY_ID,
+		  CLOSURE_BSDF_ASHIKHMIN_VELVET_ID,
+		  CLOSURE_BSDF_PHONG_RAMP_ID,
+		  CLOSURE_BSDF_GLOSSY_TOON_ID,
+		  CLOSURE_BSDF_HAIR_REFLECTION_ID,
+
+		  /* Transmission */
+		  CLOSURE_BSDF_REFRACTION_ID,
+		  CLOSURE_BSDF_MICROFACET_BECKMANN_REFRACTION_ID,
+		  CLOSURE_BSDF_MICROFACET_GGX_REFRACTION_ID,
+		  CLOSURE_BSDF_MICROFACET_MULTI_GGX_GLASS_ID,
+		  CLOSURE_BSDF_MICROFACET_BECKMANN_GLASS_ID,
+		  CLOSURE_BSDF_MICROFACET_GGX_GLASS_ID,
+		  CLOSURE_BSDF_MICROFACET_MULTI_GGX_GLASS_FRESNEL_ID,
+		  CLOSURE_BSDF_SHARP_GLASS_ID,
+		  CLOSURE_BSDF_HAIR_PRINCIPLED_ID,
+		  CLOSURE_BSDF_HAIR_TRANSMISSION_ID,
+
+		  /* Special cases */
+		  CLOSURE_BSDF_TRANSPARENT_ID,
+
+		  /* BSSRDF */
+		  CLOSURE_BSSRDF_BURLEY_ID,
+		  CLOSURE_BSSRDF_RANDOM_WALK_ID,
+		  CLOSURE_BSSRDF_RANDOM_WALK_FIXED_RADIUS_ID,
+
+		  /* Other */
+		  CLOSURE_HOLDOUT_ID,
+
+		  /* Volume */
+		  CLOSURE_VOLUME_ID,
+		  CLOSURE_VOLUME_ABSORPTION_ID,
+		  CLOSURE_VOLUME_HENYEY_GREENSTEIN_ID,
+
+		  CLOSURE_BSDF_PRINCIPLED_ID,
+
+		  NBUILTIN_CLOSURES
+		} ClosureType;
+
+		t["DISTRIBUTION_SHARP"] = ClosureType::CLOSURE_BSDF_SHARP_GLASS_ID;
+		t["DISTRIBUTION_BECKMANN"] = ClosureType::CLOSURE_BSDF_MICROFACET_BECKMANN_GLASS_ID;
+		t["DISTRIBUTION_GGX"] = ClosureType::CLOSURE_BSDF_MICROFACET_GGX_GLASS_ID;
+		t["DISTRIBUTION_MULTISCATTER_GGX"] = ClosureType::CLOSURE_BSDF_MICROFACET_MULTI_GGX_GLASS_ID;
 		
 		t = nodeTypeEnums[unirender::NODE_OUTPUT] = luabind::newtable(l.GetState());
 		t["IN_SURFACE"] = unirender::nodes::output::IN_SURFACE;
@@ -1707,26 +1804,59 @@ extern "C"
 		t["OUT_VALUE"] = unirender::nodes::vector_math::OUT_VALUE;
 		t["OUT_VECTOR"] = unirender::nodes::vector_math::OUT_VECTOR;
 
-		t["TYPE_ADD"] = ccl::NodeVectorMathType::NODE_VECTOR_MATH_ADD;
-		t["TYPE_SUBTRACT"] = ccl::NodeVectorMathType::NODE_VECTOR_MATH_SUBTRACT;
-		t["TYPE_MULTIPLY"] = ccl::NodeVectorMathType::NODE_VECTOR_MATH_MULTIPLY;
-		t["TYPE_DIVIDE"] = ccl::NodeVectorMathType::NODE_VECTOR_MATH_DIVIDE;
-		t["TYPE_CROSS_PRODUCT"] = ccl::NodeVectorMathType::NODE_VECTOR_MATH_CROSS_PRODUCT;
-		t["TYPE_PROJECT"] = ccl::NodeVectorMathType::NODE_VECTOR_MATH_PROJECT;
-		t["TYPE_REFLECT"] = ccl::NodeVectorMathType::NODE_VECTOR_MATH_REFLECT;
-		t["TYPE_DOT_PRODUCT"] = ccl::NodeVectorMathType::NODE_VECTOR_MATH_DOT_PRODUCT;
-		t["TYPE_DISTANCE"] = ccl::NodeVectorMathType::NODE_VECTOR_MATH_DISTANCE;
-		t["TYPE_LENGTH"] = ccl::NodeVectorMathType::NODE_VECTOR_MATH_LENGTH;
-		t["TYPE_SCALE"] = ccl::NodeVectorMathType::NODE_VECTOR_MATH_SCALE;
-		t["TYPE_NORMALIZE"] = ccl::NodeVectorMathType::NODE_VECTOR_MATH_NORMALIZE;
-		t["TYPE_SNAP"] = ccl::NodeVectorMathType::NODE_VECTOR_MATH_SNAP;
-		t["TYPE_FLOOR"] = ccl::NodeVectorMathType::NODE_VECTOR_MATH_FLOOR;
-		t["TYPE_CEIL"] = ccl::NodeVectorMathType::NODE_VECTOR_MATH_CEIL;
-		t["TYPE_MODULO"] = ccl::NodeVectorMathType::NODE_VECTOR_MATH_MODULO;
-		t["TYPE_FRACTION"] = ccl::NodeVectorMathType::NODE_VECTOR_MATH_FRACTION;
-		t["TYPE_ABSOLUTE"] = ccl::NodeVectorMathType::NODE_VECTOR_MATH_ABSOLUTE;
-		t["TYPE_MINIMUM"] = ccl::NodeVectorMathType::NODE_VECTOR_MATH_MINIMUM;
-		t["TYPE_MAXIMUM"] = ccl::NodeVectorMathType::NODE_VECTOR_MATH_MAXIMUM;
+		typedef enum NodeVectorMathType {
+		  NODE_VECTOR_MATH_ADD,
+		  NODE_VECTOR_MATH_SUBTRACT,
+		  NODE_VECTOR_MATH_MULTIPLY,
+		  NODE_VECTOR_MATH_DIVIDE,
+
+		  NODE_VECTOR_MATH_CROSS_PRODUCT,
+		  NODE_VECTOR_MATH_PROJECT,
+		  NODE_VECTOR_MATH_REFLECT,
+		  NODE_VECTOR_MATH_DOT_PRODUCT,
+
+		  NODE_VECTOR_MATH_DISTANCE,
+		  NODE_VECTOR_MATH_LENGTH,
+		  NODE_VECTOR_MATH_SCALE,
+		  NODE_VECTOR_MATH_NORMALIZE,
+
+		  NODE_VECTOR_MATH_SNAP,
+		  NODE_VECTOR_MATH_FLOOR,
+		  NODE_VECTOR_MATH_CEIL,
+		  NODE_VECTOR_MATH_MODULO,
+		  NODE_VECTOR_MATH_FRACTION,
+		  NODE_VECTOR_MATH_ABSOLUTE,
+		  NODE_VECTOR_MATH_MINIMUM,
+		  NODE_VECTOR_MATH_MAXIMUM,
+		  NODE_VECTOR_MATH_WRAP,
+		  NODE_VECTOR_MATH_SINE,
+		  NODE_VECTOR_MATH_COSINE,
+		  NODE_VECTOR_MATH_TANGENT,
+		  NODE_VECTOR_MATH_REFRACT,
+		  NODE_VECTOR_MATH_FACEFORWARD,
+		  NODE_VECTOR_MATH_MULTIPLY_ADD,
+		} NodeVectorMathType;
+
+		t["TYPE_ADD"] = NodeVectorMathType::NODE_VECTOR_MATH_ADD;
+		t["TYPE_SUBTRACT"] = NodeVectorMathType::NODE_VECTOR_MATH_SUBTRACT;
+		t["TYPE_MULTIPLY"] = NodeVectorMathType::NODE_VECTOR_MATH_MULTIPLY;
+		t["TYPE_DIVIDE"] = NodeVectorMathType::NODE_VECTOR_MATH_DIVIDE;
+		t["TYPE_CROSS_PRODUCT"] = NodeVectorMathType::NODE_VECTOR_MATH_CROSS_PRODUCT;
+		t["TYPE_PROJECT"] = NodeVectorMathType::NODE_VECTOR_MATH_PROJECT;
+		t["TYPE_REFLECT"] = NodeVectorMathType::NODE_VECTOR_MATH_REFLECT;
+		t["TYPE_DOT_PRODUCT"] =NodeVectorMathType::NODE_VECTOR_MATH_DOT_PRODUCT;
+		t["TYPE_DISTANCE"] = NodeVectorMathType::NODE_VECTOR_MATH_DISTANCE;
+		t["TYPE_LENGTH"] = NodeVectorMathType::NODE_VECTOR_MATH_LENGTH;
+		t["TYPE_SCALE"] = NodeVectorMathType::NODE_VECTOR_MATH_SCALE;
+		t["TYPE_NORMALIZE"] = NodeVectorMathType::NODE_VECTOR_MATH_NORMALIZE;
+		t["TYPE_SNAP"] = NodeVectorMathType::NODE_VECTOR_MATH_SNAP;
+		t["TYPE_FLOOR"] = NodeVectorMathType::NODE_VECTOR_MATH_FLOOR;
+		t["TYPE_CEIL"] = NodeVectorMathType::NODE_VECTOR_MATH_CEIL;
+		t["TYPE_MODULO"] = NodeVectorMathType::NODE_VECTOR_MATH_MODULO;
+		t["TYPE_FRACTION"] = NodeVectorMathType::NODE_VECTOR_MATH_FRACTION;
+		t["TYPE_ABSOLUTE"] = NodeVectorMathType::NODE_VECTOR_MATH_ABSOLUTE;
+		t["TYPE_MINIMUM"] = NodeVectorMathType::NODE_VECTOR_MATH_MINIMUM;
+		t["TYPE_MAXIMUM"] = NodeVectorMathType::NODE_VECTOR_MATH_MAXIMUM;
 		
 		t = nodeTypeEnums[unirender::NODE_MIX] = luabind::newtable(l.GetState());
 		t["IN_TYPE"] = unirender::nodes::mix::IN_TYPE;
@@ -1752,13 +1882,25 @@ extern "C"
 		t["IN_VECTOR"] = unirender::nodes::vector_transform::IN_VECTOR;
 		t["OUT_VECTOR"] = unirender::nodes::vector_transform::OUT_VECTOR;
 
-		t["VECTOR_TRANSFORM_TYPE_VECTOR"] = ccl::NodeVectorTransformType::NODE_VECTOR_TRANSFORM_TYPE_VECTOR;
-		t["VECTOR_TRANSFORM_TYPE_POINT"] = ccl::NodeVectorTransformType::NODE_VECTOR_TRANSFORM_TYPE_POINT;
-		t["VECTOR_TRANSFORM_TYPE_NORMAL"] = ccl::NodeVectorTransformType::NODE_VECTOR_TRANSFORM_TYPE_NORMAL;
+		typedef enum NodeVectorTransformType {
+		  NODE_VECTOR_TRANSFORM_TYPE_VECTOR,
+		  NODE_VECTOR_TRANSFORM_TYPE_POINT,
+		  NODE_VECTOR_TRANSFORM_TYPE_NORMAL
+		} NodeVectorTransformType;
+
+		t["VECTOR_TRANSFORM_TYPE_VECTOR"] = NodeVectorTransformType::NODE_VECTOR_TRANSFORM_TYPE_VECTOR;
+		t["VECTOR_TRANSFORM_TYPE_POINT"] = NodeVectorTransformType::NODE_VECTOR_TRANSFORM_TYPE_POINT;
+		t["VECTOR_TRANSFORM_TYPE_NORMAL"] = NodeVectorTransformType::NODE_VECTOR_TRANSFORM_TYPE_NORMAL;
 		
-		t["VECTOR_TRANSFORM_CONVERT_SPACE_WORLD"] = ccl::NodeVectorTransformConvertSpace::NODE_VECTOR_TRANSFORM_CONVERT_SPACE_WORLD;
-		t["VECTOR_TRANSFORM_CONVERT_SPACE_OBJECT"] = ccl::NodeVectorTransformConvertSpace::NODE_VECTOR_TRANSFORM_CONVERT_SPACE_OBJECT;
-		t["VECTOR_TRANSFORM_CONVERT_SPACE_CAMERA"] = ccl::NodeVectorTransformConvertSpace::NODE_VECTOR_TRANSFORM_CONVERT_SPACE_CAMERA;
+		typedef enum NodeVectorTransformConvertSpace {
+		  NODE_VECTOR_TRANSFORM_CONVERT_SPACE_WORLD,
+		  NODE_VECTOR_TRANSFORM_CONVERT_SPACE_OBJECT,
+		  NODE_VECTOR_TRANSFORM_CONVERT_SPACE_CAMERA
+		} NodeVectorTransformConvertSpace;
+
+		t["VECTOR_TRANSFORM_CONVERT_SPACE_WORLD"] = NodeVectorTransformConvertSpace::NODE_VECTOR_TRANSFORM_CONVERT_SPACE_WORLD;
+		t["VECTOR_TRANSFORM_CONVERT_SPACE_OBJECT"] = NodeVectorTransformConvertSpace::NODE_VECTOR_TRANSFORM_CONVERT_SPACE_OBJECT;
+		t["VECTOR_TRANSFORM_CONVERT_SPACE_CAMERA"] = NodeVectorTransformConvertSpace::NODE_VECTOR_TRANSFORM_CONVERT_SPACE_CAMERA;
 
 		t = nodeTypeEnums[unirender::NODE_RGB_RAMP] = luabind::newtable(l.GetState());
 		t["IN_RAMP"] = unirender::nodes::rgb_ramp::IN_RAMP;
@@ -1852,7 +1994,11 @@ extern "C"
 		modCycles[defShader];
 
 		auto defSocket = luabind::class_<unirender::Socket>("Socket");
-		defSocket.def(tostring(luabind::self));
+		defSocket.def("__tostring",+[](unirender::Socket &socket) -> std::string {
+			std::stringstream ss;
+			unirender::operator<<(ss,socket);
+			return ss.str();
+		});
 		defSocket.def(luabind::constructor<>());
 		defSocket.def(luabind::constructor<float>());
 		defSocket.def(luabind::constructor<Vector3>());

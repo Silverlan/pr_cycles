@@ -5,9 +5,7 @@
 * Copyright (c) 2020 Florian Weischer
 */
 
-#include <render/image.h>
 #undef __SCENE_H__
-#include <render/scene.h>
 #include "pr_cycles/scene.hpp"
 #include "pr_cycles/subdivision.hpp"
 #include <prosper_context.hpp>

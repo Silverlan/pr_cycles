@@ -5,7 +5,6 @@
 * Copyright (c) 2020 Florian Weischer
 */
 
-#include <render/mesh.h>
 #include "pr_cycles/scene.hpp"
 #include "util_raytracing/scene.hpp"
 #include "util_raytracing/mesh.hpp"
