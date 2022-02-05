@@ -33,6 +33,7 @@ namespace pragma
 	class CParticleSystemComponent;
 	class CSkyCameraComponent;
 	class CModelComponent;
+	class CSceneComponent;
 };
 namespace umath {class Transform; class ScaledTransform;};
 namespace unirender
@@ -137,7 +138,7 @@ namespace pragma::modules::cycles
 	public:
 		Scene(unirender::Scene &rtScene);
 		void AddSkybox(const std::string &texture);
-		void Add3DSkybox(pragma::CSkyCameraComponent &skyCam,const Vector3 &camPos);
+		void Add3DSkybox(pragma::CSceneComponent &gameScene,pragma::CSkyCameraComponent &skyCam,const Vector3 &camPos);
 		void SetAOBakeTarget(Model &mdl,uint32_t matIndex);
 		void SetAOBakeTarget(BaseEntity &ent,uint32_t matIndex);
 		void AddLightmapBakeTarget(BaseEntity &ent);

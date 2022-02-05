@@ -396,7 +396,7 @@ static void initialize_cycles_scene_from_game_scene(
 	for(auto *ent : entIt3dSky)
 	{
 		auto skyc = ent->GetComponent<pragma::CSkyCameraComponent>();
-		scene.Add3DSkybox(*skyc,camPos);
+		scene.Add3DSkybox(gameScene,*skyc,camPos);
 	}
 }
 
@@ -741,7 +741,7 @@ static std::shared_ptr<cycles::Scene> setup_scene(unirender::Scene::RenderMode r
 	auto eDeviceType = (renderImageSettings.device == pragma::rendering::cycles::SceneInfo::DeviceType::GPU) ? unirender::Scene::DeviceType::GPU : unirender::Scene::DeviceType::CPU;
 	auto scene = setup_scene(
 		renderMode,renderImageSettings.width,renderImageSettings.height,
-		renderImageSettings.samples,renderImageSettings.hdrOutput,renderImageSettings.denoise ? unirender::Scene::DenoiseMode::Detailed : unirender::Scene::DenoiseMode::None,
+		renderImageSettings.samples,renderImageSettings.hdrOutput,renderImageSettings.denoise ? unirender::Scene::DenoiseMode::AutoDetailed : unirender::Scene::DenoiseMode::None,
 		renderImageSettings.renderer,eDeviceType,renderImageSettings.exposure,colorTransform
 	);
 	if(scene == nullptr)
@@ -880,10 +880,16 @@ extern "C"
 		return true;
 	}
 
+	void PRAGMA_EXPORT pragma_detach(std::string &errMsg)
+	{
+		unirender::set_log_handler();
+	}
+
 	void PRAGMA_EXPORT pragma_terminate_lua(Lua::Interface &l)
 	{
 		g_nodeManager = nullptr;
 		g_shaderManager = nullptr;
+		
 	}
 
 	void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
@@ -920,7 +926,7 @@ extern "C"
 					deviceType = static_cast<unirender::Scene::DeviceType>(Lua::CheckInt(l,6));
 				auto hdrOutput = false;
 				auto denoise = true;
-				auto scene = setup_scene(unirender::Scene::RenderMode::BakeAmbientOcclusion,width,height,sampleCount,hdrOutput,denoise ? unirender::Scene::DenoiseMode::Detailed : unirender::Scene::DenoiseMode::None,{},deviceType);
+				auto scene = setup_scene(unirender::Scene::RenderMode::BakeAmbientOcclusion,width,height,sampleCount,hdrOutput,denoise ? unirender::Scene::DenoiseMode::AutoDetailed : unirender::Scene::DenoiseMode::None,{},deviceType);
 				if(scene == nullptr)
 					return 0;
 				scene->SetAOBakeTarget(mdl,materialIndex);
@@ -2346,8 +2352,10 @@ extern "C"
 		defScene.add_static_constant("SCENE_FLAG_BIT_CULL_OBJECTS_OUTSIDE_PVS",umath::to_integral(SceneFlags::CullObjectsOutsidePvs));
 		
 		defScene.add_static_constant("DENOISE_MODE_NONE",umath::to_integral(unirender::Scene::DenoiseMode::None));
-		defScene.add_static_constant("DENOISE_MODE_FAST",umath::to_integral(unirender::Scene::DenoiseMode::Fast));
-		defScene.add_static_constant("DENOISE_MODE_DETAILED",umath::to_integral(unirender::Scene::DenoiseMode::Detailed));
+		defScene.add_static_constant("DENOISE_MODE_AUTO_FAST",umath::to_integral(unirender::Scene::DenoiseMode::AutoFast));
+		defScene.add_static_constant("DENOISE_MODE_AUTO_DETAILED",umath::to_integral(unirender::Scene::DenoiseMode::AutoDetailed));
+		defScene.add_static_constant("DENOISE_MODE_OPTIX",umath::to_integral(unirender::Scene::DenoiseMode::Optix));
+		defScene.add_static_constant("DENOISE_MODE_OPEN_IMAGE",umath::to_integral(unirender::Scene::DenoiseMode::OpenImage));
 
 		defScene.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,cycles::Scene&,pragma::CSceneComponent&,const Vector3&,const Quat&,const Mat4&,float,float,float,uint32_t,luabind::object,luabind::object)>([](lua_State *l,cycles::Scene &scene,pragma::CSceneComponent &gameScene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,uint32_t sceneFlags,luabind::object entFilter,luabind::object lightFilter) {
 			initialize_from_game_scene(l,gameScene,scene,camPos,camRot,vp,nearZ,farZ,fov,static_cast<SceneFlags>(sceneFlags),&entFilter,&lightFilter);
