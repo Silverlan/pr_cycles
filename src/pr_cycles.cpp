@@ -49,6 +49,7 @@ namespace pragma::asset {class WorldData; class EntityData;};
 
 #include <luainterface.hpp>
 #include <pragma/lua/lua_entity_component.hpp>
+#include <pragma/lua/libraries/lutil.hpp>
 #include <pragma/lua/lua_call.hpp>
 
 #undef __UTIL_STRING_H__
@@ -81,6 +82,44 @@ extern DLLCLIENT CGame *c_game;
 
 using namespace pragma::modules;
 
+static void sync_light(BaseEntity &ent,unirender::Light &light)
+{
+	auto lightC = ent.GetComponent<pragma::CLightComponent>();
+	auto toggleC = ent.GetComponent<pragma::CToggleComponent>();
+	auto colorC = ent.GetComponent<pragma::CColorComponent>();
+	auto color = Color::White;
+	if(colorC.valid())
+		color = colorC->GetColor();
+
+	auto valid = lightC.valid() && ent.IsEnabled();
+	light.SetPos(ent.GetPosition());
+	light.SetRotation(ent.GetRotation());
+	light.SetColor(color);
+
+	auto hLightSpot = ent.GetComponent<pragma::CLightSpotComponent>();
+	if(hLightSpot.valid())
+	{
+		light.SetType(unirender::Light::Type::Spot);
+		light.SetConeAngles(hLightSpot->GetInnerCutoffAngle() *2.f,hLightSpot->GetOuterCutoffAngle() *2.f);
+		light.SetIntensity(valid ? lightC->GetLightIntensityLumen() : 0.f);
+		return;
+	}
+	auto hLightPoint = ent.GetComponent<pragma::CLightPointComponent>();
+	if(hLightPoint.valid())
+	{
+		light.SetType(unirender::Light::Type::Point);
+		light.SetIntensity(valid ? lightC->GetLightIntensityLumen() : 0.f);
+		return;
+	}
+	auto hLightDirectional = ent.GetComponent<pragma::CLightDirectionalComponent>();
+	if(hLightDirectional.valid())
+	{
+		light.SetType(unirender::Light::Type::Directional);
+		light.SetIntensity(valid ? lightC->GetLightIntensity() : 0.f);
+		return;
+	}
+}
+
 static void setup_light_sources(cycles::Scene &scene,const std::function<bool(BaseEntity&)> &lightFilter=nullptr)
 {
 	EntityIterator entIt {*c_game};
@@ -91,55 +130,15 @@ static void setup_light_sources(cycles::Scene &scene,const std::function<bool(Ba
 		auto toggleC = ent->GetComponent<pragma::CToggleComponent>();
 		if(toggleC.valid() && toggleC->IsTurnedOn() == false || (lightFilter && lightFilter(*ent) == false))
 			continue;
-		auto colorC = ent->GetComponent<pragma::CColorComponent>();
-		auto color = Color::White;
-		if(colorC.valid())
-			color = colorC->GetColor();
-		auto hLightSpot = ent->GetComponent<pragma::CLightSpotComponent>();
-		if(hLightSpot.valid())
-		{
-			auto light = unirender::Light::Create();
-			if(light)
-			{
-				light->SetType(unirender::Light::Type::Spot);
-				light->SetPos(ent->GetPosition());
-				light->SetRotation(ent->GetRotation());
-				light->SetConeAngles(hLightSpot->GetInnerCutoffAngle() *2.f,hLightSpot->GetOuterCutoffAngle() *2.f);
-				light->SetColor(color);
-				light->SetIntensity(lightC->GetLightIntensityLumen());
-				scene->AddLight(*light);
-			}
+		
+		if(!ent->HasComponent<pragma::CLightSpotComponent>() && !ent->HasComponent<pragma::CLightPointComponent>() && !ent->HasComponent<pragma::CLightDirectionalComponent>())
 			continue;
-		}
-		auto hLightPoint = ent->GetComponent<pragma::CLightPointComponent>();
-		if(hLightPoint.valid())
-		{
-			auto light = unirender::Light::Create();
-			if(light)
-			{
-				light->SetType(unirender::Light::Type::Point);
-				light->SetPos(ent->GetPosition());
-				light->SetRotation(ent->GetRotation());
-				light->SetColor(color);
-				light->SetIntensity(lightC->GetLightIntensityLumen());
-				scene->AddLight(*light);
-			}
+		auto light = unirender::Light::Create();
+		if(!light)
 			continue;
-		}
-		auto hLightDirectional = ent->GetComponent<pragma::CLightDirectionalComponent>();
-		if(hLightDirectional.valid())
-		{
-			auto light = unirender::Light::Create();
-			if(light)
-			{
-				light->SetType(unirender::Light::Type::Directional);
-				light->SetPos(ent->GetPosition());
-				light->SetRotation(ent->GetRotation());
-				light->SetColor(color);
-				light->SetIntensity(lightC->GetLightIntensity());
-				scene->AddLight(*light);
-			}
-		}
+		sync_light(*ent,*light);
+		light->SetUuid(ent->GetUuid());
+		scene->AddLight(*light);
 	}
 }
 
@@ -357,6 +356,17 @@ static void initialize_cycles_geometry(
 #endif
 }
 
+static void sync_camera(BaseEntity &ent,unirender::Camera &cam)
+{
+	auto hCam = ent.GetComponent<pragma::CCameraComponent>();
+	if(!hCam.valid())
+		return;
+	cam.SetPos(ent.GetPosition());
+	cam.SetRotation(ent.GetRotation());
+	cam.SetNearZ(util::pragma::units_to_metres(hCam->GetNearZ()));
+	cam.SetFarZ(util::pragma::units_to_metres(hCam->GetFarZ()));
+	cam.SetFOV(hCam->GetFOV());
+}
 static void initialize_cycles_scene_from_game_scene(
 	pragma::CSceneComponent &gameScene,pragma::modules::cycles::Scene &scene,const Vector3 &camPos,const Quat &camRot,bool equirect,const Mat4 &vp,float nearZ,float farZ,float fov,float aspectRatio,SceneFlags sceneFlags,
 	const std::function<bool(BaseEntity&)> &entFilter=nullptr,const std::function<bool(BaseEntity&)> &lightFilter=nullptr,const std::vector<BaseEntity*> *entityList=nullptr
@@ -383,6 +393,10 @@ static void initialize_cycles_scene_from_game_scene(
 	cam.SetNearZ(util::pragma::units_to_metres(nearZ));
 	cam.SetFarZ(util::pragma::units_to_metres(farZ));
 	cam.SetFOV(fov);
+
+	auto &hCam = gameScene.GetActiveCamera();
+	if(hCam.valid())
+		cam.SetUuid(hCam->GetEntity().GetUuid());
 
 	if(equirect)
 	{
@@ -1077,6 +1091,20 @@ extern "C"
 		defRenderer.def("EndSceneEdit",static_cast<bool(*)(lua_State*,pragma::modules::cycles::Renderer&)>([](lua_State *l,pragma::modules::cycles::Renderer &renderer) -> bool {
 			return renderer->EndSceneEdit();
 		}));
+		defRenderer.def("SyncActor",+[](lua_State *l,pragma::modules::cycles::Renderer &renderer,BaseEntity &ent) -> bool {
+			auto uuid = ent.GetUuid();
+			auto *o = renderer->FindActor(uuid);
+			if(!o)
+				return false;
+			if(typeid(*o) == typeid(unirender::Light))
+				sync_light(ent,static_cast<unirender::Light&>(*o));
+			else if(typeid(*o) == typeid(unirender::Camera))
+				sync_camera(ent,static_cast<unirender::Camera&>(*o));
+			return renderer->SyncEditedActor(uuid);
+		});
+		defRenderer.def("FindActor",+[](lua_State *l,pragma::modules::cycles::Renderer &renderer,const Lua::util::Uuid &uuid) -> unirender::WorldObject* {
+			return renderer->FindActor(uuid.value);
+		});
 		defRenderer.def("GetScene",static_cast<std::shared_ptr<cycles::Scene>(*)(lua_State*,pragma::modules::cycles::Renderer&)>([](lua_State *l,pragma::modules::cycles::Renderer &renderer) -> std::shared_ptr<cycles::Scene> {
 			return std::make_shared<cycles::Scene>(renderer->GetScene());
 		}));
@@ -2357,15 +2385,15 @@ extern "C"
 		defScene.add_static_constant("DENOISE_MODE_OPTIX",umath::to_integral(unirender::Scene::DenoiseMode::Optix));
 		defScene.add_static_constant("DENOISE_MODE_OPEN_IMAGE",umath::to_integral(unirender::Scene::DenoiseMode::OpenImage));
 
-		defScene.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,cycles::Scene&,pragma::CSceneComponent&,const Vector3&,const Quat&,const Mat4&,float,float,float,uint32_t,luabind::object,luabind::object)>([](lua_State *l,cycles::Scene &scene,pragma::CSceneComponent &gameScene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,uint32_t sceneFlags,luabind::object entFilter,luabind::object lightFilter) {
+		defScene.def("InitializeFromGameScene",+[](lua_State *l,cycles::Scene &scene,pragma::CSceneComponent &gameScene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,uint32_t sceneFlags,luabind::object entFilter,luabind::object lightFilter) {
 			initialize_from_game_scene(l,gameScene,scene,camPos,camRot,vp,nearZ,farZ,fov,static_cast<SceneFlags>(sceneFlags),&entFilter,&lightFilter);
-		}));
-		defScene.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,cycles::Scene&,pragma::CSceneComponent&,const Vector3&,const Quat&,const Mat4&,float,float,float,uint32_t,luabind::object)>([](lua_State *l,cycles::Scene &scene,pragma::CSceneComponent &gameScene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,uint32_t sceneFlags,luabind::object entFilter) {
+		});
+		defScene.def("InitializeFromGameScene",+[](lua_State *l,cycles::Scene &scene,pragma::CSceneComponent &gameScene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,uint32_t sceneFlags,luabind::object entFilter) {
 			initialize_from_game_scene(l,gameScene,scene,camPos,camRot,vp,nearZ,farZ,fov,static_cast<SceneFlags>(sceneFlags),&entFilter,nullptr);
-		}));
-		defScene.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,cycles::Scene&,pragma::CSceneComponent&,const Vector3&,const Quat&,const Mat4&,float,float,float,uint32_t)>([](lua_State *l,cycles::Scene &scene,pragma::CSceneComponent &gameScene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,uint32_t sceneFlags) {
+		});
+		defScene.def("InitializeFromGameScene",+[](lua_State *l,cycles::Scene &scene,pragma::CSceneComponent &gameScene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,uint32_t sceneFlags) {
 			initialize_from_game_scene(l,gameScene,scene,camPos,camRot,vp,nearZ,farZ,fov,static_cast<SceneFlags>(sceneFlags),nullptr,nullptr);
-		}));
+		});
 		defScene.def("FindObjectByName",static_cast<unirender::Object*(cycles::Scene::*)(const std::string&)>(&cycles::Scene::FindObject));
 		defScene.def("SetSky",static_cast<void(*)(lua_State*,cycles::Scene&,const std::string&)>([](lua_State *l,cycles::Scene &scene,const std::string &skyPath) {
 			scene->SetSky(skyPath);

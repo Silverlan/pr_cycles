@@ -66,11 +66,19 @@ void DenoiseTexture::RunDenoise()
 {
 	auto w = m_denoisedImage->GetWidth();
 	auto h = m_denoisedImage->GetHeight();
-	unirender::DenoiseInfo denoiseInfo {};
+	unirender::denoise::Info denoiseInfo {};
 	denoiseInfo.hdr = true;
 	denoiseInfo.width = w;
 	denoiseInfo.height = h;
-	m_denoiser.Denoise(denoiseInfo,*m_inputImage,nullptr,nullptr,nullptr,m_denoisedImage.get());
+
+	unirender::denoise::ImageData output {};
+	output.data = static_cast<uint8_t*>(m_inputImage->GetData());
+	output.format = m_inputImage->GetFormat();
+
+	unirender::denoise::ImageInputs inputs {};
+	inputs.beautyImage = output;
+
+	m_denoiser.Denoise(denoiseInfo,inputs,output);
 	m_denoisedImage->Copy(*m_outputImage,0,0,0,0,w,h);
 }
 

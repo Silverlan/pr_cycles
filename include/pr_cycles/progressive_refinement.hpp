@@ -42,7 +42,7 @@ namespace pragma::modules::cycles
 		void RunDenoise();
 
 		std::mutex m_tileMutex;
-		unirender::Denoiser m_denoiser;
+		unirender::denoise::Denoiser m_denoiser;
 		std::atomic<bool> m_running = false;
 		std::atomic<bool> m_shouldDenoise = false;
 		std::atomic<DenoisingState> m_denoisingState = DenoisingState::Initial;
