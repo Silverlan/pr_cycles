@@ -1421,6 +1421,12 @@ extern "C"
 		static_assert(unirender::NODE_COUNT == 40,"Increase this number if new node types are added!");
 		Lua::RegisterLibraryValues<std::string>(l.GetState(),"unirender",nodeTypes);
 
+		Lua::RegisterLibraryValues<uint32_t>(l.GetState(),"unirender",{
+			{"SUBSURFACE_SCATTERING_METHOD_BURLEY",32 /* ccl::ClosureType::CLOSURE_BSSRDF_BURLEY_ID */},
+			{"SUBSURFACE_SCATTERING_METHOD_RANDOM_WALK_FIXED_RADIUS",34 /* ccl::ClosureType::CLOSURE_BSSRDF_RANDOM_WALK_FIXED_RADIUS_ID */},
+			{"SUBSURFACE_SCATTERING_METHOD_RANDOM_WALK",33 /* ccl::ClosureType::CLOSURE_BSSRDF_RANDOM_WALK_ID */}
+		});
+
 		std::unordered_map<std::string,luabind::object> nodeTypeEnums;
 		luabind::object t;
 		t = nodeTypeEnums[unirender::NODE_MATH] = luabind::newtable(l.GetState());
