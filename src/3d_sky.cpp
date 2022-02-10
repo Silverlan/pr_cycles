@@ -43,8 +43,8 @@ void cycles::Scene::Add3DSkybox(pragma::CSceneComponent &gameScene,pragma::CSkyC
 		}
 	};
 
-	auto renderQueue = pragma::rendering::RenderQueue::Create();
-	auto translucentRenderQueue = pragma::rendering::RenderQueue::Create();
+	auto renderQueue = pragma::rendering::RenderQueue::Create("unirender_3d_sky");
+	auto translucentRenderQueue = pragma::rendering::RenderQueue::Create("unirender_3d_sky_translucent");
 
 	pragma::rendering::RenderMask inclusionMask,exclusionMask;
 	c_game->GetPrimaryCameraRenderMask(inclusionMask,exclusionMask);

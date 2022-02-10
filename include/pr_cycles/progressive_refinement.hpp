@@ -17,7 +17,7 @@
 #include <util_raytracing/renderer.hpp>
 
 namespace raytracing {class Scene;};
-namespace prosper {class Texture; class IImage;};
+namespace prosper {class Texture; class IImage; class IPrimaryCommandBuffer; class IFence;};
 namespace pragma::modules::cycles
 {
 	class DenoiseTexture
@@ -61,15 +61,15 @@ namespace pragma::modules::cycles
 		void Update();
 		std::shared_ptr<prosper::Texture> GetTexture() const;
 	private:
+		std::shared_ptr<prosper::IImage> CreateImage(uint32_t width,uint32_t height,bool onDevice) const;
 		Vector2i m_tileSize;
+		std::shared_ptr<prosper::IPrimaryCommandBuffer> m_cmdBuffer = nullptr;
+		std::shared_ptr<prosper::IFence> m_fence = nullptr;
 		std::shared_ptr<prosper::Texture> m_texture = nullptr;
 		std::shared_ptr<prosper::IImage> m_image = nullptr;
+		std::vector<std::shared_ptr<prosper::IImage>> m_mipImages;
 		std::shared_ptr<unirender::Renderer> m_renderer = nullptr;
 		CallbackHandle m_cbThink {};
-
-		std::unique_ptr<DenoiseTexture> m_denoiseTexture = nullptr;
-		bool m_denoise = false;
-		std::chrono::time_point<std::chrono::steady_clock> m_tDenoise;
 	};
 };
 

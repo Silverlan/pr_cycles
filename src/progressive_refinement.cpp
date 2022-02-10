@@ -10,6 +10,7 @@
 #include <util_image_buffer.hpp>
 #include <image/prosper_texture.hpp>
 #include <prosper_command_buffer.hpp>
+#include <prosper_fence.hpp>
 
 extern DLLCLIENT CEngine *c_engine;
 
@@ -94,6 +95,7 @@ ProgressiveTexture::~ProgressiveTexture()
 {
 	if(m_cbThink.IsValid())
 		m_cbThink.Remove();
+	c_engine->GetRenderContext().KeepResourceAliveUntilPresentationComplete(m_cmdBuffer);
 }
 std::shared_ptr<prosper::Texture> ProgressiveTexture::GetTexture() const {return m_texture;}
 void ProgressiveTexture::Initialize(unirender::Renderer &renderer)
@@ -104,21 +106,20 @@ void ProgressiveTexture::Initialize(unirender::Renderer &renderer)
 	auto res = scene.GetResolution();
 
 	auto &context = c_engine->GetRenderContext();
-	prosper::util::ImageCreateInfo imgCreateInfo {};
-	imgCreateInfo.width = res.x;
-	imgCreateInfo.height = res.y;
-	imgCreateInfo.format = renderer.ShouldUseProgressiveFloatFormat() ? prosper::Format::R32G32B32A32_SFloat : prosper::Format::R16G16B16A16_SFloat;
-	imgCreateInfo.usage = prosper::ImageUsageFlags::SampledBit/* | prosper::ImageUsageFlags::ColorAttachmentBit*/ | prosper::ImageUsageFlags::TransferSrcBit | prosper::ImageUsageFlags::TransferDstBit;
-	imgCreateInfo.memoryFeatures = prosper::MemoryFeatureFlags::HostAccessable | prosper::MemoryFeatureFlags::HostCached;
-	imgCreateInfo.tiling = prosper::ImageTiling::Linear;
-	imgCreateInfo.postCreateLayout = prosper::ImageLayout::TransferDstOptimal;
+	auto img = CreateImage(res.x,res.y,true);
+	m_image = img;
+	
+	uint32_t queueFamilyIndex;
+	m_cmdBuffer = context.AllocatePrimaryLevelCommandBuffer(prosper::QueueFamilyType::Universal,queueFamilyIndex);
+	m_fence = context.CreateFence(true);
+	auto result = m_cmdBuffer->StartRecording(false,false);
+	assert(result);
 
 	// Clear alpha
-	auto img = context.CreateImage(imgCreateInfo);
-	auto &setupCmd = context.GetSetupCommandBuffer();
-	setupCmd->RecordClearImage(*img,prosper::ImageLayout::TransferDstOptimal,std::array<float,4>{0.f,0.f,0.f,0.f});
-	setupCmd->RecordImageBarrier(*img,prosper::ImageLayout::TransferDstOptimal,prosper::ImageLayout::ShaderReadOnlyOptimal);
-	context.FlushSetupCommandBuffer();
+	m_cmdBuffer->RecordClearImage(*img,prosper::ImageLayout::TransferDstOptimal,std::array<float,4>{0.f,0.f,0.f,0.f});
+	m_cmdBuffer->RecordImageBarrier(*img,prosper::ImageLayout::TransferDstOptimal,prosper::ImageLayout::ShaderReadOnlyOptimal);
+	m_cmdBuffer->StopRecording();
+	context.SubmitCommandBuffer(*m_cmdBuffer,prosper::QueueFamilyType::Universal,true);
 
 	prosper::util::SamplerCreateInfo samplerCreateInfo {};
 	samplerCreateInfo.addressModeU = prosper::SamplerAddressMode::ClampToEdge;
@@ -133,38 +134,66 @@ void ProgressiveTexture::Initialize(unirender::Renderer &renderer)
 	m_cbThink = c_engine->AddCallback("Think",FunctionCallback<void>::Create([this]() {
 		Update();
 	}));
-	m_tDenoise = std::chrono::steady_clock::now();
+}
+std::shared_ptr<prosper::IImage> ProgressiveTexture::CreateImage(uint32_t width,uint32_t height,bool onDevice) const
+{
+	auto &context = c_engine->GetRenderContext();
+	prosper::util::ImageCreateInfo imgCreateInfo {};
+	imgCreateInfo.width = width;
+	imgCreateInfo.height = height;
+	imgCreateInfo.format = m_renderer->ShouldUseProgressiveFloatFormat() ? prosper::Format::R32G32B32A32_SFloat : prosper::Format::R16G16B16A16_SFloat;
+	imgCreateInfo.usage = prosper::ImageUsageFlags::TransferSrcBit | prosper::ImageUsageFlags::TransferDstBit;
+	if(onDevice)
+		imgCreateInfo.usage |= prosper::ImageUsageFlags::SampledBit;
+	imgCreateInfo.memoryFeatures = onDevice ? prosper::MemoryFeatureFlags::DeviceLocal :
+		prosper::MemoryFeatureFlags::HostAccessable | prosper::MemoryFeatureFlags::HostCached;
+	imgCreateInfo.tiling = onDevice ? prosper::ImageTiling::Optimal : prosper::ImageTiling::Linear;
+	imgCreateInfo.postCreateLayout = onDevice ? prosper::ImageLayout::TransferDstOptimal : prosper::ImageLayout::TransferSrcOptimal;
+	return context.CreateImage(imgCreateInfo);
 }
 void ProgressiveTexture::Update()
 {
 	auto &scene = m_renderer->GetScene();
 	auto &tileManager = m_renderer->GetTileManager();
-	// We'll wait for all tiles to have at least 1 finished sample before we write the image data, otherwise
-	// the image can look confusing
+	// We'll wait for all tiles to have at least 1 finished sample before we write the image data
 	if(tileManager.AllTilesHaveRenderedSamples() == false)
 		return;
 	auto tiles = m_renderer->GetRenderedTileBatch();
-	/*if(m_denoiseTexture->IsDenoisingComplete())
+	if(tiles.empty())
+		return;
+	auto &tile = tiles.back();
+	auto it = std::find_if(m_mipImages.begin(),m_mipImages.end(),[&tile](const std::shared_ptr<prosper::IImage> &img) {
+		return img->GetWidth() == tile.w && img->GetHeight() == tile.h;
+	});
+	if(it == m_mipImages.end())
 	{
-		auto imgSrc = m_denoiseTexture->GetDenoisedImageData();
-		m_image->WriteImageData(0,0,imgSrc->GetWidth(),imgSrc->GetHeight(),0,0,imgSrc->GetSize(),static_cast<uint8_t*>(imgSrc->GetData()));
-	}*/
-	for(auto &tile : tiles)
-	{
-		m_image->WriteImageData(tile.x,tile.y,tile.w,tile.h,0,0,tile.data.size() *sizeof(tile.data.front()),tile.data.data());
-		//if(m_denoiseTexture && (tile.sample %5 == 0))
-		//	m_denoiseTexture->AppendTile(std::move(tile));
+		auto newImg = CreateImage(tile.w,tile.h,false);
+		m_mipImages.push_back(newImg);
+		it = m_mipImages.end() -1;
 	}
-	/*if(m_denoiseTexture->IsDenoising() == false)
-	{
-		auto tDt = std::chrono::steady_clock::now() -m_tDenoise;
-		if(std::chrono::duration_cast<std::chrono::seconds>(tDt).count() >= 3)
-		{
-			if(m_denoise == false)
-			{
-				m_denoise = true;
-				m_denoiseTexture->Denoise();
-			}
-		}
-	}*/
+
+	auto &imgData = **it;
+	imgData.WriteImageData(tile.x,tile.y,tile.w,tile.h,0,0,tile.data.size() *sizeof(tile.data.front()),tile.data.data());
+
+	auto &context = c_engine->GetRenderContext();
+	context.WaitForFence(*m_fence);
+	auto res = m_cmdBuffer->StartRecording(false,false);
+	assert(res);
+	if(!res)
+		return;
+	m_fence->Reset();
+	prosper::util::BarrierImageLayout {};
+	// Ensure image data has been written by host before blitting to destination image
+	m_cmdBuffer->RecordImageBarrier(
+		imgData,prosper::PipelineStageFlags::HostBit,prosper::PipelineStageFlags::TransferBit,
+		prosper::ImageLayout::TransferSrcOptimal,prosper::ImageLayout::TransferSrcOptimal,
+		prosper::AccessFlags::HostWriteBit,prosper::AccessFlags::TransferReadBit
+	);
+
+	m_cmdBuffer->RecordImageBarrier(*m_image,prosper::ImageLayout::ShaderReadOnlyOptimal,prosper::ImageLayout::TransferDstOptimal);
+	m_cmdBuffer->RecordBlitImage({},imgData,*m_image);
+	m_cmdBuffer->RecordImageBarrier(*m_image,prosper::ImageLayout::TransferDstOptimal,prosper::ImageLayout::ShaderReadOnlyOptimal);
+
+	m_cmdBuffer->StopRecording();
+	context.SubmitCommandBuffer(*m_cmdBuffer,prosper::QueueFamilyType::Universal,false,m_fence.get());
 }
