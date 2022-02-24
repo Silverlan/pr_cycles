@@ -980,15 +980,20 @@ extern "C"
 			})},
 			{"get_texture_path",static_cast<int32_t(*)(lua_State*)>([](lua_State *l) -> int32_t {
 				std::string texturePath = Lua::CheckString(l,1);
-				auto res = pragma::modules::cycles::prepare_texture(texturePath);
-				auto o = res.has_value() ? luabind::object{l,*res} : luabind::object{};
-				o.push(l);
-				return 1;
-			})},
-			{"get_texture_path",static_cast<int32_t(*)(lua_State*)>([](lua_State *l) -> int32_t {
-				std::string texturePath = Lua::CheckString(l,1);
-				std::string defaultTexture = Lua::CheckString(l,2);
-				auto res = pragma::modules::cycles::prepare_texture(texturePath,defaultTexture);
+				std::optional<std::string> defaultTexture {};
+				bool translucent = false;
+				if(Lua::IsSet(l,2))
+				{
+					if(Lua::IsString(l,2))
+					{
+						defaultTexture = Lua::CheckString(l,2);
+						if(Lua::IsSet(l,3))
+							translucent = Lua::CheckBool(l,3);
+					}
+					else
+						translucent = Lua::CheckBool(l,2);
+				}
+				auto res = pragma::modules::cycles::prepare_texture(texturePath,defaultTexture,translucent);
 				auto o = res.has_value() ? luabind::object{l,*res} : luabind::object{};
 				o.push(l);
 				return 1;

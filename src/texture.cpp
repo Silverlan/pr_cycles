@@ -19,11 +19,13 @@
 #include <pragma/rendering/shaders/c_shader_cubemap_to_equirectangular.hpp>
 #include <pragma/rendering/shaders/particles/c_shader_particle.hpp>
 #include <util_texture_info.hpp>
+#include <util_image.hpp>
+#include <fsys/ifile.hpp>
 
 extern DLLCLIENT CEngine *c_engine;
 extern DLLCLIENT ClientState *client;
 extern DLLCLIENT CGame *c_game;
-
+#pragma optimize("",off)
 static std::optional<std::string> get_abs_error_texture_path()
 {
 	std::string errTexPath = "materials\\error.dds";
@@ -47,8 +49,8 @@ enum class PreparedTextureOutputFlags : uint8_t
 REGISTER_BASIC_BITWISE_OPERATORS(PreparedTextureOutputFlags)
 
 static std::optional<std::string> prepare_texture(
-	std::shared_ptr<Texture> &tex,bool &outSuccess,bool &outConverted,PreparedTextureInputFlags inFlags,PreparedTextureOutputFlags *optOutFlags=nullptr,
-	const std::optional<std::string> &defaultTexture={}
+	std::shared_ptr<Texture> &tex,bool &outSuccess,bool &outConverted,PreparedTextureInputFlags inFlags,PreparedTextureOutputFlags *optOutFlags,
+	const std::optional<std::string> &defaultTexture,bool translucent
 )
 {
 	if(optOutFlags)
@@ -108,10 +110,25 @@ static std::optional<std::string> prepare_texture(
 			*optOutFlags |= PreparedTextureOutputFlags::Envmap;
 	}
 
+	enum class Format
+	{
+		DDS = 0,
+		PNG
+	};
+	auto format = Format::DDS;
+	if(translucent)
+	{
+		// Transparent DDS textures sometimes cause weird emission artifacts (with transparent areas
+		// appearing emissive in bright white), so we'll use png for those textures instead.
+		format = Format::PNG;
+	}
+
 	auto texPath = "materials\\" +texName;
-	texPath += ".dds";
-	// Check if DDS version of the texture already exists, in which case we can just use it directly!
+	std::string ext = (format == Format::DDS) ? "dds" : "png";
+
 	std::string absPath;
+	texPath += "." +ext;
+	// Check if a version of the texture already exists, in which case we can just use it directly!
 	if(FileManager::FindAbsolutePath(texPath,absPath))
 	{
 		outSuccess = true;
@@ -123,8 +140,25 @@ static std::optional<std::string> prepare_texture(
 	if(tex == nullptr)
 		return get_abs_error_texture_path(); // Texture is not valid! Return error texture.
 
+	std::string baseOutputPath = "addons/converted/";
+	if(format == Format::PNG)
+	{
+		auto imgBuf = img->ToHostImageBuffer(uimg::Format::RGBA8,prosper::ImageLayout::ShaderReadOnlyOptimal);
+		auto fullPath = baseOutputPath +texPath;
+		FileManager::CreatePath(ufile::get_path_from_filename(fullPath).c_str());
+		auto f = filemanager::open_file(fullPath,filemanager::FileMode::Write | filemanager::FileMode::Binary);
+		fsys::File fp{f};
+		uimg::save_image(fp,*imgBuf,uimg::ImageFormat::PNG);
+		if(FileManager::FindAbsolutePath(texPath,absPath))
+		{
+			outSuccess = true;
+			return absPath;
+		}
+		return get_abs_error_texture_path();
+	}
+
 	// Output path for the DDS-file we're about to create
-	auto ddsPath = "addons/converted/materials/" +texName;
+	auto ddsPath = baseOutputPath +"materials/" +texName;
 	uimg::TextureInfo imgWriteInfo {};
 	imgWriteInfo.containerFormat = uimg::TextureInfo::ContainerFormat::DDS; // Cycles doesn't support KTX
 	if(tex->HasFlag(Texture::Flags::SRGB))
@@ -210,8 +244,8 @@ static std::optional<std::string> prepare_texture(
 }
 
 static std::optional<std::string> prepare_texture(
-	std::shared_ptr<Texture> &texInfo,PreparedTextureInputFlags inFlags,PreparedTextureOutputFlags *optOutFlags=nullptr,
-	const std::optional<std::string> &defaultTexture={}
+	std::shared_ptr<Texture> &texInfo,PreparedTextureInputFlags inFlags,PreparedTextureOutputFlags *optOutFlags,
+	const std::optional<std::string> &defaultTexture,bool translucent
 )
 {
 	if(optOutFlags)
@@ -220,7 +254,7 @@ static std::optional<std::string> prepare_texture(
 		return {};
 	auto success = false;
 	auto converted = false;
-	auto result = prepare_texture(texInfo,success,converted,inFlags,optOutFlags,defaultTexture);
+	auto result = prepare_texture(texInfo,success,converted,inFlags,optOutFlags,defaultTexture,translucent);
 	if(success == false && texInfo->GetName() != "error")
 	{
 		Con::cwar<<"WARNING: Unable to prepare texture '";
@@ -254,12 +288,15 @@ static std::optional<std::string> prepare_texture(
 	return result;
 }
 
-std::optional<std::string> pragma::modules::cycles::prepare_texture(const std::string &texPath,const std::optional<std::string> &defaultTexture)
+std::optional<std::string> pragma::modules::cycles::prepare_texture(
+	const std::string &texPath,const std::optional<std::string> &defaultTexture,bool translucent
+)
 {
 	auto &texManager = static_cast<msys::CMaterialManager&>(client->GetMaterialManager()).GetTextureManager();
 	auto ptex = texManager.LoadAsset(texPath);
 	auto flags = PreparedTextureInputFlags::CanBeEnvMap;
 	PreparedTextureOutputFlags retFlags;
 	auto tex = ptex;
-	return ::prepare_texture(tex,flags,&retFlags,defaultTexture);
+	return ::prepare_texture(tex,flags,&retFlags,defaultTexture,translucent);
 }
+#pragma optimize("",on)
