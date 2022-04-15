@@ -100,7 +100,7 @@ static void sync_light(BaseEntity &ent,unirender::Light &light)
 	if(hLightSpot.valid())
 	{
 		light.SetType(unirender::Light::Type::Spot);
-		light.SetConeAngles(hLightSpot->GetInnerCutoffAngle() *2.f,hLightSpot->GetOuterCutoffAngle() *2.f);
+		light.SetConeAngle(hLightSpot->GetOuterConeAngle(),hLightSpot->GetBlendFraction());
 		light.SetIntensity(valid ? lightC->GetLightIntensityLumen() : 0.f);
 		return;
 	}
@@ -2518,9 +2518,9 @@ extern "C"
 		defLight.def("SetType",static_cast<void(*)(lua_State*,unirender::Light&,uint32_t)>([](lua_State *l,unirender::Light &light,uint32_t type) {
 			light.SetType(static_cast<unirender::Light::Type>(type));
 			}));
-		defLight.def("SetConeAngles",static_cast<void(*)(lua_State*,unirender::Light&,float,float)>([](lua_State *l,unirender::Light &light,float innerAngle,float outerAngle) {
-			light.SetConeAngles(umath::deg_to_rad(innerAngle),umath::deg_to_rad(outerAngle));
-			}));
+		defLight.def("SetConeAngle",static_cast<void(*)(lua_State*,unirender::Light&,float,float)>([](lua_State *l,unirender::Light &light,float outerAngle,float blendFraction) {
+			light.SetConeAngle(outerAngle,blendFraction);
+		}));
 		defLight.def("SetColor",static_cast<void(*)(lua_State*,unirender::Light&,const Color&)>([](lua_State *l,unirender::Light &light,const Color &color) {
 			light.SetColor(color);
 			}));
