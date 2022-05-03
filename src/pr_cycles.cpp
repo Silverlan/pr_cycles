@@ -1407,6 +1407,7 @@ extern "C"
 			{"NODE_DIFFUSE_BSDF",unirender::NODE_DIFFUSE_BSDF},
 			{"NODE_NORMAL_MAP",unirender::NODE_NORMAL_MAP},
 			{"NODE_PRINCIPLED_BSDF",unirender::NODE_PRINCIPLED_BSDF},
+			{"NODE_PRINCIPLED_VOLUME",unirender::NODE_PRINCIPLED_VOLUME},
 			{"NODE_TOON_BSDF",unirender::NODE_TOON_BSDF},
 			{"NODE_GLOSSY_BSDF",unirender::NODE_GLOSSY_BSDF},
 			{"NODE_GLASS_BSDF",unirender::NODE_GLASS_BSDF},
@@ -1423,7 +1424,7 @@ extern "C"
 			{"NODE_VOLUME_HOMOGENEOUS",unirender::NODE_VOLUME_HOMOGENEOUS},
 			{"NODE_VOLUME_HETEROGENEOUS",unirender::NODE_VOLUME_HETEROGENEOUS}
 		};
-		static_assert(unirender::NODE_COUNT == 40,"Increase this number if new node types are added!");
+		static_assert(unirender::NODE_COUNT == 41,"Increase this number if new node types are added!");
 		Lua::RegisterLibraryValues<std::string>(l.GetState(),"unirender",nodeTypes);
 
 		Lua::RegisterLibraryValues<uint32_t>(l.GetState(),"unirender",{
@@ -1741,6 +1742,19 @@ extern "C"
 		t["IN_SURFACE_MIX_WEIGHT"] = unirender::nodes::principled_bsdf::IN_SURFACE_MIX_WEIGHT;
 		t["OUT_BSDF"] = unirender::nodes::principled_bsdf::OUT_BSDF;
 		
+		t = nodeTypeEnums[unirender::NODE_PRINCIPLED_VOLUME] = luabind::newtable(l.GetState());
+		t["IN_COLOR"] = unirender::nodes::principled_volume::IN_COLOR;
+		t["IN_DENSITY"] = unirender::nodes::principled_volume::IN_DENSITY;
+		t["IN_ANISOTROPY"] = unirender::nodes::principled_volume::IN_ANISOTROPY;
+		t["IN_ABSORPTION_COLOR"] = unirender::nodes::principled_volume::IN_ABSORPTION_COLOR;
+		t["IN_EMISSION_STRENGTH"] = unirender::nodes::principled_volume::IN_EMISSION_STRENGTH;
+		t["IN_EMISSION_COLOR"] = unirender::nodes::principled_volume::IN_EMISSION_COLOR;
+		t["IN_BLACKBODY_INTENSITY"] = unirender::nodes::principled_volume::IN_BLACKBODY_INTENSITY;
+		t["IN_BLACKBODY_TINT"] = unirender::nodes::principled_volume::IN_BLACKBODY_TINT;
+		t["IN_TEMPERATURE"] = unirender::nodes::principled_volume::IN_TEMPERATURE;
+		t["IN_VOLUME_MIX_WEIGHT"] = unirender::nodes::principled_volume::IN_VOLUME_MIX_WEIGHT;
+		t["OUT_VOLUME"] = unirender::nodes::principled_volume::OUT_VOLUME;
+
 		t = nodeTypeEnums[unirender::NODE_TOON_BSDF] = luabind::newtable(l.GetState());
 		t["IN_COMPONENT"] = unirender::nodes::toon_bsdf::IN_COMPONENT;
 		t["IN_COLOR"] = unirender::nodes::toon_bsdf::IN_COLOR;
@@ -2000,7 +2014,7 @@ extern "C"
 		t["IN_DEFAULT_WORLD_VOLUME"] = unirender::nodes::volume_heterogeneous::IN_DEFAULT_WORLD_VOLUME;
 		t["OUT_VOLUME"] = unirender::nodes::volume_heterogeneous::OUT_VOLUME;
 
-		static_assert(unirender::NODE_COUNT == 40,"Increase this number if new node types are added!");
+		static_assert(unirender::NODE_COUNT == 41,"Increase this number if new node types are added!");
 		Lua::RegisterLibraryValues<luabind::object>(l.GetState(),"unirender.Node",nodeTypeEnums);
 
 		auto defShader = luabind::class_<pragma::modules::cycles::LuaShader>("Shader");

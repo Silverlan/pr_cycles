@@ -5,22 +5,6 @@
 * Copyright (c) 2020 Florian Weischer
 */
 
-#include <render/buffers.h>
-#include <render/scene.h>
-#include <render/session.h>
-#include <render/shader.h>
-#include <render/camera.h>
-#include <render/light.h>
-#include <render/mesh.h>
-#include <render/graph.h>
-#include <render/nodes.h>
-#include <render/object.h>
-#include <render/background.h>
-#include <render/integrator.h>
-#include <render/svm.h>
-#include <render/bake.h>
-#include <render/particles.h>
-#include <render/image.h>
 #include "pr_cycles/scene.hpp"
 #include "pr_cycles/shader.hpp"
 #include <pragma/c_engine.h>
