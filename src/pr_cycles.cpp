@@ -1419,12 +1419,13 @@ extern "C"
 			{"NODE_VECTOR_TRANSFORM",unirender::NODE_VECTOR_TRANSFORM},
 			{"NODE_RGB_RAMP",unirender::NODE_RGB_RAMP},
 			{"NODE_LAYER_WEIGHT",unirender::NODE_LAYER_WEIGHT},
+			{"NODE_NOISE_TEXTURE",unirender::NODE_NOISE_TEXTURE},
 
 			{"NODE_VOLUME_CLEAR",unirender::NODE_VOLUME_CLEAR},
 			{"NODE_VOLUME_HOMOGENEOUS",unirender::NODE_VOLUME_HOMOGENEOUS},
 			{"NODE_VOLUME_HETEROGENEOUS",unirender::NODE_VOLUME_HETEROGENEOUS}
 		};
-		static_assert(unirender::NODE_COUNT == 41,"Increase this number if new node types are added!");
+		static_assert(unirender::NODE_COUNT == 42,"Increase this number if new node types are added!");
 		Lua::RegisterLibraryValues<std::string>(l.GetState(),"unirender",nodeTypes);
 
 		Lua::RegisterLibraryValues<uint32_t>(l.GetState(),"unirender",{
@@ -1589,6 +1590,21 @@ extern "C"
 		t["IN_VECTOR"] = unirender::nodes::image_texture::IN_VECTOR;
 		t["OUT_COLOR"] = unirender::nodes::image_texture::OUT_COLOR;
 		t["OUT_ALPHA"] = unirender::nodes::image_texture::OUT_ALPHA;
+
+		typedef enum InterpolationType {
+		  INTERPOLATION_NONE = -1,
+		  INTERPOLATION_LINEAR = 0,
+		  INTERPOLATION_CLOSEST = 1,
+		  INTERPOLATION_CUBIC = 2,
+		  INTERPOLATION_SMART = 3,
+
+		  INTERPOLATION_NUM_TYPES,
+		} InterpolationType;
+		t["INTERPOLATION_TYPE_NONE"] = InterpolationType::INTERPOLATION_NONE;
+		t["INTERPOLATION_TYPE_LINEAR"] = InterpolationType::INTERPOLATION_LINEAR;
+		t["INTERPOLATION_TYPE_CLOSEST"] = InterpolationType::INTERPOLATION_CLOSEST;
+		t["INTERPOLATION_TYPE_CUBIC"] = InterpolationType::INTERPOLATION_CUBIC;
+		t["INTERPOLATION_TYPE_SMART"] = InterpolationType::INTERPOLATION_SMART;
 
 		t["TEXTURE_TYPE_COLOR_IMAGE"] = umath::to_integral(unirender::TextureType::ColorImage);
 		t["TEXTURE_TYPE_EQUIRECTANGULAR_IMAGE"] = umath::to_integral(unirender::TextureType::EquirectangularImage);
@@ -1984,6 +2000,17 @@ extern "C"
 		t["IN_DEFAULT_WORLD_VOLUME"] = unirender::nodes::volume_clear::IN_DEFAULT_WORLD_VOLUME;
 		t["OUT_VOLUME"] = unirender::nodes::volume_clear::OUT_VOLUME;
 		
+		t = nodeTypeEnums[unirender::NODE_NOISE_TEXTURE] = luabind::newtable(l.GetState());
+		t["IN_VECTOR"] = unirender::nodes::noise_texture::IN_VECTOR;
+		t["IN_W"] = unirender::nodes::noise_texture::IN_W;
+		t["IN_SCALE"] = unirender::nodes::noise_texture::IN_SCALE;
+		t["IN_DETAIL"] = unirender::nodes::noise_texture::IN_DETAIL;
+		t["IN_ROUGHNESS"] = unirender::nodes::noise_texture::IN_ROUGHNESS;
+		t["IN_DISTORTION"] = unirender::nodes::noise_texture::IN_DISTORTION;
+		
+		t["OUT_FAC"] = unirender::nodes::noise_texture::OUT_FAC;
+		t["OUT_COLOR"] = unirender::nodes::noise_texture::OUT_COLOR;
+		
 		t = nodeTypeEnums[unirender::NODE_VOLUME_HOMOGENEOUS] = luabind::newtable(l.GetState());
 		t["IN_PRIORITY"] = unirender::nodes::volume_homogeneous::IN_PRIORITY;
 		t["IN_IOR"] = unirender::nodes::volume_homogeneous::IN_IOR;
@@ -2014,7 +2041,7 @@ extern "C"
 		t["IN_DEFAULT_WORLD_VOLUME"] = unirender::nodes::volume_heterogeneous::IN_DEFAULT_WORLD_VOLUME;
 		t["OUT_VOLUME"] = unirender::nodes::volume_heterogeneous::OUT_VOLUME;
 
-		static_assert(unirender::NODE_COUNT == 41,"Increase this number if new node types are added!");
+		static_assert(unirender::NODE_COUNT == 42,"Increase this number if new node types are added!");
 		Lua::RegisterLibraryValues<luabind::object>(l.GetState(),"unirender.Node",nodeTypeEnums);
 
 		auto defShader = luabind::class_<pragma::modules::cycles::LuaShader>("Shader");

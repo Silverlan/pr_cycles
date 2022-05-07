@@ -48,6 +48,7 @@ class ModelSubMesh;
 class Material;
 class CParticle;
 class DataStream;
+namespace util {struct HairStrandData;};
 namespace pragma::modules::cycles
 {
 	class Shader;
@@ -59,6 +60,7 @@ namespace pragma::modules::cycles
 		{
 			std::vector<umath::Vertex> vertices;
 			std::vector<int32_t> triangles;
+			std::unique_ptr<util::HairStrandData> hairStrandData = nullptr;
 
 			std::optional<std::vector<float>> alphas {};
 			std::optional<std::vector<float>> wrinkles {};

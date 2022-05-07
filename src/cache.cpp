@@ -30,6 +30,7 @@
 #include <cmaterialmanager.h>
 #include <cmaterial_manager2.hpp>
 #include <sharedutils/util_file.h>
+#include <sharedutils/util_hair.hpp>
 #undef __UTIL_STRING_H__
 #include <sharedutils/util_string.h>
 #include <util_texture_info.hpp>
@@ -481,6 +482,21 @@ unirender::PObject pragma::modules::cycles::Cache::AddEntity(
 	return o;
 }
 
+static bool load_hair_strand_data(util::HairStrandData &strandData,const udm::LinkedPropertyWrapper &data,std::string &outErr)
+{
+	//if(data.GetAssetType() != "PHD" || data.GetAssetVersion() < 1)
+	//	return false;
+	auto udm = data;//*data;
+	uint32_t numStrands = 0;
+	udm["strandCount"](numStrands);
+	udm["segmentCounts"](strandData.hairSegments);
+	auto udmStrands = udm["strands"];
+	udmStrands["points"](strandData.points);
+	udmStrands["uvs"](strandData.uvs);
+	udmStrands["thickness"](strandData.thicknessData);
+	return true;
+}
+
 std::shared_ptr<pragma::modules::cycles::Cache::MeshData> pragma::modules::cycles::Cache::CalcMeshData(
 	Model &mdl,ModelSubMesh &mdlMesh,bool includeAlphas,bool includeWrinkles,pragma::CModelComponent *optMdlC,
 	pragma::CAnimatedComponent *optAnimC
@@ -489,6 +505,16 @@ std::shared_ptr<pragma::modules::cycles::Cache::MeshData> pragma::modules::cycle
 	auto meshData = std::make_shared<MeshData>();
 	auto &meshVerts = mdlMesh.GetVertices();
 	auto &meshAlphas = mdlMesh.GetAlphas();
+
+	auto extData = mdlMesh.GetExtensionData();
+	auto udmHair = extData["hair"]["strandData"]["assetData"];
+	if(udmHair)
+	{
+		meshData->hairStrandData = std::make_unique<util::HairStrandData>();
+		std::string err;
+		if(!load_hair_strand_data(*meshData->hairStrandData,udmHair,err))
+			meshData->hairStrandData = nullptr;
+	}
 
 	std::vector<umath::Vertex> transformedVerts {};
 	transformedVerts.reserve(meshVerts.size());
@@ -738,6 +764,8 @@ void pragma::modules::cycles::Cache::AddMeshDataToMesh(unirender::Mesh &mesh,con
 		for(auto alpha : *meshData.alphas)
 			mesh.AddAlpha(alpha);
 	}
+	if(meshData.hairStrandData)
+		mesh.AddHairStrandData(*meshData.hairStrandData,shaderIdx);
 }
 
 void pragma::modules::cycles::Cache::AddAOBakeTarget(
