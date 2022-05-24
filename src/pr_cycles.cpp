@@ -71,7 +71,7 @@ namespace pragma::asset {class WorldData; class EntityData;};
 #include <sharedutils/util_path.hpp>
 #include <luabind/copy_policy.hpp>
 
-#define ENABLE_BAKE_DEBUGGING_INTERFACE 1
+#define ENABLE_BAKE_DEBUGGING_INTERFACE 0
 
 #if ENABLE_BAKE_DEBUGGING_INTERFACE == 1
 #include <wgui/wgui.h>
@@ -944,6 +944,7 @@ extern "C"
 				if(scene == nullptr)
 					return 0;
 				scene->SetAOBakeTarget(mdl,materialIndex);
+				scene->Finalize();
 				auto renderer = unirender::Renderer::Create(**scene,"cycles",unirender::Renderer::Flags::None);
 				if(renderer == nullptr)
 					return 0;
@@ -2436,7 +2437,18 @@ extern "C"
 		defScene.add_static_constant("DENOISE_MODE_AUTO_DETAILED",umath::to_integral(unirender::Scene::DenoiseMode::AutoDetailed));
 		defScene.add_static_constant("DENOISE_MODE_OPTIX",umath::to_integral(unirender::Scene::DenoiseMode::Optix));
 		defScene.add_static_constant("DENOISE_MODE_OPEN_IMAGE",umath::to_integral(unirender::Scene::DenoiseMode::OpenImage));
-
+		
+		defScene.def("SetAoBakeTarget",static_cast<void(cycles::Scene::*)(Model&,uint32_t)>(&cycles::Scene::SetAOBakeTarget));
+		defScene.def("SetAoBakeTarget",static_cast<void(cycles::Scene::*)(BaseEntity&,uint32_t)>(&cycles::Scene::SetAOBakeTarget));
+		defScene.def("AddLightmapBakeTarget",static_cast<void(cycles::Scene::*)(BaseEntity&)>(&cycles::Scene::AddLightmapBakeTarget));
+		defScene.def("AddLightSource",+[](lua_State *l,cycles::Scene &scene,BaseEntity &ent) {
+			auto light = unirender::Light::Create();
+			if(!light)
+				return;
+			sync_light(ent,*light);
+			light->SetUuid(ent.GetUuid());
+			scene->AddLight(*light);
+		});
 		defScene.def("InitializeFromGameScene",+[](lua_State *l,cycles::Scene &scene,pragma::CSceneComponent &gameScene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,uint32_t sceneFlags,luabind::object entFilter,luabind::object lightFilter) {
 			initialize_from_game_scene(l,gameScene,scene,camPos,camRot,vp,nearZ,farZ,fov,static_cast<SceneFlags>(sceneFlags),&entFilter,&lightFilter);
 		});
@@ -2481,6 +2493,7 @@ extern "C"
 			scene->SetLightIntensityFactor(factor);
 		}));
 		defScene.def("Finalize",static_cast<void(*)(lua_State*,cycles::Scene&)>([](lua_State *l,cycles::Scene &scene) {
+			scene.Finalize();
 			scene->Finalize();
 		}));
 		defScene.def("SetResolution",static_cast<void(*)(lua_State*,cycles::Scene&,uint32_t,uint32_t)>([](lua_State *l,cycles::Scene &scene,uint32_t width,uint32_t height) {

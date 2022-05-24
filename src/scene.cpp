@@ -101,7 +101,7 @@ void cycles::Scene::SetAOBakeTarget(BaseEntity &ent,uint32_t matIndex)
 	std::shared_ptr<unirender::Object> oAo;
 	std::shared_ptr<unirender::Object> oEnv;
 	m_cache->AddAOBakeTarget(ent,matIndex,oAo,oEnv);
-	m_rtScene->SetAOBakeTarget(*oAo);
+	m_rtScene->SetBakeTarget(*oAo);
 }
 
 void cycles::Scene::SetAOBakeTarget(Model &mdl,uint32_t matIndex)
@@ -109,13 +109,16 @@ void cycles::Scene::SetAOBakeTarget(Model &mdl,uint32_t matIndex)
 	std::shared_ptr<unirender::Object> oAo;
 	std::shared_ptr<unirender::Object> oEnv;
 	m_cache->AddAOBakeTarget(mdl,matIndex,oAo,oEnv);
-	m_rtScene->SetAOBakeTarget(*oAo);
+	m_rtScene->SetBakeTarget(*oAo);
 }
 
 cycles::Cache &cycles::Scene::GetCache() {return *m_cache;}
 
 void cycles::Scene::Finalize()
 {
+	if(m_finalized)
+		return;
+	m_finalized = true;
 	BuildLightMapObject();
 	m_rtScene->AddModelsFromCache(m_cache->GetModelCache());
 }
@@ -238,7 +241,7 @@ void cycles::Scene::BuildLightMapObject()
 		uvOffset += verts.size();
 	}
 	mesh->SetLightmapUVs(std::move(cclLightmapUvs));
-	m_rtScene->SetAOBakeTarget(*o);
+	m_rtScene->SetBakeTarget(*o);
 }
 void cycles::Scene::AddLightmapBakeTarget(BaseEntity &ent) {m_lightMapTargets.push_back(ent.GetHandle());}
 

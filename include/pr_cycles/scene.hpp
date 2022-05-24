@@ -163,6 +163,7 @@ namespace pragma::modules::cycles
 		std::vector<EntityHandle> m_lightMapTargets {};
 		std::shared_ptr<Cache> m_cache = nullptr;
 		std::shared_ptr<unirender::Scene> m_rtScene = nullptr;
+		bool m_finalized = false;
 	};
 
 	class Renderer
