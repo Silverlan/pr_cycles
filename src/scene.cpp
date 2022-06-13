@@ -23,6 +23,7 @@
 #include <pragma/entities/components/c_light_map_component.hpp>
 #include <pragma/entities/components/c_render_component.hpp>
 #include <pragma/entities/components/c_model_component.hpp>
+#include <pragma/entities/components/lightmap_data_cache.hpp>
 #include <pragma/entities/c_skybox.h>
 #include <pragma/rendering/shaders/c_shader_cubemap_to_equirectangular.hpp>
 #include <pragma/rendering/shaders/particles/c_shader_particle.hpp>
@@ -193,6 +194,7 @@ void cycles::Scene::BuildLightMapObject()
 	if(m_lightMapTargets.empty())
 		return;
 	std::vector<ModelSubMesh*> targetMeshes {};
+	std::vector<util::Uuid> targetMeshEntityUuids;
 	std::vector<std::shared_ptr<pragma::modules::cycles::Cache::MeshData>> meshDatas;
 	for(auto &hEnt : m_lightMapTargets)
 	{
@@ -204,8 +206,12 @@ void cycles::Scene::BuildLightMapObject()
 		if(meshes.empty() == false)
 		{
 			targetMeshes.reserve(targetMeshes.size() +entMeshes.size());
+			targetMeshEntityUuids.reserve(targetMeshEntityUuids.size() +entMeshes.size());
 			for(auto *mesh : entMeshes)
+			{
 				targetMeshes.push_back(mesh);
+				targetMeshEntityUuids.push_back(hEnt->GetUuid());
+			}
 			meshDatas.reserve(meshDatas.size() +meshes.size());
 			for(auto &mesh : meshes)
 				meshDatas.push_back(mesh);
@@ -229,21 +235,27 @@ void cycles::Scene::BuildLightMapObject()
 	std::vector<Vector2> cclLightmapUvs {};
 	cclLightmapUvs.resize(numTris *3);
 	size_t uvOffset = 0;
-	for(auto *subMesh : targetMeshes)
+	for(uint32_t idx=0;auto *subMesh : targetMeshes)
 	{
 		auto &verts = subMesh->GetVertices();
-		auto *uvSet = subMesh->GetUVSet("lightmap");
+		const std::vector<Vector2> *uvSet = nullptr;
+		if(m_lightMapDataCache)
+			uvSet = m_lightMapDataCache->FindLightmapUvs(targetMeshEntityUuids.at(idx),subMesh->GetUuid());
+		else
+			uvSet = subMesh->GetUVSet("lightmap");
 		if(uvSet)
 		{
 			for(auto i=decltype(verts.size()){0u};i<verts.size();++i)
 				cclLightmapUvs.at(uvOffset +i) = uvSet->at(i);
 		}
 		uvOffset += verts.size();
+		++idx;
 	}
 	mesh->SetLightmapUVs(std::move(cclLightmapUvs));
 	m_rtScene->SetBakeTarget(*o);
 }
 void cycles::Scene::AddLightmapBakeTarget(BaseEntity &ent) {m_lightMapTargets.push_back(ent.GetHandle());}
+void cycles::Scene::SetLightmapDataCache(LightmapDataCache *cache) {m_lightMapDataCache = cache ? cache->shared_from_this() : nullptr;}
 
 unirender::PShader cycles::Cache::CreateShader(Material &mat,const std::string &meshName,const ShaderInfo &shaderInfo) const
 {

@@ -33,6 +33,7 @@ namespace pragma::asset {class WorldData; class EntityData;};
 #include <pragma/entities/environment/lights/c_env_light_spot.h>
 #include <pragma/entities/environment/lights/c_env_light_point.h>
 #include <pragma/entities/environment/lights/c_env_light_directional.h>
+#include <pragma/entities/components/lightmap_data_cache.hpp>
 #include <pragma/entities/entity_component_system_t.hpp>
 #include <pragma/util/util_game.hpp>
 #include <pragma/rendering/renderers/rasterization_renderer.hpp>
@@ -238,7 +239,7 @@ static void initialize_cycles_geometry(
 		uvec::to_min_max(min,max);
 		return Intersection::AABBInPlaneMesh(min,max,planes) != INTERSECT_OUTSIDE;*/
 	};
-	auto entSceneFilter = [&entSceneFilterEx](BaseEntity &ent) -> bool {return entSceneFilterEx(ent,true);};
+	auto entSceneFilter = [&entSceneFilterEx](BaseEntity &ent,std::size_t index) -> bool {return entSceneFilterEx(ent,true);};
 
 	util::BSPTree *bspTree = nullptr;
 	util::BSPTree::Node *node = nullptr;
@@ -2440,6 +2441,7 @@ extern "C"
 		
 		defScene.def("SetAoBakeTarget",static_cast<void(cycles::Scene::*)(Model&,uint32_t)>(&cycles::Scene::SetAOBakeTarget));
 		defScene.def("SetAoBakeTarget",static_cast<void(cycles::Scene::*)(BaseEntity&,uint32_t)>(&cycles::Scene::SetAOBakeTarget));
+		defScene.def("SetLightmapDataCache",&cycles::Scene::SetLightmapDataCache);
 		defScene.def("AddLightmapBakeTarget",static_cast<void(cycles::Scene::*)(BaseEntity&)>(&cycles::Scene::AddLightmapBakeTarget));
 		defScene.def("AddLightSource",+[](lua_State *l,cycles::Scene &scene,BaseEntity &ent) {
 			auto light = unirender::Light::Create();

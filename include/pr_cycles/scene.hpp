@@ -34,6 +34,7 @@ namespace pragma
 	class CSkyCameraComponent;
 	class CModelComponent;
 	class CSceneComponent;
+	struct LightmapDataCache;
 };
 namespace umath {class Transform; class ScaledTransform;};
 namespace unirender
@@ -144,6 +145,7 @@ namespace pragma::modules::cycles
 		void SetAOBakeTarget(Model &mdl,uint32_t matIndex);
 		void SetAOBakeTarget(BaseEntity &ent,uint32_t matIndex);
 		void AddLightmapBakeTarget(BaseEntity &ent);
+		void SetLightmapDataCache(LightmapDataCache *cache);
 		void Finalize();
 
 		unirender::Object *FindObject(const std::string &name);
@@ -161,6 +163,7 @@ namespace pragma::modules::cycles
 		void BuildLightMapObject();
 
 		std::vector<EntityHandle> m_lightMapTargets {};
+		std::shared_ptr<LightmapDataCache> m_lightMapDataCache {};
 		std::shared_ptr<Cache> m_cache = nullptr;
 		std::shared_ptr<unirender::Scene> m_rtScene = nullptr;
 		bool m_finalized = false;
