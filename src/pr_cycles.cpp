@@ -772,7 +772,8 @@ static std::shared_ptr<cycles::Scene> setup_scene(unirender::Scene::RenderMode r
 extern "C"
 {
 	PRAGMA_EXPORT void pr_cycles_render_image(
-		const pragma::rendering::cycles::SceneInfo &renderImageSettings,const pragma::rendering::cycles::RenderImageInfo &renderImageInfo,const std::function<bool(BaseEntity&)> &entFilter,util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> &outJob
+		const pragma::rendering::cycles::SceneInfo &renderImageSettings,const pragma::rendering::cycles::RenderImageInfo &renderImageInfo,
+		const std::function<bool(BaseEntity&)> &entFilter,util::ParallelJob<uimg::ImageLayerSet> &outJob
 	)
 	{
 		outJob = {};
@@ -792,7 +793,8 @@ extern "C"
 		outJob = renderer->StartRender();
 	}
 	PRAGMA_EXPORT void pr_cycles_bake_ao(
-		const pragma::rendering::cycles::SceneInfo &renderImageSettings,Model &mdl,uint32_t materialIndex,util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> &outJob
+		const pragma::rendering::cycles::SceneInfo &renderImageSettings,Model &mdl,uint32_t materialIndex,
+		util::ParallelJob<uimg::ImageLayerSet> &outJob
 	)
 	{
 		outJob = {};
@@ -820,7 +822,8 @@ extern "C"
 		outJob = renderer->StartRender();
 	}
 	PRAGMA_EXPORT void pr_cycles_bake_ao_ent(
-		const pragma::rendering::cycles::SceneInfo &renderImageSettings,BaseEntity &ent,uint32_t materialIndex,util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> &outJob
+		const pragma::rendering::cycles::SceneInfo &renderImageSettings,BaseEntity &ent,uint32_t materialIndex,
+		util::ParallelJob<uimg::ImageLayerSet> &outJob
 	)
 	{
 		outJob = {};
@@ -834,7 +837,9 @@ extern "C"
 			return;
 		outJob = renderer->StartRender();
 	}
-	PRAGMA_EXPORT void pr_cycles_bake_lightmaps(const pragma::rendering::cycles::SceneInfo &renderImageSettings,util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> &outJob)
+	PRAGMA_EXPORT void pr_cycles_bake_lightmaps(
+		const pragma::rendering::cycles::SceneInfo &renderImageSettings,util::ParallelJob<uimg::ImageLayerSet> &outJob
+	)
 	{
 		outJob = {};
 		auto scene = setup_scene(unirender::Scene::RenderMode::BakeDiffuseLighting,renderImageSettings);
@@ -2397,9 +2402,11 @@ extern "C"
 		defScene.add_static_constant("RENDER_MODE_BAKE_AMBIENT_OCCLUSION",umath::to_integral(unirender::Scene::RenderMode::BakeAmbientOcclusion));
 		defScene.add_static_constant("RENDER_MODE_BAKE_NORMALS",umath::to_integral(unirender::Scene::RenderMode::BakeNormals));
 		defScene.add_static_constant("RENDER_MODE_BAKE_DIFFUSE_LIGHTING",umath::to_integral(unirender::Scene::RenderMode::BakeDiffuseLighting));
+		defScene.add_static_constant("RENDER_MODE_BAKE_DIFFUSE_LIGHTING_SEPARATE",umath::to_integral(unirender::Scene::RenderMode::BakeDiffuseLightingSeparate));
 		defScene.add_static_constant("RENDER_MODE_ALBEDO",umath::to_integral(unirender::Scene::RenderMode::SceneAlbedo));
 		defScene.add_static_constant("RENDER_MODE_NORMALS",umath::to_integral(unirender::Scene::RenderMode::SceneNormals));
 		defScene.add_static_constant("RENDER_MODE_DEPTH",umath::to_integral(unirender::Scene::RenderMode::SceneDepth));
+		static_assert(umath::to_integral(unirender::Scene::RenderMode::Count) == 31);
 
 		defScene.add_static_constant("RENDER_MODE_ALPHA",umath::to_integral(unirender::Scene::RenderMode::Alpha));
 		defScene.add_static_constant("RENDER_MODE_GEOMETRY_NORMAL",umath::to_integral(unirender::Scene::RenderMode::GeometryNormal));
