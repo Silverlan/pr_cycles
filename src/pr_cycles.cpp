@@ -1427,12 +1427,13 @@ extern "C"
 			{"NODE_RGB_RAMP",unirender::NODE_RGB_RAMP},
 			{"NODE_LAYER_WEIGHT",unirender::NODE_LAYER_WEIGHT},
 			{"NODE_NOISE_TEXTURE",unirender::NODE_NOISE_TEXTURE},
+			{"NODE_AMBIENT_OCCLUSION",unirender::NODE_AMBIENT_OCCLUSION},
 
 			{"NODE_VOLUME_CLEAR",unirender::NODE_VOLUME_CLEAR},
 			{"NODE_VOLUME_HOMOGENEOUS",unirender::NODE_VOLUME_HOMOGENEOUS},
 			{"NODE_VOLUME_HETEROGENEOUS",unirender::NODE_VOLUME_HETEROGENEOUS}
 		};
-		static_assert(unirender::NODE_COUNT == 42,"Increase this number if new node types are added!");
+		static_assert(unirender::NODE_COUNT == 43,"Increase this number if new node types are added!");
 		Lua::RegisterLibraryValues<std::string>(l.GetState(),"unirender",nodeTypes);
 
 		Lua::RegisterLibraryValues<uint32_t>(l.GetState(),"unirender",{
@@ -2048,7 +2049,17 @@ extern "C"
 		t["IN_DEFAULT_WORLD_VOLUME"] = unirender::nodes::volume_heterogeneous::IN_DEFAULT_WORLD_VOLUME;
 		t["OUT_VOLUME"] = unirender::nodes::volume_heterogeneous::OUT_VOLUME;
 
-		static_assert(unirender::NODE_COUNT == 42,"Increase this number if new node types are added!");
+		t = nodeTypeEnums[unirender::NODE_AMBIENT_OCCLUSION] = luabind::newtable(l.GetState());
+		t["IN_SAMPLES"] = unirender::nodes::ambient_occlusion::IN_SAMPLES;
+		t["IN_COLOR"] = unirender::nodes::ambient_occlusion::IN_COLOR;
+		t["IN_DISTANCE"] = unirender::nodes::ambient_occlusion::IN_DISTANCE;
+		t["IN_NORMAL"] = unirender::nodes::ambient_occlusion::IN_NORMAL;
+		t["IN_INSIDE"] = unirender::nodes::ambient_occlusion::IN_INSIDE;
+		t["IN_ONLY_LOCAL"] = unirender::nodes::ambient_occlusion::IN_ONLY_LOCAL;
+
+		t["OUT_COLOR"] = unirender::nodes::ambient_occlusion::OUT_COLOR;
+		t["OUT_AO"] = unirender::nodes::ambient_occlusion::OUT_AO;
+		static_assert(unirender::NODE_COUNT == 43,"Increase this number if new node types are added!");
 		Lua::RegisterLibraryValues<luabind::object>(l.GetState(),"unirender.Node",nodeTypeEnums);
 
 		auto defShader = luabind::class_<pragma::modules::cycles::LuaShader>("Shader");
