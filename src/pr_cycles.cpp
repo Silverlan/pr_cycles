@@ -47,6 +47,7 @@ namespace pragma::asset {class WorldData; class EntityData;};
 #include <pragma/entities/components/c_scene_component.hpp>
 #include <pragma/lua/converters/game_type_converters_t.hpp>
 #include <pragma/lua/converters/optional_converter_t.hpp>
+#
 
 #include <luainterface.hpp>
 #include <pragma/lua/lua_entity_component.hpp>
@@ -1013,27 +1014,28 @@ extern "C"
 					unirender::set_log_handler();
 				return 0;
 			})},
-#if 0
 			{"apply_color_transform",static_cast<int32_t(*)(lua_State*)>([](lua_State *l) -> int32_t {
 				auto &imgBuf = Lua::Check<uimg::ImageBuffer>(l,1);
+				auto exposure = Lua::IsSet(l,2) ? Lua::CheckNumber(l,2) : 0.f;
+				auto gamma = Lua::IsSet(l,3) ? Lua::CheckNumber(l,3) : DEFAULT_GAMMA;
 
-				auto ocioConfigLocation = util::Path::CreatePath(util::get_program_path());
-				ocioConfigLocation += "modules/open_color_io/configs/";
-				ocioConfigLocation.Canonicalize();
-				
+				unirender::ColorTransformProcessorCreateInfo createInfo {};
+				createInfo.config = Lua::CheckString(l,4);
+				createInfo.lookName = Lua::IsSet(l,5) ? Lua::CheckString(l,5) : std::optional<std::string>{};
+
 				std::string err;
-				auto processor = unirender::create_color_transform_processor(unirender::ColorTransform::FilmicBlender,err);
-				processor->Apply();
-				auto result = unirender::create_color_transform_processor(imgBuf,unirender::ColorTransform::FilmicBlender,ocioConfigLocation.GetString(),0.f /* exposure */,2.2f /* gamma */,err);
-				Lua::PushBool(l,result);
-				if(result == false)
+				auto result = unirender::apply_color_transform(
+					imgBuf,createInfo,err,exposure,gamma
+				);
+				if(!result)
 				{
+					Lua::PushBool(l,false);
 					Lua::PushString(l,err);
 					return 2;
 				}
+				Lua::PushBool(l,true);
 				return 1;
 			})}
-#endif
 		});
 		modCycles[
 			luabind::def("register_node",static_cast<unirender::NodeTypeId(*)(lua_State*,const std::string&,luabind::object)>([](lua_State *l,const std::string &typeName,luabind::object function) -> unirender::NodeTypeId {
