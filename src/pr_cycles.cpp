@@ -1022,6 +1022,10 @@ extern "C"
 				unirender::ColorTransformProcessorCreateInfo createInfo {};
 				createInfo.config = Lua::CheckString(l,4);
 				createInfo.lookName = Lua::IsSet(l,5) ? Lua::CheckString(l,5) : std::optional<std::string>{};
+				createInfo.bitDepth = imgBuf.IsFloatFormat() ?
+					unirender::ColorTransformProcessorCreateInfo::BitDepth::Float32 :
+					imgBuf.IsHDRFormat() ? unirender::ColorTransformProcessorCreateInfo::BitDepth::Float16 :
+					unirender::ColorTransformProcessorCreateInfo::BitDepth::UInt8;
 
 				std::string err;
 				auto result = unirender::apply_color_transform(
