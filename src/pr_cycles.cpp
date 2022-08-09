@@ -203,7 +203,7 @@ struct CameraData
 };
 static void initialize_cycles_geometry(
 	pragma::CSceneComponent &gameScene,pragma::modules::cycles::Cache &cache,const std::optional<CameraData> &camData,SceneFlags sceneFlags,
-	const std::function<bool(BaseEntity&)> &entFilter=nullptr,const std::function<bool(BaseEntity&)> &lightFilter=nullptr,const std::vector<BaseEntity*> *entityList=nullptr
+	const std::function<bool(BaseEntity&)> &entFilter=nullptr,const std::vector<BaseEntity*> *entityList=nullptr
 )
 {
 	auto enableFrustumCulling = umath::is_flag_set(sceneFlags,SceneFlags::CullObjectsOutsideCameraFrustum);
@@ -382,7 +382,7 @@ static void initialize_cycles_scene_from_game_scene(
 	camData.farZ = farZ;
 	camData.fov = fov;
 	camData.aspectRatio = aspectRatio;
-	initialize_cycles_geometry(gameScene,scene.GetCache(),camData,sceneFlags,entFilter,lightFilter,entityList);
+	initialize_cycles_geometry(gameScene,scene.GetCache(),camData,sceneFlags,entFilter,entityList);
 	setup_light_sources(scene,[&gameScene,&lightFilter](BaseEntity &ent) -> bool {
 		if(static_cast<CBaseEntity&>(ent).IsInScene(gameScene) == false)
 			return false;
@@ -2483,6 +2483,15 @@ extern "C"
 		});
 		defScene.def("InitializeFromGameScene",+[](lua_State *l,cycles::Scene &scene,pragma::CSceneComponent &gameScene,const Vector3 &camPos,const Quat &camRot,const Mat4 &vp,float nearZ,float farZ,float fov,uint32_t sceneFlags) {
 			initialize_from_game_scene(l,gameScene,scene,camPos,camRot,vp,nearZ,farZ,fov,static_cast<SceneFlags>(sceneFlags),nullptr,nullptr);
+		});
+		defScene.def("PopulateFromGameScene",
+			+[](lua_State *l,cycles::Scene &scene,pragma::CSceneComponent &gameScene,uint32_t sceneFlags,luabind::object optEntFilter) {
+			auto entFilter = to_entity_filter(l,&optEntFilter,4);
+			auto aspectRatio = gameScene.GetWidth() /static_cast<float>(gameScene.GetHeight());
+			initialize_cycles_geometry(
+				gameScene,scene.GetCache(),{},static_cast<SceneFlags>(sceneFlags),
+				entFilter
+			);
 		});
 		defScene.def("FindObjectByName",static_cast<unirender::Object*(cycles::Scene::*)(const std::string&)>(&cycles::Scene::FindObject));
 		defScene.def("SetSky",static_cast<void(*)(lua_State*,cycles::Scene&,const std::string&)>([](lua_State *l,cycles::Scene &scene,const std::string &skyPath) {

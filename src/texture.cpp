@@ -25,7 +25,7 @@
 extern DLLCLIENT CEngine *c_engine;
 extern DLLCLIENT ClientState *client;
 extern DLLCLIENT CGame *c_game;
-#pragma optimize("",off)
+
 static std::optional<std::string> get_abs_error_texture_path()
 {
 	std::string errTexPath = "materials\\error.dds";
@@ -299,4 +299,3 @@ std::optional<std::string> pragma::modules::cycles::prepare_texture(
 	auto tex = ptex;
 	return ::prepare_texture(tex,flags,&retFlags,defaultTexture,translucent);
 }
-#pragma optimize("",on)

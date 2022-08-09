@@ -21,7 +21,7 @@
 using namespace pragma::modules;
 
 extern DLLCLIENT CGame *c_game;
-#pragma optimize("",off)
+
 void cycles::Scene::Add3DSkybox(pragma::CSceneComponent &gameScene,pragma::CSkyCameraComponent &skyCam,const Vector3 &camPos)
 {
 	std::unordered_map<CBaseEntity*,std::unordered_set<ModelSubMesh*>> entMeshes;
@@ -73,4 +73,3 @@ void cycles::Scene::Add3DSkybox(pragma::CSceneComponent &gameScene,pragma::CSkyC
 		entObj->SetScale(Vector3{scale,scale,scale});
 	}
 }
-#pragma optimize("",on)
