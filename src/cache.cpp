@@ -51,7 +51,7 @@ enum class PreparedTextureOutputFlags : uint8_t
 	Envmap = 1u
 };
 REGISTER_BASIC_BITWISE_OPERATORS(PreparedTextureOutputFlags)
-#pragma optimize("",off)
+
 static std::optional<std::string> get_abs_error_texture_path()
 {
 	std::string errTexPath = "materials\\error.dds";
@@ -306,7 +306,11 @@ std::vector<std::shared_ptr<pragma::modules::cycles::Cache::MeshData>> pragma::m
 			if(opose.has_value())
 			{
 				for(auto &v : meshData->vertices)
+				{
 					v.position = *opose *v.position;
+					uvec::rotate(&v.normal,opose->GetRotation());
+					uvec::normalize(&v.normal);
+				}
 			}
 			meshData->shader = CreateShader(GetUniqueName(),mdl,*subMesh,optEnt,skinId);
 			if(meshData->shader)
@@ -820,4 +824,3 @@ void pragma::modules::cycles::Cache::AddAOBakeTarget(BaseEntity &ent,uint32_t ma
 }
 
 void pragma::modules::cycles::Cache::AddAOBakeTarget(Model &mdl,uint32_t matIndex,std::shared_ptr<unirender::Object> &oAo,std::shared_ptr<unirender::Object> &oEnv) {AddAOBakeTarget(nullptr,mdl,matIndex,oAo,oEnv);}
-#pragma optimize("",on)
