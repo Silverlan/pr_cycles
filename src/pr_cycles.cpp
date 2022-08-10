@@ -1113,7 +1113,18 @@ extern "C"
 			auto uuid = ent.GetUuid();
 			auto *o = renderer->FindActor(uuid);
 			if(!o)
-				return false;
+			{
+				auto lightC = ent.GetComponent<pragma::CLightComponent>();
+				if(lightC.expired())
+					return false;
+				auto light = unirender::Light::Create();
+				if(!light)
+					return false;
+				sync_light(ent,*light);
+				light->SetUuid(ent.GetUuid());
+				renderer->AddLiveActor(*light);
+				o = light.get();
+			}
 			if(typeid(*o) == typeid(unirender::Light))
 				sync_light(ent,static_cast<unirender::Light&>(*o));
 			else if(typeid(*o) == typeid(unirender::Camera))
