@@ -42,6 +42,7 @@ namespace pragma::asset {class WorldData; class EntityData;};
 #include <pragma/lua/libraries/lfile.h>
 #include <pragma/lua/c_lentity_handles.hpp>
 #include <pragma/lua/policies/shared_from_this_policy.hpp>
+#include <pragma/lua/libraries/lfile.h>
 #include <pragma/rendering/raytracing/cycles.hpp>
 #include <util_image_buffer.hpp>
 #include <pragma/entities/components/c_scene_component.hpp>
@@ -979,6 +980,33 @@ extern "C"
 					return 0;
 				Lua::Push<std::shared_ptr<pragma::modules::cycles::Renderer>>(l,std::make_shared<pragma::modules::cycles::Renderer>(scene,*renderer));
 				return 1;
+			})},
+			{"create_render_job",static_cast<int32_t(*)(lua_State*)>([](lua_State *l) -> int32_t {
+				std::string relPath = "render/lightmaps/";
+				auto path = relPath;
+				if(Lua::file::validate_write_operation(l,path) == false)
+					return false;
+				filemanager::create_path(path);
+				auto &scene = Lua::Check<cycles::Scene>(l,1);
+
+				auto fileName = path +"lightmap.prt";
+				auto rootPath = util::Path::CreatePath(FileManager::GetProgramPath()).GetString() +path;
+				unirender::Scene::SerializationData serializationData {};
+				serializationData.outputFileName = fileName;
+				DataStream ds {};
+				scene->Save(ds,rootPath,serializationData);
+				FileManager::CreatePath(path.c_str());
+				auto f = FileManager::OpenFile<VFilePtrReal>(fileName.c_str(),"wb");
+				if(!f)
+				{
+					Lua::PushBool(l,false);
+					return 1;
+				}
+				f->Write(ds->GetData(),ds->GetInternalSize());
+				f = nullptr;
+				Lua::PushBool(l,true);
+				Lua::PushString(l,relPath +"lightmap.prt");
+				return 2;
 			})},
 			{"unload_renderer_library",static_cast<int32_t(*)(lua_State*)>([](lua_State *l) -> int32_t {
 				std::string rendererIdentifier = Lua::CheckString(l,1);
