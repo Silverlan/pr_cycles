@@ -2566,6 +2566,9 @@ extern "C"
 		defScene.def("SetLightIntensityFactor",static_cast<void(*)(lua_State*,cycles::Scene&,float)>([](lua_State *l,cycles::Scene &scene,float factor) {
 			scene->SetLightIntensityFactor(factor);
 		}));
+		defScene.def("SetAdaptiveSampling",+[](cycles::Scene &scene,bool enabled,float adaptiveSamplingThreshold,uint32_t adaptiveMinSamples) {
+			scene->SetAdaptiveSampling(enabled,adaptiveSamplingThreshold,adaptiveMinSamples);
+		});
 		defScene.def("Finalize",static_cast<void(*)(lua_State*,cycles::Scene&)>([](lua_State *l,cycles::Scene &scene) {
 			scene.Finalize();
 			scene->Finalize();
