@@ -281,7 +281,10 @@ unirender::PShader cycles::Cache::CreateShader(Material &mat,const std::string &
 	if(ustring::compare<std::string>(cyclesShader,"nodraw",false))
 		return nullptr;
 	
-	auto shader = shaderManager.CreateShader(get_node_manager(),cyclesShader,shaderInfo.entity.has_value() ? *shaderInfo.entity : nullptr,mat);
+	auto shader = shaderManager.CreateShader(
+		get_node_manager(),cyclesShader,shaderInfo.entity.has_value() ? *shaderInfo.entity : nullptr,
+		shaderInfo.subMesh.has_value() ? *shaderInfo.subMesh : nullptr,mat
+	);
 	if(shader == nullptr)
 		return nullptr;
 	auto rtShader = unirender::Shader::Create<unirender::GenericShader>();

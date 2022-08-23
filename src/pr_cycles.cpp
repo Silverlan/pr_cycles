@@ -2116,6 +2116,7 @@ extern "C"
 		defShader.def("InitializeDepthPass",&pragma::modules::cycles::LuaShader::Lua_InitializeDepthPass,&pragma::modules::cycles::LuaShader::Lua_default_InitializeDepthPass);
 		defShader.def("GetEntity",&pragma::modules::cycles::LuaShader::GetEntity);
 		defShader.def("GetMaterial",&pragma::modules::cycles::LuaShader::GetMaterial);
+		defShader.def("GetMesh",&pragma::modules::cycles::LuaShader::GetMesh);
 		defShader.def("ClearHairConfig",&pragma::modules::cycles::LuaShader::ClearHairConfig);
 		defShader.def("GetHairConfig",&pragma::modules::cycles::LuaShader::GetHairConfig);
 		defShader.def("SetHairConfig",&pragma::modules::cycles::LuaShader::SetHairConfig);

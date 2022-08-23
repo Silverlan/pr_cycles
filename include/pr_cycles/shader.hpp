@@ -14,6 +14,7 @@
 
 class BaseEntity;
 class Material;
+class ModelSubMesh;
 namespace pragma::modules::cycles
 {
 	class Scene;
@@ -22,7 +23,7 @@ namespace pragma::modules::cycles
 	{
 	public:
 		virtual ~Shader()=default;
-		virtual void Initialize(unirender::NodeManager &nodeManager,BaseEntity *ent,Material &mat);
+		virtual void Initialize(unirender::NodeManager &nodeManager,BaseEntity *ent,ModelSubMesh *mesh,Material &mat);
 		virtual std::shared_ptr<unirender::GroupNodeDesc> InitializeCombinedPass();
 		virtual std::shared_ptr<unirender::GroupNodeDesc> InitializeAlbedoPass();
 		virtual std::shared_ptr<unirender::GroupNodeDesc> InitializeNormalPass();
@@ -38,6 +39,7 @@ namespace pragma::modules::cycles
 
 		BaseEntity *GetEntity() const;
 		Material *GetMaterial() const;
+		ModelSubMesh *GetMesh() const;
 	protected:
 		Shader()=default;
 		unirender::NodeManager *m_nodeManager = nullptr;
@@ -46,6 +48,7 @@ namespace pragma::modules::cycles
 	private:
 		mutable EntityHandle m_hEntity {};
 		mutable msys::MaterialHandle m_hMaterial {};
+		mutable std::shared_ptr<ModelSubMesh> m_mesh {};
 	};
 
 	class ShaderManager
@@ -59,7 +62,9 @@ namespace pragma::modules::cycles
 
 		void RegisterShader(const std::string &name,luabind::object oClass);
 		bool IsShaderRegistered(const std::string &name) const {return m_shaders.find(name) != m_shaders.end();}
-		std::shared_ptr<Shader> CreateShader(unirender::NodeManager &nodeManager,const std::string &name,BaseEntity *ent,Material &mat);
+		std::shared_ptr<Shader> CreateShader(
+			unirender::NodeManager &nodeManager,const std::string &name,BaseEntity *ent,ModelSubMesh *mesh,Material &mat
+		);
 	private:
 		ShaderManager()=default;
 		std::unordered_map<std::string,luabind::object> m_shaders;
@@ -73,7 +78,7 @@ namespace pragma::modules::cycles
 	{
 	public:
 		void Initialize(const luabind::object &o);
-		virtual void Initialize(unirender::NodeManager &nodeManager,BaseEntity *ent,Material &mat) override;
+		virtual void Initialize(unirender::NodeManager &nodeManager,BaseEntity *ent,ModelSubMesh *mesh,Material &mat) override;
 
 		void Lua_Initialize() {}
 		static void Lua_default_Initialize(lua_State *l,LuaShader &shader) {}

@@ -7,6 +7,7 @@
 
 #include "pr_cycles/shader.hpp"
 #include "pr_cycles/scene.hpp"
+#include <pragma/model/modelmesh.h>
 #include <pragma/console/conout.h>
 #include <pragma/lua/ldefinitions.h>
 
@@ -18,11 +19,12 @@ extern template class util::TWeakSharedHandle<BaseEntity>;
 template __declspec(dllimport) util::TWeakSharedHandle<BaseEntity>::~TWeakSharedHandle();
 //
 
-void Shader::Initialize(unirender::NodeManager &nodeManager,BaseEntity *ent,Material &mat)
+void Shader::Initialize(unirender::NodeManager &nodeManager,BaseEntity *ent,ModelSubMesh *mesh,Material &mat)
 {
 	m_nodeManager = &nodeManager;
 	m_hEntity = ent ? ent->GetHandle() : EntityHandle{};
 	m_hMaterial = mat.GetHandle();
+	m_mesh = mesh ? mesh->shared_from_this() : nullptr;
 }
 
 std::shared_ptr<unirender::GroupNodeDesc> Shader::InitializeCombinedPass() {return nullptr;}
@@ -31,6 +33,7 @@ std::shared_ptr<unirender::GroupNodeDesc> Shader::InitializeNormalPass() {return
 std::shared_ptr<unirender::GroupNodeDesc> Shader::InitializeDepthPass() {return nullptr;}
 BaseEntity *Shader::GetEntity() const {return m_hEntity.get();}
 Material *Shader::GetMaterial() const {return m_hMaterial.get();}
+ModelSubMesh *Shader::GetMesh() const {return m_mesh.get();}
 
 //////////////
 
@@ -39,7 +42,9 @@ void ShaderManager::RegisterShader(const std::string &name,luabind::object oClas
 {
 	m_shaders[name] = oClass;
 }
-std::shared_ptr<Shader> ShaderManager::CreateShader(unirender::NodeManager &nodeManager,const std::string &name,BaseEntity *ent,Material &mat)
+std::shared_ptr<Shader> ShaderManager::CreateShader(
+	unirender::NodeManager &nodeManager,const std::string &name,BaseEntity *ent,ModelSubMesh *mesh,Material &mat
+)
 {
 	auto it = m_shaders.find(name);
 	if(it == m_shaders.end())
@@ -75,7 +80,7 @@ std::shared_ptr<Shader> ShaderManager::CreateShader(unirender::NodeManager &node
 		return nullptr;
 	}
 	shader->Initialize(r);
-	shader->Initialize(nodeManager,ent,mat);
+	shader->Initialize(nodeManager,ent,mesh,mat);
 	auto pShader = std::unique_ptr<Shader,void(*)(Shader*)>{shader,[](Shader*) {}};
 	return pShader;
 }
@@ -86,9 +91,9 @@ void LuaShader::Initialize(const luabind::object &o)
 {
 	m_baseLuaObj = std::shared_ptr<luabind::object>(new luabind::object(o));
 }
-void LuaShader::Initialize(unirender::NodeManager &nodeManager,BaseEntity *ent,Material &mat)
+void LuaShader::Initialize(unirender::NodeManager &nodeManager,BaseEntity *ent,ModelSubMesh *mesh,Material &mat)
 {
-	Shader::Initialize(nodeManager,ent,mat);
+	Shader::Initialize(nodeManager,ent,mesh,mat);
 	CallLuaMember<void>("Initialize");
 }
 std::shared_ptr<unirender::GroupNodeDesc> LuaShader::InitializeCombinedPass()
