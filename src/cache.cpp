@@ -481,6 +481,7 @@ unirender::PObject pragma::modules::cycles::Cache::AddEntity(
 		o->SetRotation(t.GetRotation());
 		o->SetScale(t.GetScale());
 	}
+	o->SetUuid(ent.GetUuid());
 	o->SetName(util::uuid_to_string(ent.GetUuid()));
 	m_mdlCache->GetChunks().front().AddObject(*o);
 	return o;

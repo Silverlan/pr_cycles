@@ -1157,6 +1157,11 @@ extern "C"
 				sync_light(ent,static_cast<unirender::Light&>(*o));
 			else if(typeid(*o) == typeid(unirender::Camera))
 				sync_camera(ent,static_cast<unirender::Camera&>(*o));
+			else
+			{
+				o->SetPos(ent.GetPosition());
+				o->SetRotation(ent.GetRotation());
+			}
 			return renderer->SyncEditedActor(uuid);
 		});
 		defRenderer.def("FindActor",+[](lua_State *l,pragma::modules::cycles::Renderer &renderer,const Lua::util::Uuid &uuid) -> unirender::WorldObject* {
