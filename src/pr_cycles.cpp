@@ -2468,8 +2468,6 @@ extern "C"
 		defScene.add_static_constant("RENDER_MODE_ALBEDO",umath::to_integral(unirender::Scene::RenderMode::SceneAlbedo));
 		defScene.add_static_constant("RENDER_MODE_NORMALS",umath::to_integral(unirender::Scene::RenderMode::SceneNormals));
 		defScene.add_static_constant("RENDER_MODE_DEPTH",umath::to_integral(unirender::Scene::RenderMode::SceneDepth));
-		static_assert(umath::to_integral(unirender::Scene::RenderMode::Count) == 31);
-
 		defScene.add_static_constant("RENDER_MODE_ALPHA",umath::to_integral(unirender::Scene::RenderMode::Alpha));
 		defScene.add_static_constant("RENDER_MODE_GEOMETRY_NORMAL",umath::to_integral(unirender::Scene::RenderMode::GeometryNormal));
 		defScene.add_static_constant("RENDER_MODE_SHADING_NORMAL",umath::to_integral(unirender::Scene::RenderMode::ShadingNormal));
@@ -2494,6 +2492,8 @@ extern "C"
 		defScene.add_static_constant("RENDER_MODE_NOISE",umath::to_integral(unirender::Scene::RenderMode::Noise));
 		defScene.add_static_constant("RENDER_MODE_CAUSTIC",umath::to_integral(unirender::Scene::RenderMode::Caustic));
 		defScene.add_static_constant("RENDER_MODE_COUNT",umath::to_integral(unirender::Scene::RenderMode::Count));
+		// Update "lua/pfm/raytracing_render_job.lua" when making changes to the render modes!
+		static_assert(umath::to_integral(unirender::Scene::RenderMode::Count) == 31);
 
 		defScene.add_static_constant("DEVICE_TYPE_CPU",umath::to_integral(unirender::Scene::DeviceType::CPU));
 		defScene.add_static_constant("DEVICE_TYPE_GPU",umath::to_integral(unirender::Scene::DeviceType::GPU));
