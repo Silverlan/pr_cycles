@@ -245,6 +245,18 @@ void cycles::Scene::BuildLightMapObject()
 			uvSet = subMesh->GetUVSet("lightmap");
 		if(uvSet)
 		{
+			if(uvSet->size() != verts.size())
+			{
+				Con::cwar<<"WARNING: Number of UV coordinates ("<<uvSet->size()<<
+					") in lightmap UV set does not match number of mesh vertices ("<<
+					verts.size()<<") of mesh with uuid "<<util::uuid_to_string(subMesh->GetUuid())<<
+					" of entity with uuid "<<util::uuid_to_string(targetMeshEntityUuids.at(idx))<<
+					"! Mesh will be ignored!"<<std::endl;
+				++idx;
+				continue;
+			}
+			if(uvOffset +verts.size() > cclLightmapUvs.size())
+				throw std::logic_error{"Number of mesh vertices exceeds expected number!"};
 			for(auto i=decltype(verts.size()){0u};i<verts.size();++i)
 				cclLightmapUvs.at(uvOffset +i) = uvSet->at(i);
 		}
