@@ -12,6 +12,7 @@
 #include <util_raytracing/renderer.hpp>
 #include <sharedutils/util_weak_handle.hpp>
 #include <sharedutils/util_parallel_job.hpp>
+#include <sharedutils/util_hair.hpp>
 #include <mathutil/transform.hpp>
 #include <memory>
 #include <mathutil/uvec.h>
@@ -109,6 +110,7 @@ namespace pragma::modules::cycles
 		};
 		struct ShaderInfo
 		{
+			ShaderInfo();
 			// These are only required if the shader is used for eyeballs
 			std::optional<BaseEntity*> entity = {};
 			std::optional<ModelSubMesh*> subMesh = {};

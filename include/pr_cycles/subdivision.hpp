@@ -11,6 +11,7 @@
 #include <mathutil/uvec.h>
 #include <vector>
 #include <functional>
+#include <memory>
 #include <opensubdiv/far/topologyDescriptor.h>
 #include <opensubdiv/far/primvarRefiner.h>
 

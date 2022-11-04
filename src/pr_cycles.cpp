@@ -771,6 +771,23 @@ static std::shared_ptr<cycles::Scene> setup_scene(unirender::Scene::RenderMode r
 	return scene;
 }
 
+#ifdef __linux__
+namespace unirender
+{
+	static unirender::Socket operator+(const Vector3 &v,const unirender::Socket &socket) {return luabind::operator+(v,socket);}
+	static unirender::Socket operator-(const Vector3 &v,const unirender::Socket &socket) {return luabind::operator-(v,socket);}
+	static unirender::Socket operator*(const Vector3 &v,const unirender::Socket &socket) {return luabind::operator*(v,socket);}
+	static unirender::Socket operator/(const Vector3 &v,const unirender::Socket &socket) {return luabind::operator/(v,socket);}
+	static unirender::Socket operator%(const Vector3 &v,const unirender::Socket &socket) {return luabind::operator%(v,socket);}
+
+	static unirender::Socket operator+(float &v,const unirender::Socket &socket) {return luabind::operator+(v,socket);}
+	static unirender::Socket operator-(float &v,const unirender::Socket &socket) {return luabind::operator-(v,socket);}
+	static unirender::Socket operator*(float &v,const unirender::Socket &socket) {return luabind::operator*(v,socket);}
+	static unirender::Socket operator/(float &v,const unirender::Socket &socket) {return luabind::operator/(v,socket);}
+	static unirender::Socket operator%(float &v,const unirender::Socket &socket) {return luabind::operator%(v,socket);}
+};
+#endif
+
 extern "C"
 {
 	PRAGMA_EXPORT void pr_cycles_render_image(

@@ -50,6 +50,9 @@ using namespace pragma::modules;
 extern DLLCLIENT CEngine *c_engine;
 extern DLLCLIENT CGame *c_game;
 
+cycles::Cache::ShaderInfo::ShaderInfo()
+{}
+
 cycles::Scene::Scene(unirender::Scene &rtScene)
 	: m_rtScene{rtScene.shared_from_this()}
 {
