@@ -771,23 +771,6 @@ static std::shared_ptr<cycles::Scene> setup_scene(unirender::Scene::RenderMode r
 	return scene;
 }
 
-#ifdef __linux__
-namespace unirender
-{
-	static unirender::Socket operator+(const Vector3 &v,const unirender::Socket &socket) {return luabind::operator+(v,socket);}
-	static unirender::Socket operator-(const Vector3 &v,const unirender::Socket &socket) {return luabind::operator-(v,socket);}
-	static unirender::Socket operator*(const Vector3 &v,const unirender::Socket &socket) {return luabind::operator*(v,socket);}
-	static unirender::Socket operator/(const Vector3 &v,const unirender::Socket &socket) {return luabind::operator/(v,socket);}
-	static unirender::Socket operator%(const Vector3 &v,const unirender::Socket &socket) {return luabind::operator%(v,socket);}
-
-	static unirender::Socket operator+(float &v,const unirender::Socket &socket) {return luabind::operator+(v,socket);}
-	static unirender::Socket operator-(float &v,const unirender::Socket &socket) {return luabind::operator-(v,socket);}
-	static unirender::Socket operator*(float &v,const unirender::Socket &socket) {return luabind::operator*(v,socket);}
-	static unirender::Socket operator/(float &v,const unirender::Socket &socket) {return luabind::operator/(v,socket);}
-	static unirender::Socket operator%(float &v,const unirender::Socket &socket) {return luabind::operator%(v,socket);}
-};
-#endif
-
 extern "C"
 {
 	PRAGMA_EXPORT void pr_cycles_render_image(
@@ -992,9 +975,14 @@ extern "C"
 				auto flags = unirender::Renderer::Flags::None;
 				if(Lua::IsSet(l,3))
 					flags = static_cast<unirender::Renderer::Flags>(Lua::CheckInt(l,3));
-				auto renderer = unirender::Renderer::Create(*scene,rendererIdentifier,flags);
+				std::string err;
+				auto renderer = unirender::Renderer::Create(*scene,rendererIdentifier,err,flags);
 				if(renderer == nullptr)
-					return 0;
+				{
+					Lua::PushBool(l,false);
+					Lua::PushString(l,err);
+					return 2;
+				}
 				Lua::Push<std::shared_ptr<pragma::modules::cycles::Renderer>>(l,std::make_shared<pragma::modules::cycles::Renderer>(scene,*renderer));
 				return 1;
 			})},
