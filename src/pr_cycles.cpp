@@ -806,7 +806,8 @@ extern "C"
 			nullptr,renderImageInfo.entityList
 		);
 		scene->Finalize();
-		auto renderer = unirender::Renderer::Create(**scene,renderImageSettings.renderer);
+		std::string err;
+		auto renderer = unirender::Renderer::Create(**scene,renderImageSettings.renderer,err);
 		if(renderer == nullptr)
 			return;
 		outJob = renderer->StartRender();
@@ -822,7 +823,8 @@ extern "C"
 			return;
 		scene->SetAOBakeTarget(mdl,materialIndex);
 		scene->Finalize();
-		auto renderer = unirender::Renderer::Create(**scene,"cycles",unirender::Renderer::Flags::None);
+		std::string err;
+		auto renderer = unirender::Renderer::Create(**scene,"cycles",err,unirender::Renderer::Flags::None);
 		if(renderer == nullptr)
 			return;
 #if ENABLE_BAKE_DEBUGGING_INTERFACE == 1
@@ -851,7 +853,8 @@ extern "C"
 			return;
 		scene->SetAOBakeTarget(ent,materialIndex);
 		scene->Finalize();
-		auto renderer = unirender::Renderer::Create(**scene,"cycles",unirender::Renderer::Flags::None);
+		std::string err;
+		auto renderer = unirender::Renderer::Create(**scene,"cycles",err,unirender::Renderer::Flags::None);
 		if(renderer == nullptr)
 			return;
 		outJob = renderer->StartRender();
@@ -893,7 +896,8 @@ extern "C"
 		}
 		else
 		{
-			auto renderer = unirender::Renderer::Create(**scene,renderImageSettings.renderer);
+			std::string err;
+			auto renderer = unirender::Renderer::Create(**scene,renderImageSettings.renderer,err);
 			if(renderer == nullptr)
 				return;
 #if ENABLE_BAKE_DEBUGGING_INTERFACE == 1
@@ -970,7 +974,8 @@ extern "C"
 					return 0;
 				scene->SetAOBakeTarget(mdl,materialIndex);
 				scene->Finalize();
-				auto renderer = unirender::Renderer::Create(**scene,"cycles",unirender::Renderer::Flags::None);
+				std::string err;
+				auto renderer = unirender::Renderer::Create(**scene,"cycles",err,unirender::Renderer::Flags::None);
 				if(renderer == nullptr)
 					return 0;
 				auto job = renderer->StartRender();
