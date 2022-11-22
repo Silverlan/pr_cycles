@@ -169,7 +169,7 @@ if(${PR_UNIRENDER_ENABLE_DEPENDENCIES})
 	add_subdirectory(external_libs/luxcorerender)
 	
 	set_target_properties(pr_unirender PROPERTIES FOLDER modules/offline_render/unirender)
-	set_target_properties(UniRender_Cycles PROPERTIES FOLDER modules/offline_render/unirender)
+	set_target_properties(UniRender_cycles PROPERTIES FOLDER modules/offline_render/unirender)
 	set_target_properties(UniRender_LuxCoreRender PROPERTIES FOLDER modules/offline_render/unirender)
 	
 	set_property(GLOBAL PROPERTY PRAGMA_MODULE_SKIP_TARGET_PROPERTY_FOLDER 1)
