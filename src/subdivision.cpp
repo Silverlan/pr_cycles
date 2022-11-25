@@ -9,8 +9,6 @@
 #include "pr_cycles/subdivision.hpp"
 #include <mathutil/umath.h>
 
-#pragma comment(lib,"E:/projects/OpenSubdiv/build_winx64/lib/RelWithDebInfo/osdCPU.lib")
-
 struct OsdVertexWeight
 {
 	OsdVertexWeight()
