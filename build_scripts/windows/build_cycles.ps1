@@ -66,6 +66,8 @@ print_hmsg "Done!"
 
 $cyclesDepsRoot="$deps/lib/win64_vc15"
 $global:cmakeArgs += " -DDEPENDENCY_CYCLES_INCLUDE=`"$deps/cycles/src`" "
+$global:cmakeArgs += " -DDEPENDENCY_CYCLES_ROOT=`"$deps/cycles`" "
+$global:cmakeArgs += " -DDEPENDENCY_CYCLES_BUILD_LOCATION=`"$deps/cycles/build`" "
 $global:cmakeArgs += " -DDEPENDENCY_CYCLES_ATOMIC_INCLUDE=`"$deps/cycles\third_party\atomic`" "
 $global:cmakeArgs += " -DDEPENDENCY_CYCLES_OPENIMAGEIO_INCLUDE=`"$cyclesDepsRoot/OpenImageIO/include`" "
 $global:cmakeArgs += " -DDEPENDENCY_CYCLES_PUGIXML_INCLUDE=`"$cyclesDepsRoot/pugixml/include`" "
@@ -75,6 +77,7 @@ $global:cmakeArgs += " -DDEPENDENCY_CYCLES_EMBREE_INCLUDE=`"$cyclesDepsRoot/embr
 $global:cmakeArgs += " -DDEPENDENCY_CYCLES_OSL_INCLUDE=`"$cyclesDepsRoot/osl/include`" "
 $global:cmakeArgs += " -DDEPENDENCY_CYCLES_TBB_INCLUDE=`"$cyclesDepsRoot/tbb/include`" "
 $global:cmakeArgs += " -DDEPENDENCY_CYCLES_TBB_LIBRARY=`"$cyclesDepsRoot/tbb/lib/tbb.lib`" "
+$global:cmakeArgs += " -DDEPENDENCY_CYCLES_OPENVDB_LIBRARY_PATH=`"$cyclesDepsRoot/openvdb/lib`" "
 
 $global:cmakeArgs += " -DDEPENDENCY_CYCLES_DEPENDENCIES_LOCATION=`"$cyclesDepsRoot`" "
 $global:cmakeArgs += " -DDEPENDENCY_CYCLES_LIBRARY_LOCATION=`"$cyclesRoot/build/lib/$buildConfig`" "

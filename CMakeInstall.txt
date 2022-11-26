@@ -7,7 +7,26 @@ pragma_install_lib("${DEPENDENCY_OPENIMAGEDENOISE_LIBRARY}" "${CYCLES_INSTALL_DI
 pragma_install_lib("${DEPENDENCY_TBB_LIBRARY}" "${CYCLES_INSTALL_DIR}" OPTIONAL)
 # pragma_install_lib("${DEPENDENCY_TIFF_LIBRARY}" "${CYCLES_INSTALL_DIR}" OPTIONAL)
 
+# Install util_raytracing
+pragma_install_lib("${DEPENDENCY_UTIL_RAYTRACING_LIBRARY}" "${BINARY_OUTPUT_DIR}" OPTIONAL)
+
+# Install tbb
+get_filename_component(PR_UNIRENDER_CYCLES_TBB_LIBRARY_PATH "${DEPENDENCY_CYCLES_TBB_LIBRARY}" DIRECTORY REALPATH)
+pragma_install_lib_c("${PR_UNIRENDER_CYCLES_TBB_LIBRARY_PATH}/../bin/" "tbb" "${CYCLES_INSTALL_DIR}")
+
+# Install OpenColorIO
+pragma_install_lib_c("${DEPENDENCY_OPENCOLORIO_LIBRARY}" "OpenColorIO_2_2" "${BINARY_OUTPUT_DIR}")
+
 if(NOT ${DEPENDENCY_GLEW_LIBRARY_BIN} STREQUAL "")
 	pragma_install_lib_c("${DEPENDENCY_GLEW_LIBRARY_BIN}" "glew32" "${CYCLES_INSTALL_DIR}" OPTIONAL)
 endif()
 pragma_install_lib_c("${DEPENDENCY_TBB_LIBRARY}" "tbbmalloc" "${CYCLES_INSTALL_DIR}" OPTIONAL)
+
+# Cycles
+pragma_install_lib("${CMAKE_CURRENT_BINARY_DIR}/modules/pr_unirender/external_libs/cycles/${CONFIG_BUILD_TYPE}/UniRender_cycles${OS_LIB_BIN_EXT}" "${CYCLES_INSTALL_DIR}/cycles" OPTIONAL)
+pragma_install_directory("${DEPENDENCY_CYCLES_BUILD_LOCATION}/src/kernel/" "${CYCLES_INSTALL_DIR}/cycles/lib" FILES_MATCHING PATTERN "*.ptx" PATTERN "*.cubin" PATTERN "CMakeFiles" EXCLUDE PATTERN "cycles_kernel.dir" EXCLUDE PATTERN "osl" EXCLUDE PATTERN "x64" EXCLUDE)
+pragma_install_directory("${DEPENDENCY_CYCLES_ROOT}/src/kernel" "${CYCLES_INSTALL_DIR}/cycles/source")
+pragma_install_directory("${DEPENDENCY_CYCLES_ROOT}/src/util" "${CYCLES_INSTALL_DIR}/cycles/source")
+
+pragma_install_lib_c("${DEPENDENCY_CYCLES_GLOG_LIBRARY}" "glog" "${CYCLES_INSTALL_DIR}/cycles")
+pragma_install_lib_c("${DEPENDENCY_CYCLES_OPENVDB_LIBRARY_PATH}/../bin/" "openvdb" "${CYCLES_INSTALL_DIR}/cycles")
