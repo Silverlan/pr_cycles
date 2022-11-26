@@ -9,14 +9,26 @@ if(![System.IO.Directory]::Exists("$cyclesRoot")){
 }
 cd cycles
 
-git reset --hard "b1882be6b1f2e27725ee672d87c5b6f8d6113eb1"
-validate_result
+$lastBuildCommit = $null
+if([System.IO.File]::Exists("$cyclesRoot/lastbuildsha")){
+    $lastBuildCommit = Get-Content -Path "$cyclesRoot/lastbuildsha"
+}
 
-print_hmsg "Done!"
+$targetCommit="b1882be6b1f2e27725ee672d87c5b6f8d6113eb1"
+if($lastBuildCommit -ne $targetCommit)
+{
+    print_hmsg "Downloading cycles dependencies..."
+    cmd.exe /C "make.bat update"
+    validate_result
 
-print_hmsg "Downloading cycles dependencies..."
-cmd.exe /C "make.bat update"
-validate_result
+    # The update commit above will unfortunately update Cycles to the last commit. This behavior
+    # can't be disabled, so we have to reset the commit back to the one we want here.
+    # This can cause issues if the Cycles update-script updates the dependencies to newer versions
+    # that aren't compatible with the commit we're using, but it can't be helped.
+    git reset --hard "$targetCommit"
+    validate_result
+    print_hmsg "Done!"
+}
 
 # We need to add the --allow-unsupported-compiler flag to a cycles CMake configuration file manually,
 # otherwise compilation will fail for newer versions of Visual Studio.
@@ -34,10 +46,6 @@ cd build
 # Building cycles rebuilds shaders every time, which can take a very long time.
 # Since there's usually no reason to rebuild the shaders, we'll only build if the head commit has
 # changed since the last build.
-$lastBuildCommit = $null
-if([System.IO.File]::Exists("$cyclesRoot/lastbuildsha")){
-	$lastBuildCommit = Get-Content -Path "$cyclesRoot/lastbuildsha"
-}
 $curCommitId = git rev-parse HEAD
 validate_result
 if ($lastBuildCommit -ne $curCommitId) {
@@ -59,6 +67,14 @@ print_hmsg "Done!"
 $cyclesDepsRoot="$deps/lib/win64_vc15"
 $global:cmakeArgs += " -DDEPENDENCY_CYCLES_INCLUDE=`"$deps/cycles/src`" "
 $global:cmakeArgs += " -DDEPENDENCY_CYCLES_ATOMIC_INCLUDE=`"$deps/cycles\third_party\atomic`" "
+$global:cmakeArgs += " -DDEPENDENCY_CYCLES_OPENIMAGEIO_INCLUDE=`"$cyclesDepsRoot/OpenImageIO/include`" "
+$global:cmakeArgs += " -DDEPENDENCY_CYCLES_PUGIXML_INCLUDE=`"$cyclesDepsRoot/pugixml/include`" "
+$global:cmakeArgs += " -DDEPENDENCY_CYCLES_OPENIMAGEDENOISE_INCLUDE=`"$cyclesDepsRoot/openimagedenoise/include`" "
+$global:cmakeArgs += " -DDEPENDENCY_CYCLES_OPENEXR_INCLUDE=`"$cyclesDepsRoot/openexr/include`" "
+$global:cmakeArgs += " -DDEPENDENCY_CYCLES_EMBREE_INCLUDE=`"$cyclesDepsRoot/embree/include`" "
+$global:cmakeArgs += " -DDEPENDENCY_CYCLES_OSL_INCLUDE=`"$cyclesDepsRoot/osl/include`" "
+$global:cmakeArgs += " -DDEPENDENCY_CYCLES_TBB_INCLUDE=`"$cyclesDepsRoot/tbb/include`" "
+
 $global:cmakeArgs += " -DDEPENDENCY_CYCLES_DEPENDENCIES_LOCATION=`"$cyclesDepsRoot`" "
 $global:cmakeArgs += " -DDEPENDENCY_CYCLES_LIBRARY_LOCATION=`"$cyclesRoot/build/lib/$buildConfig`" "
 
