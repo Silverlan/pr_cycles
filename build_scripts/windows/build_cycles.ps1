@@ -74,6 +74,7 @@ $global:cmakeArgs += " -DDEPENDENCY_CYCLES_OPENEXR_INCLUDE=`"$cyclesDepsRoot/ope
 $global:cmakeArgs += " -DDEPENDENCY_CYCLES_EMBREE_INCLUDE=`"$cyclesDepsRoot/embree/include`" "
 $global:cmakeArgs += " -DDEPENDENCY_CYCLES_OSL_INCLUDE=`"$cyclesDepsRoot/osl/include`" "
 $global:cmakeArgs += " -DDEPENDENCY_CYCLES_TBB_INCLUDE=`"$cyclesDepsRoot/tbb/include`" "
+$global:cmakeArgs += " -DDEPENDENCY_CYCLES_TBB_LIBRARY=`"$cyclesDepsRoot/tbb/lib/tbb.lib`" "
 
 $global:cmakeArgs += " -DDEPENDENCY_CYCLES_DEPENDENCIES_LOCATION=`"$cyclesDepsRoot`" "
 $global:cmakeArgs += " -DDEPENDENCY_CYCLES_LIBRARY_LOCATION=`"$cyclesRoot/build/lib/$buildConfig`" "
@@ -86,6 +87,6 @@ $global:cmakeArgs += " -DDEPENDENCY_OPENEXR_ILMTHREAD_LIBRARY=`"$cyclesDepsRoot/
 $global:cmakeArgs += " -DDEPENDENCY_OPENEXR_IEX_LIBRARY=`"$cyclesDepsRoot/openexr/lib/Iex_s.lib`" "
 
 $global:cmakeArgs += " -DDEPENDENCY_JPEG_LIBRARY=`"$cyclesDepsRoot/jpeg/lib/libjpeg.lib`" "
-$global:cmakeArgs += " -DDEPENDENCY_TIFF_LIBRARY=`"$deps/libtiff/build/libtiff/$buildConfig/tiff.lib`" "
+$global:cmakeArgs += " -DDEPENDENCY_TIFF_LIBRARY=`"$cyclesDepsRoot/tiff/lib/libtiff.lib`" "
 
 Exit 0
