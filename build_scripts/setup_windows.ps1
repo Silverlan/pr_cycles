@@ -4,35 +4,35 @@ cd $deps
 # ISPC
 $ispcRoot="$deps/ispc-v1.17.0-windows"
 if(![System.IO.Directory]::Exists("$ispcRoot")){
-	print_hmsg "ISPC not found. Downloading..."
-	Invoke-WebRequest "https://github.com/ispc/ispc/releases/download/v1.17.0/ispc-v1.17.0-windows.zip" -OutFile "ispc-v1.17.0-windows.zip"
-	validate_result
+    print_hmsg "ISPC not found. Downloading..."
+    Invoke-WebRequest "https://github.com/ispc/ispc/releases/download/v1.17.0/ispc-v1.17.0-windows.zip" -OutFile "ispc-v1.17.0-windows.zip"
+    validate_result
 
-	# Extract ISPC
-	print_hmsg "Extracting ISPC..."
-	Add-Type -Assembly "System.IO.Compression.Filesystem"
-	[System.IO.Compression.ZipFile]::ExtractToDirectory("$PWD/ispc-v1.17.0-windows.zip", "$PWD")
-	validate_result
+    # Extract ISPC
+    print_hmsg "Extracting ISPC..."
+    Add-Type -Assembly "System.IO.Compression.Filesystem"
+    [System.IO.Compression.ZipFile]::ExtractToDirectory("$PWD/ispc-v1.17.0-windows.zip", "$PWD")
+    validate_result
 
-	rm "ispc-v1.17.0-windows.zip"
-	print_hmsg "Done!"
+    rm "ispc-v1.17.0-windows.zip"
+    print_hmsg "Done!"
 }
 
 # TBB
 $oneTBBRoot="$deps/tbb2019_20190605oss"
 if(![System.IO.Directory]::Exists("$oneTBBRoot")){
-	print_hmsg "oneTBB not found. Downloading..."
-	Invoke-WebRequest "https://github.com/oneapi-src/oneTBB/releases/download/2019_U8/tbb2019_20190605oss_win.zip" -OutFile "tbb2019_20190605oss_win.zip"
-	validate_result
+    print_hmsg "oneTBB not found. Downloading..."
+    Invoke-WebRequest "https://github.com/oneapi-src/oneTBB/releases/download/2019_U8/tbb2019_20190605oss_win.zip" -OutFile "tbb2019_20190605oss_win.zip"
+    validate_result
 
-	# Extract oneTBB
-	print_hmsg "Extracting oneTBB..."
-	Add-Type -Assembly "System.IO.Compression.Filesystem"
-	[System.IO.Compression.ZipFile]::ExtractToDirectory("$PWD/tbb2019_20190605oss_win.zip", "$PWD")
-	validate_result
+    # Extract oneTBB
+    print_hmsg "Extracting oneTBB..."
+    Add-Type -Assembly "System.IO.Compression.Filesystem"
+    [System.IO.Compression.ZipFile]::ExtractToDirectory("$PWD/tbb2019_20190605oss_win.zip", "$PWD")
+    validate_result
 
-	rm tbb2019_20190605oss_win.zip
-	print_hmsg "Done!"
+    rm tbb2019_20190605oss_win.zip
+    print_hmsg "Done!"
 }
 
 $global:cmakeArgs+=" -DDEPENDENCY_TBB_LIBRARY=`"$oneTBBRoot/lib/intel64/vc14/tbb.lib`" "
@@ -41,10 +41,10 @@ $global:cmakeArgs+=" -DDEPENDENCY_TBB_LIBRARY=`"$oneTBBRoot/lib/intel64/vc14/tbb
 cd "$deps"
 $oidnRoot="$deps/oidn"
 if(![System.IO.Directory]::Exists($oidnRoot)){
-	print_hmsg "oidn not found. Downloading..."
-	git clone "https://github.com/OpenImageDenoise/oidn.git" --recurse-submodules
-	validate_result
-	print_hmsg "Done!"
+    print_hmsg "oidn not found. Downloading..."
+    git clone "https://github.com/OpenImageDenoise/oidn.git" --recurse-submodules
+    validate_result
+    print_hmsg "Done!"
 }
 
 cd oidn
@@ -66,10 +66,10 @@ $global:cmakeArgs+=" -DDEPENDENCY_OPENIMAGEDENOISE_INCLUDE=`"$oidnRoot/include`"
 cd "$deps"
 $ocioRoot="$deps/OpenColorIO"
 if(![System.IO.Directory]::Exists($ocioRoot)){
-	print_hmsg "ocio not found. Downloading..."
-	git clone "https://github.com/AcademySoftwareFoundation/OpenColorIO.git" --recurse-submodules
-	validate_result
-	print_hmsg "Done!"
+    print_hmsg "ocio not found. Downloading..."
+    git clone "https://github.com/AcademySoftwareFoundation/OpenColorIO.git" --recurse-submodules
+    validate_result
+    print_hmsg "Done!"
 }
 
 cd OpenColorIO
@@ -105,10 +105,10 @@ print_hmsg "Done!"
 cd "$deps"
 $subdivRoot="$deps/opensubdiv"
 if(![System.IO.Directory]::Exists($subdivRoot)){
-	print_hmsg "OpenSubdiv not found. Downloading..."
-	git clone "https://github.com/PixarAnimationStudios/OpenSubdiv.git" --recurse-submodules
-	validate_result
-	print_hmsg "Done!"
+    print_hmsg "OpenSubdiv not found. Downloading..."
+    git clone "https://github.com/PixarAnimationStudios/OpenSubdiv.git" --recurse-submodules
+    validate_result
+    print_hmsg "Done!"
 }
 
 cd OpenSubdiv
@@ -131,12 +131,12 @@ $global:cmakeArgs+=" -DDEPENDENCY_OPENSUBDIV_INCLUDE=`"$subdivRoot`" -DDEPENDENC
 # util_ocio
 $utilOcioRoot="$root/external_libs/util_ocio"
 if(![System.IO.Directory]::Exists($utilOcioRoot)){
-	print_hmsg "util_ocio not found. Downloading..."
-	cd "$root/external_libs"
-	git clone "https://github.com/Silverlan/util_ocio.git" --recurse-submodules util_ocio
-	validate_result
-	print_hmsg "Done!"
-	cd ..
+    print_hmsg "util_ocio not found. Downloading..."
+    cd "$root/external_libs"
+    git clone "https://github.com/Silverlan/util_ocio.git" --recurse-submodules util_ocio
+    validate_result
+    print_hmsg "Done!"
+    cd ..
 }
 
 $global:cmakeArgs+=" -DDEPENDENCY_UTIL_OCIO_INCLUDE=`"$utilOcioRoot/include`" "
@@ -194,15 +194,33 @@ validate_result
 
 $global:cmakeArgs+=" -DDEPENDENCY_GFLAGS_INCLUDE=`"$gflagsRoot/build_files/include`" -DDEPENDENCY_GFLAGS_LIBRARY=`"$gflagsRoot/build_files/lib/$buildConfig/gflags_static.lib`" "
 
+# render_raytracing tool
+cd "$tools"
+$rrToolRoot="$tools/render_raytracing"
+if(![System.IO.Directory]::Exists($rrToolRoot)){
+    print_hmsg "render_raytracing tool not found. Downloading..."
+    git clone "https://github.com/Silverlan/render_raytracing.git" --recurse-submodules
+    validate_result
+    print_hmsg "Done!"
+}
+else{
+    print_hmsg "Updating 'render_raytracing' tool..."
+    git pull
+    validate_result
+    print_hmsg "Done!"
+}
+
+$global:additionalBuildTargets+=" render_raytracing "
+
 # Unirender
 $unirenderRoot="$root/external_libs/util_raytracing"
 if(![System.IO.Directory]::Exists($unirenderRoot)){
-	print_hmsg "Unirender not found. Downloading..."
-	cd "$root/external_libs"
-	git clone "https://github.com/Silverlan/UniRender.git" --recurse-submodules util_raytracing
-	validate_result
-	print_hmsg "Done!"
-	cd ..
+    print_hmsg "Unirender not found. Downloading..."
+    cd "$root/external_libs"
+    git clone "https://github.com/Silverlan/UniRender.git" --recurse-submodules util_raytracing
+    validate_result
+    print_hmsg "Done!"
+    cd ..
 }
 
 $global:cmakeArgs+=" -DDEPENDENCY_UTIL_RAYTRACING_INCLUDE=`"$unirenderRoot/include`" "
