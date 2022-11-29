@@ -92,4 +92,6 @@ $global:cmakeArgs += " -DDEPENDENCY_OPENEXR_IEX_LIBRARY=`"$cyclesDepsRoot/openex
 $global:cmakeArgs += " -DDEPENDENCY_JPEG_LIBRARY=`"$cyclesDepsRoot/jpeg/lib/libjpeg.lib`" "
 $global:cmakeArgs += " -DDEPENDENCY_TIFF_LIBRARY=`"$cyclesDepsRoot/tiff/lib/libtiff.lib`" "
 
+$global:additionalBuildTargets+=" UniRender_cycles "
+
 Exit 0
