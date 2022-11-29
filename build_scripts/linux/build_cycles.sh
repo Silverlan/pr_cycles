@@ -20,7 +20,7 @@ if [ "$lastBuildCommit" != "$targetCommit" ]; then
     make update
     validate_result
 
-    # The update commit above will unfortunately update Cycles to the last commit. This behavior
+    # The update command above will unfortunately update Cycles to the last commit. This behavior
     # can't be disabled, so we have to reset the commit back to the one we want here.
     # This can cause issues if the Cycles update-script updates the dependencies to newer versions
     # that aren't compatible with the commit we're using, but it can't be helped.
@@ -37,7 +37,7 @@ print_hmsg "Build cycles"
 mkdir -p $PWD/build
 cd build
 
-# Cycles doesn't cash properly and rebuilds every time, which can take a long time. For this reason
+# Cycles doesn't cache properly and rebuilds every time, which can take a long time. For this reason
 # we'll only build if the head commit has changed since the last build.
 curCommitId=$(git rev-parse HEAD)
 validate_result
