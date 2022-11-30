@@ -35,7 +35,7 @@ if [ ! -d "$oneTBBRoot" ]; then
 	print_hmsg "Done!"
 fi
 
-cmakeArgs=" $cmakeArgs -DDEPENDENCY_TBB_LIBRARY=\"$oneTBBRoot/lib/intel64/gcc4.7/libtbb.so\" "
+cmakeArgs=" $cmakeArgs -DDEPENDENCY_TBB_LIBRARY=\"$oneTBBRoot/lib/intel64/gcc4.7/libtbb.so.2\" "
 
 # OIDN
 cd "$deps"
