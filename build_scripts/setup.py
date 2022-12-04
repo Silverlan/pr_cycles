@@ -66,7 +66,9 @@ if not Path(ocio_root).is_dir():
     git_clone("https://github.com/AcademySoftwareFoundation/OpenColorIO.git")
 
 os.chdir(ocio_root)
-subprocess.run(["git","reset","--hard","fb9390ece9504ae30aa0213d8fb8f44a5550554f"],check=True)
+# Note: Version 2.2.0 of OpenColorIO introduces a zlib dependency, which causes conflicts with our zlib installation, so we're stuck
+# with the older version for now.
+subprocess.run(["git","reset","--hard","e670cd98d794e83cd5a9d079f8979d9204466128"],check=True)
 
 print_msg("Build ocio")
 mkdir("build",cd=True)
