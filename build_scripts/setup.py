@@ -50,7 +50,7 @@ print_msg("Build oidn")
 mkdir("build",cd=True)
 
 cmake_configure("..",generator,["-DTBB_ROOT=" +one_tbb_root,"-DTBB_INCLUDE_DIR=" +one_tbb_root +"/include"])
-cmake_build(build_config)
+cmake_build(build_config,["OpenImageDenoise"])
 
 cmake_args.append("-DDEPENDENCY_OPENIMAGEDENOISE_INCLUDE=" +oidn_root +"/include")
 if platform == "linux":
@@ -77,7 +77,7 @@ configArgs = []
 if platform == "linux":
 	configArgs.append("-DOCIO_BUILD_PYTHON=OFF")
 cmake_configure("..",generator,configArgs)
-cmake_build(build_config)
+cmake_build(build_config,["OpenColorIO"])
 
 if platform == "linux":
 	cp(ocio_root +"/build/include/OpenColorIO/OpenColorABI.h",ocio_root +"/include/OpenColorIO/")
@@ -113,7 +113,7 @@ print_msg("Build OpenSubdiv")
 mkdir("build",cd=True)
 
 cmake_configure("..",generator,["-DTBB_ROOT=" +one_tbb_root,"-DTBB_INCLUDE_DIR=" +one_tbb_root +"/include","-D NO_PTEX=1","-D NO_DOC=1","-D NO_OMP=1","-D NO_TBB=1","-D NO_CUDA=1","-D NO_OPENCL=1","-D NO_CLEW=1","-D NO_EXAMPLES=1"])
-cmake_build(build_config)
+cmake_build(build_config,["osd_static_cpu","osd_static_gpu"])
 
 cmake_args.append("-DDEPENDENCY_OPENSUBDIV_INCLUDE=" +subdiv_root +"")
 if platform == "linux":
