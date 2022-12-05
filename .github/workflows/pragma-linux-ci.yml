@@ -27,80 +27,18 @@ jobs:
             generators: "Unix Makefiles"
             build_dir: 'build'
     steps:
-      - uses: actions/checkout@v2
+      - name: Build Module
+        id: build-module
+        uses: Silverlan/pragma/github_actions/build_generic_module@master
         with:
-          submodules: true
-
-      - name: Setup
-        id: setup
-        uses: Silverlan/common_actions/setup@main
-          
-      - name: Download binaries
-        uses: Silverlan/common_actions/download_build_binaries@main
-        continue-on-error: true
-          
-      - name: Initialize Env
-        id: init-env
-        uses: Silverlan/common_actions/set_common_env_vars@main
-        
-      - name: Download dependencies
-        shell: bash
-        run: |
-          git clone --recursive https://github.com/Silverlan/pragma.git pragma
-          git clone --recursive https://github.com/Silverlan/pr_cycles.git pragma/modules/pr_unirender
-          git clone --recursive https://github.com/Silverlan/unirender.git pragma/external_libs/util_raytracing
-          #git clone --recursive https://github.com/Silverlan/UniRender.git pragma/external_libs/util_raytracing
-          
-      #- name: Build Cycles
-      #  uses: Silverlan/UniRender_Cycles/github_actions/build_cycles@main
-
-      - name: Install vcpkg
-        shell: bash
-        run: |
-          git clone https://github.com/Microsoft/vcpkg.git
-          ./vcpkg/bootstrap-vcpkg.sh
-
-      - name: Install Openimageio
-        shell: bash
-        run: |
-          sudo vcpkg update
-          sudo vcpkg install openimageio
-
-      - name: Get Unirender Binaries
-        shell: bash
-        run: |
-          mkdir unirender
-          cd unirender
-          wget https://github.com/Silverlan/unirender/releases/download/latest/binaries_linux64.tar.gz
-          tar xvfz binaries_linux64.tar.gz
-          rm -f binaries_linux64.tar.gz
-
-      - name: Build
-        shell: bash
-        continue-on-error: true
-        run: |
-          rootDir=$PWD
-          git clone --recursive https://github.com/PixarAnimationStudios/OpenSubdiv.git OpenSubdiv
-          cd OpenSubdiv
-          git checkout 82ab1b9f54c87fdd7e989a3470d53e137b8ca270
-          git reset --hard
-          cd ..
-
-          sudo apt install xorg-dev
-          cd pragma
-          pragmaDir="$PWD"
-          cd modules/pr_unirender
-          cmake -G "Unix Makefiles" $value -DDEPENDENCY_OPENSUBDIV_INCLUDE="$pragmaDir/../OpenSubdiv" -DPR_UNIRENDER_ENABLE_DEPENDENCIES=0 -DDEPENDENCY_UTIL_RAYTRACING_LIBRARY="$rootDir/unirender/lib/libutil_raytracing.so" -DDEPENDENCY_UTIL_RAYTRACING_INCLUDE="$pragmaDir/external_libs/util_raytracing/include/" -DDEPENDENCY_LUABIND_INCLUDE="$pragmaDir/third_party_libs/luabind/" -DDEPENDENCY_DATASYSTEM_INCLUDE="$pragmaDir/external_libs/datasystem/include/" -DDEPENDENCY_ALSOUNDSYSTEM_INCLUDE="$pragmaDir/external_libs/alsoundsystem/include/" -DDEPENDENCY_LUASYSTEM_INCLUDE="$pragmaDir/external_libs/luasystem/include/" -DDEPENDENCY_SHARED_INCLUDE="$pragmaDir/core/shared/include/" -DDEPENDENCY_GLM_INCLUDE="$pragmaDir/third_party_libs/glm/" -DDEPENDENCY_GLFW_INCLUDE="$pragmaDir/third_party_libs/glfw/include/" -DDEPENDENCY_MATHUTIL_INCLUDE="$pragmaDir/external_libs/mathutil/include/" -DDEPENDENCY_VFILESYSTEM_INCLUDE="$pragmaDir/external_libs/vfilesystem/include/" -DDEPENDENCY_SHAREDUTILS_INCLUDE="$pragmaDir/external_libs/sharedutils/include/" -DDEPENDENCY_PROSPER_INCLUDE="$pragmaDir/external_libs/prosper/include/" -DDEPENDENCY_IGLFW_INCLUDE="$pragmaDir/external_libs/iglfw/include/" -DDEPENDENCY_WGUI_INCLUDE="$pragmaDir/external_libs/wgui/include/" -DDEPENDENCY_UTIL_IMAGE_INCLUDE="$pragmaDir/external_libs/util_image/include/" -DDEPENDENCY_CLIENT_INCLUDE="$pragmaDir/core/client/include/" -DDEPENDENCY_LUAJIT_INCLUDE="$pragmaDir/third_party_libs/luajit/src/" -DDEPENDENCY_MATERIALSYSTEM_INCLUDE="$pragmaDir/external_libs/materialsystem/materialsystem/include/" -DDEPENDENCY_CMATERIALSYSTEM_INCLUDE="$pragmaDir/external_libs/materialsystem/cmaterialsystem/include/" -DDEPENDENCY_UTIL_UDM_INCLUDE="$pragmaDir/external_libs/util_udm/include/"
-          cmake --build ./ --verbose --target pr_unirender
+          module: 'pr_unirender'
 
       - name: Create Release Files
         shell: bash
         run: |
-          mkdir release
-          mkdir release/lib
-          rsync --mkpath ./pragma/modules/pr_unirender/libpr_unirender.so release/modules/unirender/
-          rsync --mkpath ./unirender/lib/libutil_raytracing.so release/lib/
-          
+          mkdir -p release/modules
+          cp -R "${{ steps.build-module.outputs.install-dir }}/modules/unirender" "release/modules/"
+
       - name: Release Binaries
         uses: Silverlan/common_actions/release_nightly_binaries@main
         with:
