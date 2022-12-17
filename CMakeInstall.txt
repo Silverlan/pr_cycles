@@ -35,9 +35,13 @@ pragma_install_lib("${CMAKE_CURRENT_BINARY_DIR}/tools/render_raytracing/external
 
 # Cycles
 pragma_install_lib("${CMAKE_CURRENT_BINARY_DIR}/modules/pr_unirender/external_libs/cycles/${PR_MODULE_INSTALL_SUBDIR}/${OS_LIB_BIN_PRE}UniRender_cycles${OS_LIB_BIN_EXT}" "${CYCLES_INSTALL_DIR}/cycles" OPTIONAL)
-pragma_install_directory("${DEPENDENCY_CYCLES_BUILD_LOCATION}/src/kernel/" "${CYCLES_INSTALL_DIR}/cycles/lib" FILES_MATCHING PATTERN "*.ptx" PATTERN "*.cubin" PATTERN "CMakeFiles" EXCLUDE PATTERN "cycles_kernel.dir" EXCLUDE PATTERN "osl" EXCLUDE PATTERN "x64" EXCLUDE)
-pragma_install_directory("${DEPENDENCY_CYCLES_ROOT}/src/kernel" "${CYCLES_INSTALL_DIR}/cycles/source")
-pragma_install_directory("${DEPENDENCY_CYCLES_ROOT}/src/util" "${CYCLES_INSTALL_DIR}/cycles/source")
+if(DEFINED DEPENDENCY_GLEW_LIBRARY_BIN AND NOT "${DEPENDENCY_CYCLES_BUILD_LOCATION}" STREQUAL "")
+	pragma_install_directory("${DEPENDENCY_CYCLES_BUILD_LOCATION}/src/kernel/" "${CYCLES_INSTALL_DIR}/cycles/lib" FILES_MATCHING PATTERN "*.ptx" PATTERN "*.cubin" PATTERN "CMakeFiles" EXCLUDE PATTERN "cycles_kernel.dir" EXCLUDE PATTERN "osl" EXCLUDE PATTERN "x64" EXCLUDE)
+endif()
+if(DEFINED DEPENDENCY_GLEW_LIBRARY_BIN AND NOT "${DEPENDENCY_CYCLES_ROOT}" STREQUAL "")
+	pragma_install_directory("${DEPENDENCY_CYCLES_ROOT}/src/kernel" "${CYCLES_INSTALL_DIR}/cycles/source")
+	pragma_install_directory("${DEPENDENCY_CYCLES_ROOT}/src/util" "${CYCLES_INSTALL_DIR}/cycles/source")
+endif()
 
 pragma_install_lib_c("${DEPENDENCY_CYCLES_GLOG_LIBRARY}" "glog" "${CYCLES_INSTALL_DIR}/cycles")
 pragma_install_lib_c("${DEPENDENCY_CYCLES_OPENVDB_LIBRARY_PATH}/../bin/" "openvdb" "${CYCLES_INSTALL_DIR}/cycles")

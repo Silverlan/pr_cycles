@@ -1094,7 +1094,15 @@ extern "C"
 				}
 				Lua::PushBool(l,true);
 				return 1;
-			})}
+			})},
+			{"set_vertex_debug_function",+[](lua_State *l) -> int32_t {
+				extern std::function<void(umath::Vertex&)> g_debugMeshVertex;
+				auto f = luabind::object(luabind::from_stack(l,1));
+				g_debugMeshVertex = [f](umath::Vertex &v) mutable {
+					v = luabind::object_cast<umath::Vertex>(f(v));
+				};
+				return 0;
+			}}
 		});
 		modCycles[
 			luabind::def("register_node",static_cast<unirender::NodeTypeId(*)(lua_State*,const std::string&,luabind::object)>([](lua_State *l,const std::string &typeName,luabind::object function) -> unirender::NodeTypeId {
@@ -1648,7 +1656,6 @@ extern "C"
 		t["IN_B"] = unirender::nodes::combine_rgb::IN_B;
 		
 		t = nodeTypeEnums[unirender::NODE_GEOMETRY] = luabind::newtable(l.GetState());
-		t["IN_NORMAL_OSL"] = unirender::nodes::geometry::IN_NORMAL_OSL;
 		t["OUT_POSITION"] = unirender::nodes::geometry::OUT_POSITION;
 		t["OUT_NORMAL"] = unirender::nodes::geometry::OUT_NORMAL;
 		t["OUT_TANGENT"] = unirender::nodes::geometry::OUT_TANGENT;
@@ -1733,7 +1740,6 @@ extern "C"
 		t["IN_FROM_DUPLI"] = unirender::nodes::texture_coordinate::IN_FROM_DUPLI;
 		t["IN_USE_TRANSFORM"] = unirender::nodes::texture_coordinate::IN_USE_TRANSFORM;
 		t["IN_OB_TFM"] = unirender::nodes::texture_coordinate::IN_OB_TFM;
-		t["IN_NORMAL_OSL"] = unirender::nodes::texture_coordinate::IN_NORMAL_OSL;
 		t["OUT_GENERATED"] = unirender::nodes::texture_coordinate::OUT_GENERATED;
 		t["OUT_NORMAL"] = unirender::nodes::texture_coordinate::OUT_NORMAL;
 		t["OUT_UV"] = unirender::nodes::texture_coordinate::OUT_UV;
@@ -1810,7 +1816,6 @@ extern "C"
 		t = nodeTypeEnums[unirender::NODE_NORMAL_MAP] = luabind::newtable(l.GetState());
 		t["IN_SPACE"] = unirender::nodes::normal_map::IN_SPACE;
 		t["IN_ATTRIBUTE"] = unirender::nodes::normal_map::IN_ATTRIBUTE;
-		t["IN_NORMAL_OSL"] = unirender::nodes::normal_map::IN_NORMAL_OSL;
 		t["IN_STRENGTH"] = unirender::nodes::normal_map::IN_STRENGTH;
 		t["IN_COLOR"] = unirender::nodes::normal_map::IN_COLOR;
 		t["OUT_NORMAL"] = unirender::nodes::normal_map::OUT_NORMAL;
