@@ -1,6 +1,7 @@
 import os
 import tarfile
 import subprocess
+import argparse
 from sys import platform
 from pathlib import Path
 
@@ -95,8 +96,20 @@ execbuildscript(os.path.dirname(os.path.realpath(__file__)) +"/build_oiio.py")
 os.chdir(deps_dir)
 
 ########## cycles ##########
-print_msg("Running cycles build script...")
-execbuildscript(os.path.dirname(os.path.realpath(__file__)) +"/build_cycles.py")
+
+parser = argparse.ArgumentParser(description='pr_unirender build script', allow_abbrev=False, formatter_class=argparse.ArgumentDefaultsHelpFormatter, epilog="")
+parser.add_argument("--build-cycles", type=str2bool, nargs='?', const=True, default=False, help="Build the Cycles library (otherwise uses pre-built binaries).")
+args,unknown = parser.parse_known_args()
+args = vars(args)
+
+if build_all or args["build_cycles"]:
+	print_msg("Running cycles build script...")
+	execbuildscript(os.path.dirname(os.path.realpath(__file__)) +"/build_cycles.py")
+else:
+	print_msg("Downloading prebuilt cycles binaries...")
+	os.chdir(install_dir)
+	install_prebuilt_binaries("https://github.com/Silverlan/UniRender_Cycles/releases/download/latest/")
+
 os.chdir(deps_dir)
 
 ########## OpenSubdiv ##########
