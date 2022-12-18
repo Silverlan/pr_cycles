@@ -207,5 +207,9 @@ if not Path(unirender_root).is_dir():
     print_msg("Unirender not found. Downloading...")
     os.chdir(root +"/external_libs")
     git_clone("https://github.com/Silverlan/UniRender.git","util_raytracing")
+else:
+    print_msg("Updating Unirender...")
+    os.chdir(unirender_root)
+    subprocess.run(["git","pull","--recurse-submodules"],check=True)
 
 cmake_args.append("-DDEPENDENCY_UTIL_RAYTRACING_INCLUDE=" +unirender_root +"/include")
