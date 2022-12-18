@@ -1094,15 +1094,7 @@ extern "C"
 				}
 				Lua::PushBool(l,true);
 				return 1;
-			})},
-			{"set_vertex_debug_function",+[](lua_State *l) -> int32_t {
-				extern std::function<void(umath::Vertex&)> g_debugMeshVertex;
-				auto f = luabind::object(luabind::from_stack(l,1));
-				g_debugMeshVertex = [f](umath::Vertex &v) mutable {
-					v = luabind::object_cast<umath::Vertex>(f(v));
-				};
-				return 0;
-			}}
+			})}
 		});
 		modCycles[
 			luabind::def("register_node",static_cast<unirender::NodeTypeId(*)(lua_State*,const std::string&,luabind::object)>([](lua_State *l,const std::string &typeName,luabind::object function) -> unirender::NodeTypeId {
