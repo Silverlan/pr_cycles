@@ -12,7 +12,7 @@ pragma_install_lib("${DEPENDENCY_UTIL_RAYTRACING_LIBRARY}" "${BINARY_OUTPUT_DIR}
 
 # Install tbb
 get_filename_component(PR_UNIRENDER_CYCLES_TBB_LIBRARY_PATH "${DEPENDENCY_CYCLES_TBB_LIBRARY}" DIRECTORY REALPATH)
-pragma_install_lib_c("${PR_UNIRENDER_CYCLES_TBB_LIBRARY_PATH}/../bin/" "tbb" "${CYCLES_INSTALL_DIR}")
+# pragma_install_lib_c("${PR_UNIRENDER_CYCLES_TBB_LIBRARY_PATH}/../bin/" "tbb" "${CYCLES_INSTALL_DIR}")
 
 # Install OpenColorIO
 if(WIN32)
@@ -24,7 +24,7 @@ endif()
 if(NOT ${DEPENDENCY_GLEW_LIBRARY_BIN} STREQUAL "")
 	pragma_install_lib_c("${DEPENDENCY_GLEW_LIBRARY_BIN}" "glew32" "${CYCLES_INSTALL_DIR}" OPTIONAL)
 endif()
-pragma_install_lib_c("${DEPENDENCY_TBB_LIBRARY}" "tbbmalloc" "${CYCLES_INSTALL_DIR}" OPTIONAL)
+pragma_install_lib_c("${DEPENDENCY_TBB_LIBRARY}" "tbb" "${CYCLES_INSTALL_DIR}" OPTIONAL)
 
 # assets
 pragma_install_directory("${CMAKE_CURRENT_LIST_DIR}/assets/" "modules/")

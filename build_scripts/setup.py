@@ -36,6 +36,7 @@ if platform == "linux":
 	cmake_args.append("-DDEPENDENCY_TBB_LIBRARY=" +one_tbb_root +"/lib/intel64/gcc4.7/libtbb.so.2")
 else:
 	cmake_args.append("-DDEPENDENCY_TBB_LIBRARY=" +one_tbb_root +"/lib/intel64/vc14/tbb.lib")
+	cp(one_tbb_root +"/bin/intel64/vc14/tbb.dll",one_tbb_root +"/lib/intel64/vc14/")
 
 ########## OIDN ##########
 os.chdir(deps_dir)
