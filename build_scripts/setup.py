@@ -56,7 +56,11 @@ cmake_build(build_config,["OpenImageDenoise"])
 
 cmake_args.append("-DDEPENDENCY_OPENIMAGEDENOISE_INCLUDE=" +oidn_root +"/include")
 if platform == "linux":
-	cmake_args.append("-DDEPENDENCY_OPENIMAGEDENOISE_LIBRARY=" +oidn_root +"/build/libOpenImageDenoise.so")
+	if generator=="Ninja Multi-Config":
+		cmake_args.append("-DDEPENDENCY_OPENIMAGEDENOISE_LIBRARY=" +oidn_root +"/build/"+build_config +"/libOpenImageDenoise.so")
+	else:
+		cmake_args.append("-DDEPENDENCY_OPENIMAGEDENOISE_LIBRARY=" +oidn_root +"/build/libOpenImageDenoise.so")
+
 else:
 	cmake_args.append("-DDEPENDENCY_OPENIMAGEDENOISE_LIBRARY=" +oidn_root +"/build/" +build_config +"/OpenImageDenoise.lib")
 
@@ -88,7 +92,10 @@ cp(ocio_root +"/build/include/OpenColorIO/OpenColorABI.h",ocio_root +"/include/O
 
 cmake_args.append("-DDEPENDENCY_OPENCOLORIO_INCLUDE=" +ocio_root +"/include")
 if platform == "linux":
-	cmake_args.append("-DDEPENDENCY_OPENCOLORIO_LIBRARY=" +ocio_root +"/build/src/OpenColorIO/libOpenColorIO.so")
+	if generator=="Ninja Multi-Config":
+		cmake_args.append("-DDEPENDENCY_OPENCOLORIO_LIBRARY=" +ocio_root +"/build/src/OpenColorIO/"+build_config +"/libOpenColorIO.so")
+	else:
+		cmake_args.append("-DDEPENDENCY_OPENCOLORIO_LIBRARY=" +ocio_root +"/build/src/OpenColorIO/libOpenColorIO.so")
 else:
 	cmake_args.append("-DDEPENDENCY_OPENCOLORIO_LIBRARY=" +ocio_root +"/build/src/OpenColorIO/" +build_config +"/OpenColorIO.lib")
 
@@ -131,8 +138,12 @@ cmake_build(build_config,["osd_static_cpu","osd_static_gpu"])
 
 cmake_args.append("-DDEPENDENCY_OPENSUBDIV_INCLUDE=" +subdiv_root +"")
 if platform == "linux":
-	cmake_args.append("-DDEPENDENCY_OPENSUBDIV_LIBRARY=" +subdiv_root +"/build/lib/libosdGPU.a")
-	cmake_args.append("-DDEPENDENCY_OPENSUBDIV_CPU_LIBRARY=" +subdiv_root +"/build/lib/libosdCPU.a")
+	if generator=="Ninja Multi-Config":
+		cmake_args.append("-DDEPENDENCY_OPENSUBDIV_LIBRARY=" +subdiv_root +"/build/lib/"+build_config+"/libosdGPU.a")
+		cmake_args.append("-DDEPENDENCY_OPENSUBDIV_CPU_LIBRARY=" +subdiv_root +"/build/lib/"+build_config+"/libosdCPU.a")
+	else:
+		cmake_args.append("-DDEPENDENCY_OPENSUBDIV_LIBRARY=" +subdiv_root +"/build/lib/libosdGPU.a")
+		cmake_args.append("-DDEPENDENCY_OPENSUBDIV_CPU_LIBRARY=" +subdiv_root +"/build/lib/libosdCPU.a")
 else:
 	cmake_args.append("-DDEPENDENCY_OPENSUBDIV_LIBRARY=" +subdiv_root +"/build/lib/" +build_config +"/osdGPU.lib")
 	cmake_args.append("-DDEPENDENCY_OPENSUBDIV_CPU_LIBRARY=" +subdiv_root +"/build/lib/" +build_config +"/osdCPU.lib")
