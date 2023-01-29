@@ -8,7 +8,6 @@
 #include <optional>
 #include <string>
 
-namespace pragma::modules::cycles
-{
-	std::optional<std::string> prepare_texture(const std::string &texPath,const std::optional<std::string> &defaultTexture={},bool translucent=false);
+namespace pragma::modules::cycles {
+	std::optional<std::string> prepare_texture(const std::string &texPath, const std::optional<std::string> &defaultTexture = {}, bool translucent = false);
 };

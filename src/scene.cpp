@@ -50,17 +50,15 @@ using namespace pragma::modules;
 extern DLLCLIENT CEngine *c_engine;
 extern DLLCLIENT CGame *c_game;
 
-cycles::Cache::ShaderInfo::ShaderInfo()
-{}
+cycles::Cache::ShaderInfo::ShaderInfo() {}
 
-cycles::Scene::Scene(unirender::Scene &rtScene)
-	: m_rtScene{rtScene.shared_from_this()}
+cycles::Scene::Scene(unirender::Scene &rtScene) : m_rtScene {rtScene.shared_from_this()}
 {
 	m_cache = std::make_shared<Cache>(rtScene.GetRenderMode());
 	m_cache->GetModelCache().SetUnique(true);
 }
 
-void cycles::Scene::AddRoughnessMapImageTextureNode(unirender::ShaderModuleRoughness &shader,Material &mat,float defaultRoughness) const
+void cycles::Scene::AddRoughnessMapImageTextureNode(unirender::ShaderModuleRoughness &shader, Material &mat, float defaultRoughness) const
 {
 #if 0
 	// If no roughness map is available, just use roughness or specular factor directly
@@ -100,23 +98,23 @@ void cycles::Scene::AddRoughnessMapImageTextureNode(unirender::ShaderModuleRough
 #endif
 }
 
-void cycles::Scene::SetAOBakeTarget(BaseEntity &ent,uint32_t matIndex)
+void cycles::Scene::SetAOBakeTarget(BaseEntity &ent, uint32_t matIndex)
 {
 	std::shared_ptr<unirender::Object> oAo;
 	std::shared_ptr<unirender::Object> oEnv;
-	m_cache->AddAOBakeTarget(ent,matIndex,oAo,oEnv);
+	m_cache->AddAOBakeTarget(ent, matIndex, oAo, oEnv);
 	m_rtScene->SetBakeTarget(*oAo);
 }
 
-void cycles::Scene::SetAOBakeTarget(Model &mdl,uint32_t matIndex)
+void cycles::Scene::SetAOBakeTarget(Model &mdl, uint32_t matIndex)
 {
 	std::shared_ptr<unirender::Object> oAo;
 	std::shared_ptr<unirender::Object> oEnv;
-	m_cache->AddAOBakeTarget(mdl,matIndex,oAo,oEnv);
+	m_cache->AddAOBakeTarget(mdl, matIndex, oAo, oEnv);
 	m_rtScene->SetBakeTarget(*oAo);
 }
 
-cycles::Cache &cycles::Scene::GetCache() {return *m_cache;}
+cycles::Cache &cycles::Scene::GetCache() { return *m_cache; }
 
 void cycles::Scene::Finalize()
 {
@@ -131,12 +129,9 @@ unirender::Object *cycles::Scene::FindObject(const std::string &name)
 {
 	auto &cache = GetCache();
 	auto &mdlCache = cache.GetModelCache();
-	for(auto &chunk : mdlCache.GetChunks())
-	{
+	for(auto &chunk : mdlCache.GetChunks()) {
 		auto &objs = chunk.GetObjects();
-		auto it = std::find_if(objs.begin(),objs.end(),[&name](const unirender::PObject &obj) {
-			return obj->GetName() == name;
-		});
+		auto it = std::find_if(objs.begin(), objs.end(), [&name](const unirender::PObject &obj) { return obj->GetName() == name; });
 		if(it == objs.end())
 			continue;
 		return it->get();
@@ -144,26 +139,20 @@ unirender::Object *cycles::Scene::FindObject(const std::string &name)
 	return nullptr;
 }
 
-cycles::Renderer::Renderer(Scene &scene,unirender::Renderer &renderer)
-	: m_scene{scene.shared_from_this()},m_renderer{renderer.shared_from_this()}
-{}
+cycles::Renderer::Renderer(Scene &scene, unirender::Renderer &renderer) : m_scene {scene.shared_from_this()}, m_renderer {renderer.shared_from_this()} {}
 
 void cycles::Renderer::ReloadShaders()
 {
 	// Can only reload shaders that are part of this scene's parimary cache
 	auto &shaderTranslationTable = m_scene->GetCache().GetRTShaderToShaderTable();
-	for(auto &mdlCache : (*m_scene)->GetModelCaches())
-	{
-		for(auto &chunk : mdlCache->GetChunks())
-		{
-			for(auto &mesh : chunk.GetMeshes())
-			{
+	for(auto &mdlCache : (*m_scene)->GetModelCaches()) {
+		for(auto &chunk : mdlCache->GetChunks()) {
+			for(auto &mesh : chunk.GetMeshes()) {
 				auto renderMesh = m_renderer->FindRenderMeshByHash(mesh->GetHash());
 				if(renderMesh == nullptr)
 					continue;
 				auto &meshShaders = renderMesh->GetSubMeshShaders();
-				for(auto i=decltype(meshShaders.size()){0u};i<meshShaders.size();++i)
-				{
+				for(auto i = decltype(meshShaders.size()) {0u}; i < meshShaders.size(); ++i) {
 					auto &rtShader = meshShaders.at(i);
 					auto it = shaderTranslationTable.find(rtShader.get());
 					if(it == shaderTranslationTable.end())
@@ -178,7 +167,7 @@ void cycles::Renderer::ReloadShaders()
 					shaderTranslationTable[newRtShader.get()] = shader;
 
 					rtShader = newRtShader;*/
-					
+
 					// TODO: Cache
 					// TODO
 					/*auto pass = shader->InitializeCombinedPass();
@@ -196,26 +185,23 @@ void cycles::Scene::BuildLightMapObject()
 {
 	if(m_lightMapTargets.empty())
 		return;
-	std::vector<ModelSubMesh*> targetMeshes {};
+	std::vector<ModelSubMesh *> targetMeshes {};
 	std::vector<util::Uuid> targetMeshEntityUuids;
 	std::vector<std::shared_ptr<pragma::modules::cycles::Cache::MeshData>> meshDatas;
-	for(auto &hEnt : m_lightMapTargets)
-	{
+	for(auto &hEnt : m_lightMapTargets) {
 		if(hEnt.IsValid() == false || hEnt->GetModel() == nullptr)
 			continue;
 		auto &t = hEnt->GetPose();
-		std::vector<ModelSubMesh*> entMeshes;
-		auto meshes = m_cache->AddEntityMesh(*hEnt.get(),&entMeshes,nullptr,nullptr,"",t);
-		if(meshes.empty() == false)
-		{
-			targetMeshes.reserve(targetMeshes.size() +entMeshes.size());
-			targetMeshEntityUuids.reserve(targetMeshEntityUuids.size() +entMeshes.size());
-			for(auto *mesh : entMeshes)
-			{
+		std::vector<ModelSubMesh *> entMeshes;
+		auto meshes = m_cache->AddEntityMesh(*hEnt.get(), &entMeshes, nullptr, nullptr, "", t);
+		if(meshes.empty() == false) {
+			targetMeshes.reserve(targetMeshes.size() + entMeshes.size());
+			targetMeshEntityUuids.reserve(targetMeshEntityUuids.size() + entMeshes.size());
+			for(auto *mesh : entMeshes) {
 				targetMeshes.push_back(mesh);
 				targetMeshEntityUuids.push_back(hEnt->GetUuid());
 			}
-			meshDatas.reserve(meshDatas.size() +meshes.size());
+			meshDatas.reserve(meshDatas.size() + meshes.size());
 			for(auto &mesh : meshes)
 				meshDatas.push_back(mesh);
 		}
@@ -224,7 +210,7 @@ void cycles::Scene::BuildLightMapObject()
 	if(meshDatas.empty())
 		return;
 
-	auto mesh = m_cache->BuildMesh("bake_target",meshDatas);
+	auto mesh = m_cache->BuildMesh("bake_target", meshDatas);
 	if(mesh == nullptr)
 		return;
 
@@ -236,32 +222,26 @@ void cycles::Scene::BuildLightMapObject()
 	// Lightmap uvs per mesh
 	auto numTris = mesh->GetTriangleCount();
 	std::vector<Vector2> cclLightmapUvs {};
-	cclLightmapUvs.resize(numTris *3);
+	cclLightmapUvs.resize(numTris * 3);
 	size_t uvOffset = 0;
-	for(uint32_t idx=0;auto *subMesh : targetMeshes)
-	{
+	for(uint32_t idx = 0; auto *subMesh : targetMeshes) {
 		auto &verts = subMesh->GetVertices();
 		const std::vector<Vector2> *uvSet = nullptr;
 		if(m_lightMapDataCache)
-			uvSet = m_lightMapDataCache->FindLightmapUvs(targetMeshEntityUuids.at(idx),subMesh->GetUuid());
+			uvSet = m_lightMapDataCache->FindLightmapUvs(targetMeshEntityUuids.at(idx), subMesh->GetUuid());
 		else
 			uvSet = subMesh->GetUVSet("lightmap");
-		if(uvSet)
-		{
-			if(uvSet->size() != verts.size())
-			{
-				Con::cwar<<"WARNING: Number of UV coordinates ("<<uvSet->size()<<
-					") in lightmap UV set does not match number of mesh vertices ("<<
-					verts.size()<<") of mesh with uuid "<<util::uuid_to_string(subMesh->GetUuid())<<
-					" of entity with uuid "<<util::uuid_to_string(targetMeshEntityUuids.at(idx))<<
-					"! Mesh will be ignored!"<<std::endl;
+		if(uvSet) {
+			if(uvSet->size() != verts.size()) {
+				Con::cwar << "WARNING: Number of UV coordinates (" << uvSet->size() << ") in lightmap UV set does not match number of mesh vertices (" << verts.size() << ") of mesh with uuid " << util::uuid_to_string(subMesh->GetUuid()) << " of entity with uuid "
+				          << util::uuid_to_string(targetMeshEntityUuids.at(idx)) << "! Mesh will be ignored!" << std::endl;
 				++idx;
 				continue;
 			}
-			if(uvOffset +verts.size() > cclLightmapUvs.size())
-				throw std::logic_error{"Number of mesh vertices exceeds expected number!"};
-			for(auto i=decltype(verts.size()){0u};i<verts.size();++i)
-				cclLightmapUvs.at(uvOffset +i) = uvSet->at(i);
+			if(uvOffset + verts.size() > cclLightmapUvs.size())
+				throw std::logic_error {"Number of mesh vertices exceeds expected number!"};
+			for(auto i = decltype(verts.size()) {0u}; i < verts.size(); ++i)
+				cclLightmapUvs.at(uvOffset + i) = uvSet->at(i);
 		}
 		uvOffset += verts.size();
 		++idx;
@@ -269,37 +249,33 @@ void cycles::Scene::BuildLightMapObject()
 	mesh->SetLightmapUVs(std::move(cclLightmapUvs));
 	m_rtScene->SetBakeTarget(*o);
 }
-void cycles::Scene::AddLightmapBakeTarget(BaseEntity &ent) {m_lightMapTargets.push_back(ent.GetHandle());}
-void cycles::Scene::SetLightmapDataCache(LightmapDataCache *cache) {m_lightMapDataCache = cache ? cache->shared_from_this() : nullptr;}
+void cycles::Scene::AddLightmapBakeTarget(BaseEntity &ent) { m_lightMapTargets.push_back(ent.GetHandle()); }
+void cycles::Scene::SetLightmapDataCache(LightmapDataCache *cache) { m_lightMapDataCache = cache ? cache->shared_from_this() : nullptr; }
 
-unirender::PShader cycles::Cache::CreateShader(Material &mat,const std::string &meshName,const ShaderInfo &shaderInfo) const
+unirender::PShader cycles::Cache::CreateShader(Material &mat, const std::string &meshName, const ShaderInfo &shaderInfo) const
 {
 	auto it = m_materialToShader.find(&mat);
 	if(it != m_materialToShader.end())
 		return m_shaderCache->GetShader(it->second);
 	auto &matShader = mat.GetShaderIdentifier();
-	if(ustring::compare<std::string>(matShader,"nodraw",false))
+	if(ustring::compare<std::string>(matShader, "nodraw", false))
 		return nullptr;
 	std::string cyclesShader = "pbr";
 	auto &dataBlock = mat.GetDataBlock();
 	auto cyclesBlock = dataBlock->GetBlock("unirender");
 	auto &shaderManager = get_shader_manager();
 	if(cyclesBlock)
-		cyclesShader = cyclesBlock->GetString("shader","pbr");
-	else
-	{
+		cyclesShader = cyclesBlock->GetString("shader", "pbr");
+	else {
 		auto matShader = mat.GetShaderIdentifier();
 		ustring::to_lower(matShader);
 		if(shaderManager.IsShaderRegistered(matShader))
 			cyclesShader = matShader;
 	}
-	if(ustring::compare<std::string>(cyclesShader,"nodraw",false))
+	if(ustring::compare<std::string>(cyclesShader, "nodraw", false))
 		return nullptr;
-	
-	auto shader = shaderManager.CreateShader(
-		get_node_manager(),cyclesShader,shaderInfo.entity.has_value() ? *shaderInfo.entity : nullptr,
-		shaderInfo.subMesh.has_value() ? *shaderInfo.subMesh : nullptr,mat
-	);
+
+	auto shader = shaderManager.CreateShader(get_node_manager(), cyclesShader, shaderInfo.entity.has_value() ? *shaderInfo.entity : nullptr, shaderInfo.subMesh.has_value() ? *shaderInfo.subMesh : nullptr, mat);
 	if(shader == nullptr)
 		return nullptr;
 	auto rtShader = unirender::Shader::Create<unirender::GenericShader>();

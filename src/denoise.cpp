@@ -10,25 +10,22 @@
 #include <sharedutils/util_parallel_job.hpp>
 #include "pr_cycles/scene.hpp"
 
-class DenoiseWorker
-	: public util::ParallelWorker<std::shared_ptr<uimg::ImageBuffer>>
-{
-public:
+class DenoiseWorker : public util::ParallelWorker<std::shared_ptr<uimg::ImageBuffer>> {
+  public:
 	DenoiseWorker(uimg::ImageBuffer &imgBuffer);
 	using util::ParallelWorker<std::shared_ptr<uimg::ImageBuffer>>::Cancel;
 	virtual std::shared_ptr<uimg::ImageBuffer> GetResult() override;
-private:
+  private:
 	std::shared_ptr<uimg::ImageBuffer> m_imgBuffer = nullptr;
-	template<typename TJob,typename... TARGS>
-		friend util::ParallelJob<typename TJob::RESULT_TYPE> util::create_parallel_job(TARGS&& ...args);
+	template<typename TJob, typename... TARGS>
+	friend util::ParallelJob<typename TJob::RESULT_TYPE> util::create_parallel_job(TARGS &&...args);
 };
 
-DenoiseWorker::DenoiseWorker(uimg::ImageBuffer &imgBuffer)
-	: m_imgBuffer{imgBuffer.shared_from_this()}
+DenoiseWorker::DenoiseWorker(uimg::ImageBuffer &imgBuffer) : m_imgBuffer {imgBuffer.shared_from_this()}
 {
 	AddThread([this]() {
 		unirender::denoise::Info denoiseInfo {};
-		auto success = unirender::denoise::denoise(denoiseInfo,*m_imgBuffer,nullptr,nullptr,[this](float progress) -> bool {
+		auto success = unirender::denoise::denoise(denoiseInfo, *m_imgBuffer, nullptr, nullptr, [this](float progress) -> bool {
 			UpdateProgress(progress);
 			return !IsCancelled();
 		});
@@ -37,9 +34,6 @@ DenoiseWorker::DenoiseWorker(uimg::ImageBuffer &imgBuffer)
 		SetStatus(success ? util::JobStatus::Successful : util::JobStatus::Failed);
 	});
 }
-std::shared_ptr<uimg::ImageBuffer> DenoiseWorker::GetResult() {return m_imgBuffer;}
+std::shared_ptr<uimg::ImageBuffer> DenoiseWorker::GetResult() { return m_imgBuffer; }
 
-util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> pragma::modules::cycles::denoise(uimg::ImageBuffer &imgBuffer)
-{
-	return util::create_parallel_job<DenoiseWorker>(imgBuffer);
-}
+util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> pragma::modules::cycles::denoise(uimg::ImageBuffer &imgBuffer) { return util::create_parallel_job<DenoiseWorker>(imgBuffer); }

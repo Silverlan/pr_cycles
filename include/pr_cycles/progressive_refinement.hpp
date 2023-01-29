@@ -16,20 +16,20 @@
 #include <util_raytracing/tilemanager.hpp>
 #include <util_raytracing/renderer.hpp>
 
-namespace raytracing {class Scene;};
-namespace prosper {class Texture; class IImage; class IPrimaryCommandBuffer; class IFence;};
-namespace pragma::modules::cycles
-{
-	class DenoiseTexture
-	{
-	public:
-		enum class DenoisingState : uint8_t
-		{
-			Initial = 0,
-			Denoising,
-			Complete
-		};
-		DenoiseTexture(uint32_t w,uint32_t h);
+namespace raytracing {
+	class Scene;
+};
+namespace prosper {
+	class Texture;
+	class IImage;
+	class IPrimaryCommandBuffer;
+	class IFence;
+};
+namespace pragma::modules::cycles {
+	class DenoiseTexture {
+	  public:
+		enum class DenoisingState : uint8_t { Initial = 0, Denoising, Complete };
+		DenoiseTexture(uint32_t w, uint32_t h);
 		~DenoiseTexture();
 
 		void Denoise();
@@ -37,7 +37,7 @@ namespace pragma::modules::cycles
 		bool IsDenoisingComplete() const;
 		void AppendTile(unirender::TileManager::TileData &&tileData);
 		std::shared_ptr<uimg::ImageBuffer> GetDenoisedImageData() const;
-	private:
+	  private:
 		void UpdatePendingTiles();
 		void RunDenoise();
 
@@ -53,15 +53,14 @@ namespace pragma::modules::cycles
 		std::thread m_thread;
 	};
 
-	class ProgressiveTexture
-	{
-	public:
+	class ProgressiveTexture {
+	  public:
 		~ProgressiveTexture();
 		void Initialize(unirender::Renderer &renderer);
 		void Update();
 		std::shared_ptr<prosper::Texture> GetTexture() const;
-	private:
-		std::shared_ptr<prosper::IImage> CreateImage(uint32_t width,uint32_t height,bool onDevice) const;
+	  private:
+		std::shared_ptr<prosper::IImage> CreateImage(uint32_t width, uint32_t height, bool onDevice) const;
 		Vector2i m_tileSize;
 		std::shared_ptr<prosper::IPrimaryCommandBuffer> m_cmdBuffer = nullptr;
 		std::shared_ptr<prosper::IFence> m_fence = nullptr;

@@ -22,13 +22,12 @@ using namespace pragma::modules;
 
 extern DLLCLIENT CGame *c_game;
 
-void cycles::Scene::Add3DSkybox(pragma::CSceneComponent &gameScene,pragma::CSkyCameraComponent &skyCam,const Vector3 &camPos)
+void cycles::Scene::Add3DSkybox(pragma::CSceneComponent &gameScene, pragma::CSkyCameraComponent &skyCam, const Vector3 &camPos)
 {
-	std::unordered_map<CBaseEntity*,std::unordered_set<ModelSubMesh*>> entMeshes;
+	std::unordered_map<CBaseEntity *, std::unordered_set<ModelSubMesh *>> entMeshes;
 	auto fIterateRenderQueue = [&entMeshes](pragma::rendering::RenderQueue &renderQueue) {
-		for(auto &item : renderQueue.queue)
-		{
-			auto *ent = static_cast<CBaseEntity*>(c_game->GetEntityByLocalIndex(item.entity));
+		for(auto &item : renderQueue.queue) {
+			auto *ent = static_cast<CBaseEntity *>(c_game->GetEntityByLocalIndex(item.entity));
 			if(!ent)
 				continue;
 			auto renderC = ent->GetComponent<pragma::CRenderComponent>();
@@ -37,7 +36,7 @@ void cycles::Scene::Add3DSkybox(pragma::CSceneComponent &gameScene,pragma::CSkyC
 			auto &renderMeshes = renderC->GetRenderMeshes();
 			auto itEnt = entMeshes.find(ent);
 			if(itEnt == entMeshes.end())
-				itEnt = entMeshes.insert(std::make_pair(ent,std::unordered_set<ModelSubMesh*>{})).first;
+				itEnt = entMeshes.insert(std::make_pair(ent, std::unordered_set<ModelSubMesh *> {})).first;
 			for(auto &mesh : renderMeshes)
 				itEnt->second.insert(mesh.get());
 		}
@@ -46,30 +45,28 @@ void cycles::Scene::Add3DSkybox(pragma::CSceneComponent &gameScene,pragma::CSkyC
 	auto renderQueue = pragma::rendering::RenderQueue::Create("unirender_3d_sky");
 	auto translucentRenderQueue = pragma::rendering::RenderQueue::Create("unirender_3d_sky_translucent");
 
-	pragma::rendering::RenderMask inclusionMask,exclusionMask;
-	c_game->GetPrimaryCameraRenderMask(inclusionMask,exclusionMask);
+	pragma::rendering::RenderMask inclusionMask, exclusionMask;
+	c_game->GetPrimaryCameraRenderMask(inclusionMask, exclusionMask);
 	auto mask = c_game->GetInclusiveRenderMasks();
 	mask |= inclusionMask;
 	mask &= ~exclusionMask;
 
-	skyCam.BuildSkyMeshRenderQueues(gameScene,RenderFlags::All,mask,false /* enableClipping */,*renderQueue,*translucentRenderQueue);
+	skyCam.BuildSkyMeshRenderQueues(gameScene, RenderFlags::All, mask, false /* enableClipping */, *renderQueue, *translucentRenderQueue);
 	fIterateRenderQueue(*renderQueue);
 	fIterateRenderQueue(*translucentRenderQueue);
 
 	auto &posSkyCam = skyCam.GetEntity().GetPosition();
 	auto scale = skyCam.GetSkyboxScale();
-	for(auto &pair : entMeshes)
-	{
+	for(auto &pair : entMeshes) {
 		auto &subMeshes = pair.second;
-		auto entObj = m_cache->AddEntity(*pair.first,nullptr,nullptr,[&subMeshes](ModelSubMesh &subMesh,const umath::ScaledTransform &pose) -> bool {
-			return subMeshes.find(&subMesh) != subMeshes.end();
-		},"3d_sky");
+		auto entObj = m_cache->AddEntity(
+		  *pair.first, nullptr, nullptr, [&subMeshes](ModelSubMesh &subMesh, const umath::ScaledTransform &pose) -> bool { return subMeshes.find(&subMesh) != subMeshes.end(); }, "3d_sky");
 		if(!entObj)
 			continue;
 		auto entPos = entObj->GetPos();
 		entPos -= posSkyCam;
 		entPos *= scale;
 		entObj->SetPos(entPos);
-		entObj->SetScale(Vector3{scale,scale,scale});
+		entObj->SetScale(Vector3 {scale, scale, scale});
 	}
 }

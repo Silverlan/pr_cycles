@@ -9,52 +9,39 @@
 #include "pr_cycles/subdivision.hpp"
 #include <mathutil/umath.h>
 
-struct OsdVertexWeight
-{
-	OsdVertexWeight()
-	{
-		Clear();
-	}
+struct OsdVertexWeight {
+	OsdVertexWeight() { Clear(); }
 
-	OsdVertexWeight(OsdVertexWeight const & src)
-		: vw{src.vw}
-	{}
+	OsdVertexWeight(OsdVertexWeight const &src) : vw {src.vw} {}
 
-	void Clear()
-	{
-		vw = {};
-	}
+	void Clear() { vw = {}; }
 
-	void AddWithWeight(OsdVertexWeight const & src, float weight)
+	void AddWithWeight(OsdVertexWeight const &src, float weight)
 	{
 		// ??
 	}
 	umath::VertexWeight vw {};
 };
 
-void pragma::modules::cycles::subdivide_mesh(
-	const std::vector<umath::Vertex> &verts,const std::vector<int32_t> &tris,std::vector<umath::Vertex> &outVerts,std::vector<int32_t> &outTris,uint32_t subDivLevel,
-	const std::vector<std::shared_ptr<BaseChannelData>> &miscAttributes
-)
+void pragma::modules::cycles::subdivide_mesh(const std::vector<umath::Vertex> &verts, const std::vector<int32_t> &tris, std::vector<umath::Vertex> &outVerts, std::vector<int32_t> &outTris, uint32_t subDivLevel, const std::vector<std::shared_ptr<BaseChannelData>> &miscAttributes)
 {
 	std::vector<std::shared_ptr<BaseChannelData>> vertexAttributes {};
-	vertexAttributes.reserve(miscAttributes.size() +3);
-	auto vertexData = std::make_shared<ChannelData<OsdVertex>>([](BaseChannelData &cd,FaceVertexIndex faceVertexIndex,umath::Vertex &v,int idx) {v.position = static_cast<OsdVertex*>(cd.GetElementPtr(idx))->value;});
+	vertexAttributes.reserve(miscAttributes.size() + 3);
+	auto vertexData = std::make_shared<ChannelData<OsdVertex>>([](BaseChannelData &cd, FaceVertexIndex faceVertexIndex, umath::Vertex &v, int idx) { v.position = static_cast<OsdVertex *>(cd.GetElementPtr(idx))->value; });
 	vertexAttributes.push_back(vertexData);
 
-	auto uvData = std::make_shared<ChannelData<OsdUV>>([](BaseChannelData &cd,FaceVertexIndex faceVertexIndex,umath::Vertex &v,int idx) {v.uv = static_cast<OsdUV*>(cd.GetElementPtr(idx))->value;});
+	auto uvData = std::make_shared<ChannelData<OsdUV>>([](BaseChannelData &cd, FaceVertexIndex faceVertexIndex, umath::Vertex &v, int idx) { v.uv = static_cast<OsdUV *>(cd.GetElementPtr(idx))->value; });
 	vertexAttributes.push_back(uvData);
 	uvData->ReserveBuffer(verts.size());
 
-	auto normData = std::make_shared<ChannelData<OsdVertex>>([](BaseChannelData &cd,FaceVertexIndex faceVertexIndex,umath::Vertex &v,int idx) {v.normal = static_cast<OsdVertex*>(cd.GetElementPtr(idx))->value;});
+	auto normData = std::make_shared<ChannelData<OsdVertex>>([](BaseChannelData &cd, FaceVertexIndex faceVertexIndex, umath::Vertex &v, int idx) { v.normal = static_cast<OsdVertex *>(cd.GetElementPtr(idx))->value; });
 	vertexAttributes.push_back(normData);
 	normData->ReserveBuffer(verts.size());
 
 	for(auto &attr : miscAttributes)
 		vertexAttributes.push_back(attr);
 
-	for(auto i=decltype(verts.size()){0u};i<verts.size();++i)
-	{
+	for(auto i = decltype(verts.size()) {0u}; i < verts.size(); ++i) {
 		auto &v = verts.at(i);
 		uvData->buffer.push_back({v.uv});
 		normData->buffer.push_back({v.normal});
@@ -64,17 +51,14 @@ void pragma::modules::cycles::subdivide_mesh(
 	originalVertexIndexToUniqueIndex.resize(verts.size());
 	vertexData->ReserveBuffer(verts.size());
 	constexpr float VERTEX_EPSILON = 0.02f;
-	for(auto i=decltype(verts.size()){0u};i<verts.size();++i)
-	{
+	for(auto i = decltype(verts.size()) {0u}; i < verts.size(); ++i) {
 		auto &v0 = verts.at(i);
 
 		auto wasInserted = false;
-		for(auto j=decltype(verts.size()){0u};j<i;++j)
-		{
+		for(auto j = decltype(verts.size()) {0u}; j < i; ++j) {
 			auto &v1 = verts.at(j);
-			auto d = uvec::distance_sqr(v0.position,v1.position);
-			if(d < VERTEX_EPSILON)
-			{
+			auto d = uvec::distance_sqr(v0.position, v1.position);
+			if(d < VERTEX_EPSILON) {
 				wasInserted = true;
 				originalVertexIndexToUniqueIndex.at(i) = originalVertexIndexToUniqueIndex.at(j);
 				break;
@@ -84,10 +68,10 @@ void pragma::modules::cycles::subdivide_mesh(
 			continue;
 		vertexData->buffer.push_back({});
 		vertexData->buffer.back().value = v0.position;
-		originalVertexIndexToUniqueIndex.at(i) = vertexData->buffer.size() -1;
+		originalVertexIndexToUniqueIndex.at(i) = vertexData->buffer.size() - 1;
 	}
 
-	std::cout<<"Reduced mesh vertex count from "<<verts.size()<<" to "<<vertexData->buffer.size()<<std::endl;
+	std::cout << "Reduced mesh vertex count from " << verts.size() << " to " << vertexData->buffer.size() << std::endl;
 
 	auto triIndicesForUniqueVerts = tris;
 	for(auto &idx : triIndicesForUniqueVerts)
@@ -101,10 +85,10 @@ void pragma::modules::cycles::subdivide_mesh(
 	options.SetTriangleSubdivision(OpenSubdiv::Sdc::Options::TriangleSubdivision::TRI_SUB_SMOOTH);
 
 	constexpr uint32_t numVertsPerFace = 3;
-	auto numFaces = triIndicesForUniqueVerts.size() /numVertsPerFace;
+	auto numFaces = triIndicesForUniqueVerts.size() / numVertsPerFace;
 
 	std::vector<int> iVertsPerFace {};
-	iVertsPerFace.resize(numFaces,numVertsPerFace);
+	iVertsPerFace.resize(numFaces, numVertsPerFace);
 
 	OpenSubdiv::Far::TopologyDescriptor desc;
 	desc.numVertices = verts.size();
@@ -115,35 +99,33 @@ void pragma::modules::cycles::subdivide_mesh(
 	OpenSubdiv::Far::TopologyDescriptor::FVarChannel channelInfo {};
 	channelInfo.numValues = verts.size();
 	channelInfo.valueIndices = tris.data();
-	auto numChannels = vertexAttributes.size() -1;
+	auto numChannels = vertexAttributes.size() - 1;
 	std::vector<OpenSubdiv::Far::TopologyDescriptor::FVarChannel> channels {};
-	channels.resize(numChannels,channelInfo);
+	channels.resize(numChannels, channelInfo);
 
 	desc.numFVarChannels = channels.size();
 	desc.fvarChannels = channels.data();
 
-	auto *refiner = OpenSubdiv::Far::TopologyRefinerFactory<OpenSubdiv::Far::TopologyDescriptor>::Create(desc,OpenSubdiv::Far::TopologyRefinerFactory<OpenSubdiv::Far::TopologyDescriptor>::Options(type,options));
+	auto *refiner = OpenSubdiv::Far::TopologyRefinerFactory<OpenSubdiv::Far::TopologyDescriptor>::Create(desc, OpenSubdiv::Far::TopologyRefinerFactory<OpenSubdiv::Far::TopologyDescriptor>::Options(type, options));
 
 	OpenSubdiv::Far::TopologyRefiner::UniformOptions refineOptions(subDivLevel);
 	refineOptions.fullTopologyInLastLevel = true;
 	refiner->RefineUniform(refineOptions);
 
-	for(auto i=decltype(vertexAttributes.size()){0u};i<vertexAttributes.size();++i)
-		vertexAttributes.at(i)->ResizeBuffer((i == 0) ? refiner->GetNumVerticesTotal() : refiner->GetNumFVarValuesTotal(i -1));
+	for(auto i = decltype(vertexAttributes.size()) {0u}; i < vertexAttributes.size(); ++i)
+		vertexAttributes.at(i)->ResizeBuffer((i == 0) ? refiner->GetNumVerticesTotal() : refiner->GetNumFVarValuesTotal(i - 1));
 
-	OpenSubdiv::Far::PrimvarRefiner primvarRefiner{*refiner};
-	std::vector<uint8_t*> attrPtrs {};
+	OpenSubdiv::Far::PrimvarRefiner primvarRefiner {*refiner};
+	std::vector<uint8_t *> attrPtrs {};
 	attrPtrs.reserve(vertexAttributes.size());
 	for(auto &attr : vertexAttributes)
-		attrPtrs.push_back(static_cast<uint8_t*>(attr->GetDataPtr()));
-	for(auto level=decltype(subDivLevel){1};level<=subDivLevel;++level)
-	{
-		for(auto i=decltype(attrPtrs.size()){0u};i<attrPtrs.size();++i)
-		{
+		attrPtrs.push_back(static_cast<uint8_t *>(attr->GetDataPtr()));
+	for(auto level = decltype(subDivLevel) {1}; level <= subDivLevel; ++level) {
+		for(auto i = decltype(attrPtrs.size()) {0u}; i < attrPtrs.size(); ++i) {
 			auto *src = attrPtrs.at(i);
-			auto n = (i == 0) ? refiner->GetLevel(level -1).GetNumVertices() : refiner->GetLevel(level -1).GetNumFVarValues(i -1);
-			auto *dst = src +n *vertexAttributes.at(i)->GetElementSize();
-			vertexAttributes.at(i)->Interpolate(primvarRefiner,level,src,dst,i);
+			auto n = (i == 0) ? refiner->GetLevel(level - 1).GetNumVertices() : refiner->GetLevel(level - 1).GetNumFVarValues(i - 1);
+			auto *dst = src + n * vertexAttributes.at(i)->GetElementSize();
+			vertexAttributes.at(i)->Interpolate(primvarRefiner, level, src, dst, i);
 			attrPtrs.at(i) = dst;
 		}
 	}
@@ -153,46 +135,41 @@ void pragma::modules::cycles::subdivide_mesh(
 	std::vector<int> firstOfLastAttrs {};
 	numResultAttrs.resize(vertexAttributes.size());
 	firstOfLastAttrs.resize(vertexAttributes.size());
-	for(auto i=decltype(vertexAttributes.size()){0u};i<vertexAttributes.size();++i)
-	{
-		numResultAttrs.at(i) = (i == 0) ? refLastLevel.GetNumVertices() : refLastLevel.GetNumFVarValues(i -1);
-		firstOfLastAttrs.at(i) = (i == 0) ? (refiner->GetNumVerticesTotal() -numResultAttrs.at(i)) : (refiner->GetNumFVarValuesTotal(i -1) -numResultAttrs.at(i));
+	for(auto i = decltype(vertexAttributes.size()) {0u}; i < vertexAttributes.size(); ++i) {
+		numResultAttrs.at(i) = (i == 0) ? refLastLevel.GetNumVertices() : refLastLevel.GetNumFVarValues(i - 1);
+		firstOfLastAttrs.at(i) = (i == 0) ? (refiner->GetNumVerticesTotal() - numResultAttrs.at(i)) : (refiner->GetNumFVarValuesTotal(i - 1) - numResultAttrs.at(i));
 	}
-	
+
 	auto numResultFaces = refLastLevel.GetNumFaces();
-	outVerts.reserve(numResultFaces *3);
-	outTris.reserve(numResultFaces *3);
+	outVerts.reserve(numResultFaces * 3);
+	outTris.reserve(numResultFaces * 3);
 	for(auto &attr : vertexAttributes)
 		attr->PrepareResultData(numResultFaces);
-	for(auto face=decltype(numResultFaces){0u};face<numResultFaces;++face)
-	{
+	for(auto face = decltype(numResultFaces) {0u}; face < numResultFaces; ++face) {
 		std::vector<OpenSubdiv::Far::ConstIndexArray> attrIndices;
 		attrIndices.reserve(numResultAttrs.size());
-		for(auto i=decltype(numResultAttrs.size()){0u};i<numResultAttrs.size();++i)
-			attrIndices.push_back((i == 0) ? refLastLevel.GetFaceVertices(face) : refLastLevel.GetFaceFVarValues(face,i -1));
+		for(auto i = decltype(numResultAttrs.size()) {0u}; i < numResultAttrs.size(); ++i)
+			attrIndices.push_back((i == 0) ? refLastLevel.GetFaceVertices(face) : refLastLevel.GetFaceFVarValues(face, i - 1));
 
-		for(uint8_t i=0;i<3;++i)
-		{
+		for(uint8_t i = 0; i < 3; ++i) {
 			umath::Vertex v {};
-			for(auto j=decltype(numResultAttrs.size()){0u};j<numResultAttrs.size();++j)
-			{
+			for(auto j = decltype(numResultAttrs.size()) {0u}; j < numResultAttrs.size(); ++j) {
 				auto &attr = vertexAttributes.at(j);
-				auto idx = firstOfLastAttrs.at(j) +attrIndices.at(j)[i];
-				attr->Apply(face *3 +i,v,idx);
+				auto idx = firstOfLastAttrs.at(j) + attrIndices.at(j)[i];
+				attr->Apply(face * 3 + i, v, idx);
 			}
-			auto it = outVerts.end();/*std::find_if(outVerts.begin(),outVerts.end(),[&v,VERTEX_EPSILON](const umath::Vertex &vOther) {
+			auto it = outVerts.end(); /*std::find_if(outVerts.begin(),outVerts.end(),[&v,VERTEX_EPSILON](const umath::Vertex &vOther) {
 				return vOther.Equal(v,VERTEX_EPSILON);
 			});*/
-			if(it == outVerts.end())
-			{
+			if(it == outVerts.end()) {
 				outVerts.push_back(v);
-				it = outVerts.end() -1;
+				it = outVerts.end() - 1;
 			}
-			outTris.push_back(it -outVerts.begin());
+			outTris.push_back(it - outVerts.begin());
 		}
 	}
 
-	std::cout<<"Reduced final vertex count from "<<refLastLevel.GetNumVertices()<<" to "<<outVerts.size()<<std::endl;
+	std::cout << "Reduced final vertex count from " << refLastLevel.GetNumVertices() << " to " << outVerts.size() << std::endl;
 
 #if 0
 	outVerts.reserve(numVerts);
