@@ -413,7 +413,7 @@ unirender::PObject pragma::modules::cycles::Cache::AddEntity(BaseEntity &ent, st
 	// Create the object using the mesh
 	auto &t = ent.GetPose();
 	auto o = unirender::Object::Create(*mesh);
-	if(unirender::Scene::IsRenderSceneMode(renderMode) || renderMode == unirender::Scene::RenderMode::BakeDiffuseLighting) {
+	if(unirender::Scene::IsRenderSceneMode(renderMode) || unirender::Scene::IsLightmapRenderMode(renderMode)) {
 		o->SetPos(t.GetOrigin());
 		o->SetRotation(t.GetRotation());
 		o->SetScale(t.GetScale());
