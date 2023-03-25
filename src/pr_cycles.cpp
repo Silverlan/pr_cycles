@@ -18,6 +18,7 @@ namespace pragma::asset {
 #include <pragma/lua/luaapi.h>
 #include <prosper_context.hpp>
 #include <pragma/c_engine.h>
+#include <pragma/clientstate/clientstate.h>
 #include <pragma/game/c_game.h>
 #include <pragma/entities/baseentity.h>
 #include <pragma/model/model.h>
@@ -846,17 +847,41 @@ bool PRAGMA_EXPORT pragma_attach(std::string &errMsg)
 
 void PRAGMA_EXPORT pragma_detach(std::string &errMsg) { unirender::set_log_handler(); }
 
+static luabind::object g_compileCallback {};
 void PRAGMA_EXPORT pragma_terminate_lua(Lua::Interface &l)
 {
 	g_nodeManager = nullptr;
 	g_shaderManager = nullptr;
 	unirender::set_logger(nullptr);
+	unirender::set_kernel_compile_callback(nullptr);
+	g_compileCallback = Lua::nil;
 }
 
 void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 {
 	auto logger = pragma::register_logger("unirender");
 	unirender::set_logger(spdlog::get("unirender"));
+
+	auto *lstate = l.GetState();
+	unirender::set_kernel_compile_callback([lstate](bool building) {
+		auto *engine = pragma::get_engine();
+		if(!engine)
+			return;
+		engine->AddTickEvent([building, lstate]() {
+			auto *engine = pragma::get_engine();
+			auto *cl = engine->GetClientState();
+			auto *game = cl ? cl->GetGameState() : nullptr;
+			if(!game)
+				return;
+			auto *l = game->GetLuaState();
+			if(l != lstate)
+				return;
+			if(!g_compileCallback)
+				return;
+			g_compileCallback(building);
+		});
+	});
+
 	auto &modCycles = l.RegisterLibrary("unirender",
 	  std::unordered_map<std::string, int32_t (*)(lua_State *)> {{"create_scene", static_cast<int32_t (*)(lua_State *)>([](lua_State *l) -> int32_t {
 		                                                              auto renderMode = static_cast<unirender::Scene::RenderMode>(Lua::CheckInt(l, 1));
@@ -902,6 +927,16 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 		     Lua::Push(l, job);
 		     return 1;
 	     })},
+	    {"set_kernel_compile_callback",
+	      +[](lua_State *l) -> int32_t {
+		      if(!Lua::IsSet(l, 1)) {
+			      g_compileCallback = Lua::nil;
+			      return 0;
+			  }
+		      Lua::CheckFunction(l, 1);
+		      g_compileCallback = luabind::object {luabind::from_stack(l, 1)};
+			  return 0;
+	      }},
 	    {"create_cache", static_cast<int32_t (*)(lua_State *)>([](lua_State *l) -> int32_t {
 		     Lua::Push(l, std::make_shared<pragma::modules::cycles::Cache>(unirender::Scene::RenderMode::RenderImage));
 		     return 1;
@@ -1093,6 +1128,8 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 	defRenderer.def("GetScene",
 	  static_cast<std::shared_ptr<cycles::Scene> (*)(lua_State *, pragma::modules::cycles::Renderer &)>([](lua_State *l, pragma::modules::cycles::Renderer &renderer) -> std::shared_ptr<cycles::Scene> { return std::make_shared<cycles::Scene>(renderer->GetScene()); }));
 	defRenderer.def("HasRenderedSamplesForAllTiles", static_cast<bool (*)(lua_State *, pragma::modules::cycles::Renderer &)>([](lua_State *l, pragma::modules::cycles::Renderer &renderer) -> bool { return renderer->GetTileManager().AllTilesHaveRenderedSamples(); }));
+	defRenderer.def(
+	  "IsBuildingKernels", +[](pragma::modules::cycles::Renderer &renderer) { return renderer->IsBuildingKernels(); });
 	defRenderer.add_static_constant("FLAG_NONE", umath::to_integral(unirender::Renderer::Flags::None));
 	defRenderer.add_static_constant("FLAG_ENABLE_LIVE_EDITING_BIT", umath::to_integral(unirender::Renderer::Flags::EnableLiveEditing));
 	modCycles[defRenderer];
