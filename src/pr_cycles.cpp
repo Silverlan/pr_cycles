@@ -22,6 +22,7 @@ namespace pragma::asset {
 #include <pragma/entities/baseentity.h>
 #include <pragma/model/model.h>
 #include <pragma/model/c_modelmesh.h>
+#include <pragma/logging.hpp>
 #include <pragma/entities/components/c_player_component.hpp>
 #include <pragma/entities/components/c_color_component.hpp>
 #include <pragma/entities/components/c_model_component.hpp>
@@ -849,10 +850,13 @@ void PRAGMA_EXPORT pragma_terminate_lua(Lua::Interface &l)
 {
 	g_nodeManager = nullptr;
 	g_shaderManager = nullptr;
+	unirender::set_logger(nullptr);
 }
 
 void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 {
+	auto logger = pragma::register_logger("unirender");
+	unirender::set_logger(spdlog::get("unirender"));
 	auto &modCycles = l.RegisterLibrary("unirender",
 	  std::unordered_map<std::string, int32_t (*)(lua_State *)> {{"create_scene", static_cast<int32_t (*)(lua_State *)>([](lua_State *l) -> int32_t {
 		                                                              auto renderMode = static_cast<unirender::Scene::RenderMode>(Lua::CheckInt(l, 1));
@@ -910,6 +914,9 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 	    {"create_renderer", static_cast<int32_t (*)(lua_State *)>([](lua_State *l) -> int32_t {
 		     auto &scene = Lua::Check<cycles::Scene>(l, 1);
 		     std::string rendererIdentifier = Lua::CheckString(l, 2);
+		     auto logger = spdlog::get("unirender");
+		     if(logger)
+			     logger->info("Creating renderer {}...", rendererIdentifier);
 		     auto flags = unirender::Renderer::Flags::None;
 		     if(Lua::IsSet(l, 3))
 			     flags = static_cast<unirender::Renderer::Flags>(Lua::CheckInt(l, 3));
