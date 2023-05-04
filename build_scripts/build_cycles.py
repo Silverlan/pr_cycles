@@ -124,7 +124,7 @@ os.chdir(deps_dir)
 cyclesRoot = deps_dir +"/cycles"
 if not Path(cyclesRoot).is_dir():
 	print_msg("cycles not found. Downloading...")
-	git_clone("git://git.blender.org/cycles.git")
+	git_clone("https://github.com/blender/cycles.git")
 
 os.chdir(cyclesRoot)
 
