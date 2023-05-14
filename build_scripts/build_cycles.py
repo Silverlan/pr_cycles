@@ -190,8 +190,8 @@ if lastBuildCommit != curCommitId:
 		zlib = zlib_root +"/build/libz.a"
 	else:
 		zlib = zlib_lib
-	# OSL is disabled because we don't need it and it causes build errors on the GitHub runner.
-	args = ["-DWITH_CYCLES_CUDA_BINARIES=ON","-DWITH_CYCLES_DEVICE_OPTIX=ON","-DWITH_CYCLES_DEVICE_CUDA=ON","-DWITH_CYCLES_OSL=OFF","-DZLIB_INCLUDE_DIR=" +zlib_root,"-DZLIB_LIBRARY=" +zlib]
+	# OSL and Cycles hydra delegate are disabled because we don't need them and they cause build errors on the GitHub runner.
+	args = ["-DWITH_CYCLES_HYDRA_RENDER_DELEGATE=OFF","-DWITH_CYCLES_CUDA_BINARIES=ON","-DWITH_CYCLES_DEVICE_OPTIX=ON","-DWITH_CYCLES_DEVICE_CUDA=ON","-DWITH_CYCLES_OSL=OFF","-DZLIB_INCLUDE_DIR=" +zlib_root,"-DZLIB_LIBRARY=" +zlib]
 	if platform == "linux":
 		# Unfortunately, when building the dependencies ourselves, some of the lookup
 		# locations don't match what cycles expects, so we have to tell cycles where to
