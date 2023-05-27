@@ -178,7 +178,8 @@ if platform == "win32":
 	    git_clone("https://github.com/gflags/gflags.git")
 
 	os.chdir(gflags_root)
-	reset_to_commit("e171aa2")
+	# reset_to_commit("e171aa2") # Causes build errors for unknown reasons
+	subprocess.run(["git","reset","--hard","e171aa2"],check=True)
 
 	print_msg("Build gflags")
 	mkdir("build_files",cd=True)
