@@ -46,7 +46,7 @@ if not Path(oidn_root).is_dir():
     git_clone("https://github.com/OpenImageDenoise/oidn.git")
 
 os.chdir(oidn_root)
-subprocess.run(["git","reset","--hard","d959bac5b7130b31c41095811ddfbe58c4cf03f4"],check=True)
+reset_to_commit("d959bac5b7130b31c41095811ddfbe58c4cf03f4")
 
 print_msg("Build oidn")
 mkdir("build",cd=True)
@@ -70,7 +70,7 @@ if not Path(ocio_root).is_dir():
 os.chdir(ocio_root)
 # Note: Version 2.2.0 of OpenColorIO introduces a zlib dependency, which causes conflicts with our zlib installation, so we're stuck
 # with the older version for now.
-subprocess.run(["git","reset","--hard","4fa94918c2cf572dcaf61ca07016f3b5c231c14c"],check=True)
+reset_to_commit("4fa94918c2cf572dcaf61ca07016f3b5c231c14c")
 
 print_msg("Build ocio")
 mkdir("build",cd=True)
@@ -121,7 +121,7 @@ if not Path(subdiv_root).is_dir():
     git_clone("https://github.com/PixarAnimationStudios/OpenSubdiv.git")
 
 os.chdir(subdiv_root)
-subprocess.run(["git","reset","--hard","82ab1b9f54c87fdd7e989a3470d53e137b8ca270"],check=True)
+reset_to_commit("82ab1b9f54c87fdd7e989a3470d53e137b8ca270")
 
 print_msg("Build OpenSubdiv")
 mkdir("build",cd=True)
@@ -155,7 +155,7 @@ if platform == "win32":
 	    git_clone("https://github.com/google/glog")
 
 	os.chdir(glog_root)
-	subprocess.run(["git","reset","--hard","b33e3ba"],check=True)
+	reset_to_commit("b33e3ba")
 
 	print_msg("Build ocio")
 	mkdir("build",cd=True)
@@ -178,7 +178,7 @@ if platform == "win32":
 	    git_clone("https://github.com/gflags/gflags.git")
 
 	os.chdir(gflags_root)
-	subprocess.run(["git","reset","--hard","e171aa2"],check=True)
+	reset_to_commit("e171aa2")
 
 	print_msg("Build gflags")
 	mkdir("build_files",cd=True)
