@@ -136,8 +136,31 @@ if Path(lastbuildshaFile).is_file():
 targetCommit = cycles_commit_sha
 if lastBuildCommit != targetCommit:
 	print_msg("Downloading cycles dependencies...")
+	subprocess.run(["git","fetch"],check=True)
 	if platform == "win32":
-		subprocess.run([cyclesRoot +"/make.bat","update"],check=True,shell=True)
+		subprocess.run(["git","reset","--hard",targetCommit],check=True)
+
+		# Turn off cycles hydra render delegate
+		cyclesCmakePath = cyclesRoot +"/CMakeLists.txt"
+		strIdx = open(cyclesCmakePath, 'r').read().find('"Build Cycles Hydra render delegate" OFF')
+		if strIdx == -1:
+			replace_text_in_file(cyclesCmakePath,'"Build Cycles Hydra render delegate" ON','"Build Cycles Hydra render delegate" OFF')
+		#
+		
+		# For some reason Cycles does not link against OpenColorIO by default, even though it's required,
+		# so we have to brute force some more changes.
+		cyclesMacrosPath = cyclesRoot +"/src/cmake/macros.cmake"
+		strIdx = open(cyclesMacrosPath, 'r').read().find('list(APPEND ${libraries} ${OPENIMAGEIO_LIBRARIES})')
+		if strIdx == -1:
+			strIdx = open(cyclesMacrosPath, 'r').read().find('if(WITH_OPENCOLORIO)')
+			if strIdx != -1:
+				replace_text_in_file(cyclesMacrosPath,'if(WITH_OPENCOLORIO)','list(APPEND ${libraries} ${OPENIMAGEIO_LIBRARIES})\n  if(WITH_OPENCOLORIO)')
+		#
+		
+		scriptPath = cyclesRoot +"/src/cmake/make_update.py"
+		python_interpreter = sys.executable
+		command = [python_interpreter, scriptPath, "--no-cycles"]
+		subprocess.run(command)
 	else:
 		# Reset our changes from previous versions
 		subprocess.run(["git","reset","--hard"],check=True)
@@ -150,11 +173,11 @@ if lastBuildCommit != targetCommit:
 		command = [python_interpreter, scriptPath, "--no-libraries"]
 		subprocess.run(command)
 
-	# The update commit above will unfortunately update Cycles to the last commit. This behavior
-	# can't be disabled, so we have to reset the commit back to the one we want here.
-	# This can cause issues if the Cycles update-script updates the dependencies to newer versions
-	# that aren't compatible with the commit we're using, but it can't be helped.
-	subprocess.run(["git","reset","--hard",targetCommit],check=True)
+		# The update commit above will unfortunately update Cycles to the last commit. This behavior
+		# can't be disabled, so we have to reset the commit back to the one we want here.
+		# This can cause issues if the Cycles update-script updates the dependencies to newer versions
+		# that aren't compatible with the commit we're using, but it can't be helped.
+		subprocess.run(["git","reset","--hard",targetCommit],check=True)
 
 if platform == "linux":
 	# Building the cycles executable causes build errors. We don't need it, but unfortunately cycles doesn't provide us with a
@@ -190,13 +213,20 @@ if lastBuildCommit != curCommitId:
 		zlib = zlib_root +"/build/libz.a"
 	else:
 		zlib = zlib_lib
-	# OSL and Cycles hydra delegate are disabled because we don't need them and they cause build errors on the GitHub runner.
-	args = ["-DWITH_CYCLES_HYDRA_RENDER_DELEGATE=OFF","-DWITH_CYCLES_CUDA_BINARIES=ON","-DWITH_CYCLES_DEVICE_OPTIX=ON","-DWITH_CYCLES_DEVICE_CUDA=ON","-DWITH_CYCLES_OSL=OFF","-DZLIB_INCLUDE_DIR=" +zlib_root,"-DZLIB_LIBRARY=" +zlib]
+	args = ["-DWITH_CYCLES_CUDA_BINARIES=ON","-DWITH_CYCLES_DEVICE_OPTIX=ON","-DWITH_CYCLES_DEVICE_CUDA=ON","-DZLIB_INCLUDE_DIR=" +zlib_root,"-DZLIB_LIBRARY=" +zlib]
+	
+	# OSL is disabled because we don't need it and it causes build errors on the GitHub runner.
+	args.append("-DWITH_CYCLES_OSL=OFF")
+
+	# Hydra delegate is disabled because we don't need it and it causes build errors on the (Windows) GitHub runner.
+	args.append("-DWITH_CYCLES_HYDRA_RENDER_DELEGATE=OFF")
+	args.append("-DWITH_CYCLES_USD=OFF")
+	
+	args.append("-DOPENIMAGEIO_ROOT_DIR:PATH=" +oiio_root_dir)
 	if platform == "linux":
 		# Unfortunately, when building the dependencies ourselves, some of the lookup
 		# locations don't match what cycles expects, so we have to tell cycles where to
 		# look for those dependencies here.
-		args.append("-DOPENIMAGEIO_ROOT_DIR:PATH=" +oiio_root_dir)
 		args.append("-DOPENCOLORIO_ROOT_DIR:PATH=" +cyclesDepsInstallLocation +"/ocio")
 		args.append("-DOPENSUBDIV_ROOT_DIR:PATH=" +cyclesDepsInstallLocation +"/osd")
 		args.append("-DOPENIMAGEDENOISE_ROOT_DIR:PATH=" +oidn_root_dir)
