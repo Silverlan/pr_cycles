@@ -29,6 +29,7 @@ namespace pragma::asset {
 #include <pragma/entities/components/c_model_component.hpp>
 #include <pragma/entities/components/c_render_component.hpp>
 #include <pragma/entities/components/c_toggle_component.hpp>
+#include <pragma/entities/c_skybox.h>
 #include <pragma/entities/components/c_light_map_receiver_component.hpp>
 #include <pragma/entities/environment/effects/c_env_particle_system.h>
 #include <pragma/entities/environment/c_sky_camera.hpp>
@@ -932,10 +933,10 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 		      if(!Lua::IsSet(l, 1)) {
 			      g_compileCallback = Lua::nil;
 			      return 0;
-			  }
+		      }
 		      Lua::CheckFunction(l, 1);
 		      g_compileCallback = luabind::object {luabind::from_stack(l, 1)};
-			  return 0;
+		      return 0;
 	      }},
 	    {"create_cache", static_cast<int32_t (*)(lua_State *)>([](lua_State *l) -> int32_t {
 		     Lua::Push(l, std::make_shared<pragma::modules::cycles::Cache>(unirender::Scene::RenderMode::RenderImage));
@@ -1102,6 +1103,15 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 		  auto uuid = ent.GetUuid();
 		  auto *o = renderer->FindActor(uuid);
 		  if(!o) {
+			  /*
+			  auto skyboxC = ent.GetComponent<pragma::CSkyboxComponent>();
+			  if(skyboxC.valid()) {
+				  auto &scene = renderer->GetScene();
+				  scene.SetSkyStrength(skyboxC->GetStrength());
+				  return true;
+			  }
+			  */
+
 			  auto lightC = ent.GetComponent<pragma::CLightComponent>();
 			  if(lightC.expired())
 				  return false;
@@ -1130,8 +1140,12 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 	defRenderer.def("HasRenderedSamplesForAllTiles", static_cast<bool (*)(lua_State *, pragma::modules::cycles::Renderer &)>([](lua_State *l, pragma::modules::cycles::Renderer &renderer) -> bool { return renderer->GetTileManager().AllTilesHaveRenderedSamples(); }));
 	defRenderer.def(
 	  "IsBuildingKernels", +[](pragma::modules::cycles::Renderer &renderer) { return renderer->IsBuildingKernels(); });
+	defRenderer.def(
+	  "IsFeatureAvailable", +[](pragma::modules::cycles::Renderer &renderer, unirender::Renderer::Feature feature) { return renderer->IsFeatureEnabled(feature); });
 	defRenderer.add_static_constant("FLAG_NONE", umath::to_integral(unirender::Renderer::Flags::None));
 	defRenderer.add_static_constant("FLAG_ENABLE_LIVE_EDITING_BIT", umath::to_integral(unirender::Renderer::Flags::EnableLiveEditing));
+	defRenderer.add_static_constant("FEATURE_FLAG_NONE", umath::to_integral(unirender::Renderer::Feature::None));
+	defRenderer.add_static_constant("FEATURE_FLAG_OPTIX_AVAILABLE_BIT", umath::to_integral(unirender::Renderer::Feature::OptiXAvailable));
 	modCycles[defRenderer];
 
 	auto defNode = luabind::class_<unirender::NodeDesc>("Node");
