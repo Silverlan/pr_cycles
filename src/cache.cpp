@@ -269,7 +269,6 @@ std::vector<std::shared_ptr<pragma::modules::cycles::Cache::MeshData>> pragma::m
 			auto meshData = CalcMeshData(mdl, *subMesh, hasAlphas, hasWrinkles, optMdlC, optAnimC);
 			if(opose.has_value()) {
 				for(auto &v : meshData->vertices) {
-					v.position = v.position * opose->GetScale();
 					v.position = *opose * v.position;
 					uvec::rotate(&v.normal, opose->GetRotation());
 					uvec::normalize(&v.normal);
