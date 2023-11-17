@@ -74,8 +74,9 @@ if not Path(ocio_root).is_dir():
 os.chdir(ocio_root)
 # Note: Version 2.2.0 of OpenColorIO introduces a zlib dependency, which causes conflicts with our zlib installation, so we're stuck
 # with the older version for now.
-reset_to_commit("4fa94918c2cf572dcaf61ca07016f3b5c231c14c")
-
+#Should no longer happen with zlib bump.
+reset_to_commit("b35fb73b8674176098d3084deaa9da3d111d72d1")
+#TODO: yaml-cpp broken
 print_msg("Build ocio")
 mkdir("build",cd=True)
 
