@@ -75,7 +75,7 @@ os.chdir(ocio_root)
 # Note: Version 2.2.0 of OpenColorIO introduces a zlib dependency, which causes conflicts with our zlib installation, so we're stuck
 # with the older version for now.
 #Should no longer happen with zlib bump.
-reset_to_commit("b35fb73b8674176098d3084deaa9da3d111d72d1")
+reset_to_commit("ba2b41e309eac66af8d555d98b1af999625697fb")
 #TODO: yaml-cpp broken
 print_msg("Build ocio")
 mkdir("build",cd=True)
@@ -207,7 +207,7 @@ os.chdir(tools)
 rr_tool_root = tools +"/render_raytracing"
 if not Path(rr_tool_root).is_dir():
     print_msg("render_raytracing tool not found. Downloading...")
-    git_clone("https://github.com/Silverlan/render_raytracing.git")
+    git_clone("https://github.com/Slaweknowy/render_raytracing.git")
 else:
     print_msg("Updating 'render_raytracing' tool...")
     os.chdir(rr_tool_root)
