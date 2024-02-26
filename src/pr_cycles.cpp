@@ -220,7 +220,7 @@ static void initialize_cycles_geometry(pragma::CSceneComponent &gameScene, pragm
 		if(renderC->ShouldDraw() == false)
 			return false;
 		auto sphere = renderC->GetUpdatedAbsoluteRenderSphere();
-		if(umath::intersection::sphere_in_plane_mesh(sphere.pos, sphere.radius, planes, true) == umath::intersection::Intersect::Outside)
+		if(umath::intersection::sphere_in_plane_mesh(sphere.pos, sphere.radius, planes.begin(), planes.end(), true) == umath::intersection::Intersect::Outside)
 			return false;
 		return true;
 		/* // TODO: Take rotation into account
@@ -264,7 +264,7 @@ static void initialize_cycles_geometry(pragma::CSceneComponent &gameScene, pragm
 					max -= center;
 					auto r = umath::max(umath::abs(min.x), umath::abs(min.y), umath::abs(min.z), umath::abs(max.x), umath::abs(max.y), umath::abs(max.z));
 					center += pose.GetOrigin();
-					return (umath::intersection::sphere_in_plane_mesh(center, r, planes) != umath::intersection::Intersect::Outside) ? true : false;
+					return (umath::intersection::sphere_in_plane_mesh(center, r, planes.begin(), planes.end()) != umath::intersection::Intersect::Outside) ? true : false;
 				};
 			}
 			if(node) {
