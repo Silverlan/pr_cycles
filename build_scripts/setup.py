@@ -76,7 +76,7 @@ os.chdir(ocio_root)
 # with the older version for now.
 #Should no longer happen with zlib bump.
 reset_to_commit("ba2b41e309eac66af8d555d98b1af999625697fb")
-#TODO: yaml-cpp broken
+# TODO: minizip-ng broken
 print_msg("Build ocio")
 mkdir("build",cd=True)
 
