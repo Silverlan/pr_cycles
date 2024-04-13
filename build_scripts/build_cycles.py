@@ -107,7 +107,7 @@ if platform == "linux":
 	os.chdir(cyclesDepsInstallLocation)
 	libtiff_root = cyclesDepsInstallLocation +"/tiff"
 	if not Path(libtiff_root).is_dir():
-		print_msg("libjpeg-turbo not found. Downloading...")
+		print_msg("libtiff not found. Downloading...")
 		http_extract("https://download.osgeo.org/libtiff/tiff-4.4.0.tar.gz",format="tar.gz")
 		os.rename("tiff-4.4.0","tiff")
 
