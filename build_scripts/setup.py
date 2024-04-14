@@ -68,17 +68,14 @@ else:
 os.chdir(deps_dir)
 ocio_root = deps_dir +"/OpenColorIO"
 if not Path(ocio_root).is_dir():
-    print_msg("ocio not found. Downloading...")
-    git_clone("https://github.com/AcademySoftwareFoundation/OpenColorIO.git")
+    print_msg("ocio not found. Downloading...")=
+    git_clone("https://github.com/SlawekNowy/OpenColorIO.git")
 
 os.chdir(ocio_root)
 # Note: Version 2.2.0 of OpenColorIO introduces a zlib dependency, which causes conflicts with our zlib installation, so we're stuck
 # with the older version for now.
 #Should no longer happen with zlib bump.
-reset_to_commit("ba2b41e309eac66af8d555d98b1af999625697fb")
-# TODO: minizip-ng broken
-print_msg("Build ocio")
-mkdir("build",cd=True)
+reset_to_commit("025e7c07794913a8cf8191247777393300797a0b")
 
 configArgs = []
 if platform == "linux":
