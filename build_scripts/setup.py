@@ -68,7 +68,7 @@ else:
 os.chdir(deps_dir)
 ocio_root = deps_dir +"/OpenColorIO"
 if not Path(ocio_root).is_dir():
-    print_msg("ocio not found. Downloading...")=
+    print_msg("ocio not found. Downloading...")
     git_clone("https://github.com/SlawekNowy/OpenColorIO.git")
 
 os.chdir(ocio_root)
