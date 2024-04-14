@@ -241,7 +241,7 @@ if lastBuildCommit != curCommitId:
 		args.append("-DTIFF_INCLUDE_DIR:PATH=" +cyclesDepsInstallLocation +"/tiff/libtiff")
 		args.append("-DTIFF_LIBRARY:FILEPATH=" +cyclesDepsInstallLocation +"/tiff/build/libtiff/libtiff.so")
 
-	cmake_configure("..",generator,args+msvc_cmake_args)
+	cmake_configure("..",generator,args)
 	cmake_build(build_config)
 
 	with open(lastbuildshaFile, 'w') as filetowrite:
