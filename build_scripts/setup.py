@@ -75,6 +75,9 @@ os.chdir(ocio_root)
 # Note: Version 2.2.0 of OpenColorIO introduces a zlib dependency, which causes conflicts with our zlib installation, so we're stuck
 # with the older version for now.
 #Should no longer happen with zlib bump.
+# TODO: minizip-ng broken
+print_msg("Build ocio")
+mkdir("build",cd=True)
 reset_to_commit("025e7c07794913a8cf8191247777393300797a0b")
 
 configArgs = []
