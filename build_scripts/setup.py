@@ -56,7 +56,11 @@ cmake_build(build_config,["OpenImageDenoise"])
 
 cmake_args.append("-DDEPENDENCY_OPENIMAGEDENOISE_INCLUDE=" +oidn_root +"/include")
 if platform == "linux":
-	cmake_args.append("-DDEPENDENCY_OPENIMAGEDENOISE_LIBRARY=" +oidn_root +"/build/libOpenImageDenoise.so")
+	if generator=="Ninja Multi-Config":
+		cmake_args.append("-DDEPENDENCY_OPENIMAGEDENOISE_LIBRARY=" +oidn_root +"/build/"+build_config +"/libOpenImageDenoise.so")
+	else:
+		cmake_args.append("-DDEPENDENCY_OPENIMAGEDENOISE_LIBRARY=" +oidn_root +"/build/libOpenImageDenoise.so")
+
 else:
 	cmake_args.append("-DDEPENDENCY_OPENIMAGEDENOISE_LIBRARY=" +oidn_root +"/build/" +build_config +"/OpenImageDenoise.lib")
 
@@ -65,15 +69,16 @@ os.chdir(deps_dir)
 ocio_root = deps_dir +"/OpenColorIO"
 if not Path(ocio_root).is_dir():
     print_msg("ocio not found. Downloading...")
-    git_clone("https://github.com/AcademySoftwareFoundation/OpenColorIO.git")
+    git_clone("https://github.com/SlawekNowy/OpenColorIO.git")
 
 os.chdir(ocio_root)
 # Note: Version 2.2.0 of OpenColorIO introduces a zlib dependency, which causes conflicts with our zlib installation, so we're stuck
 # with the older version for now.
-reset_to_commit("4fa94918c2cf572dcaf61ca07016f3b5c231c14c")
-
+#Should no longer happen with zlib bump.
+# TODO: minizip-ng broken
 print_msg("Build ocio")
 mkdir("build",cd=True)
+reset_to_commit("025e7c07794913a8cf8191247777393300797a0b")
 
 configArgs = []
 if platform == "linux":
@@ -88,7 +93,10 @@ cp(ocio_root +"/build/include/OpenColorIO/OpenColorABI.h",ocio_root +"/include/O
 
 cmake_args.append("-DDEPENDENCY_OPENCOLORIO_INCLUDE=" +ocio_root +"/include")
 if platform == "linux":
-	cmake_args.append("-DDEPENDENCY_OPENCOLORIO_LIBRARY=" +ocio_root +"/build/src/OpenColorIO/libOpenColorIO.so")
+	if generator=="Ninja Multi-Config":
+		cmake_args.append("-DDEPENDENCY_OPENCOLORIO_LIBRARY=" +ocio_root +"/build/src/OpenColorIO/"+build_config +"/libOpenColorIO.so")
+	else:
+		cmake_args.append("-DDEPENDENCY_OPENCOLORIO_LIBRARY=" +ocio_root +"/build/src/OpenColorIO/libOpenColorIO.so")
 else:
 	cmake_args.append("-DDEPENDENCY_OPENCOLORIO_LIBRARY=" +ocio_root +"/build/src/OpenColorIO/" +build_config +"/OpenColorIO.lib")
 
@@ -131,8 +139,12 @@ cmake_build(build_config,["osd_static_cpu","osd_static_gpu"])
 
 cmake_args.append("-DDEPENDENCY_OPENSUBDIV_INCLUDE=" +subdiv_root +"")
 if platform == "linux":
-	cmake_args.append("-DDEPENDENCY_OPENSUBDIV_LIBRARY=" +subdiv_root +"/build/lib/libosdGPU.a")
-	cmake_args.append("-DDEPENDENCY_OPENSUBDIV_CPU_LIBRARY=" +subdiv_root +"/build/lib/libosdCPU.a")
+	if generator=="Ninja Multi-Config":
+		cmake_args.append("-DDEPENDENCY_OPENSUBDIV_LIBRARY=" +subdiv_root +"/build/lib/"+build_config+"/libosdGPU.a")
+		cmake_args.append("-DDEPENDENCY_OPENSUBDIV_CPU_LIBRARY=" +subdiv_root +"/build/lib/"+build_config+"/libosdCPU.a")
+	else:
+		cmake_args.append("-DDEPENDENCY_OPENSUBDIV_LIBRARY=" +subdiv_root +"/build/lib/libosdGPU.a")
+		cmake_args.append("-DDEPENDENCY_OPENSUBDIV_CPU_LIBRARY=" +subdiv_root +"/build/lib/libosdCPU.a")
 else:
 	cmake_args.append("-DDEPENDENCY_OPENSUBDIV_LIBRARY=" +subdiv_root +"/build/lib/" +build_config +"/osdGPU.lib")
 	cmake_args.append("-DDEPENDENCY_OPENSUBDIV_CPU_LIBRARY=" +subdiv_root +"/build/lib/" +build_config +"/osdCPU.lib")
@@ -195,10 +207,10 @@ os.chdir(tools)
 rr_tool_root = tools +"/render_raytracing"
 if not Path(rr_tool_root).is_dir():
     print_msg("render_raytracing tool not found. Downloading...")
-    git_clone("https://github.com/Silverlan/render_raytracing.git")
+    git_clone("https://github.com/Slaweknowy/render_raytracing.git")
 
 os.chdir(rr_tool_root)
-reset_to_commit("018c63aee11e71e8b4c6edb98e819b2262fef86b")
+reset_to_commit("d59ee26cfd1ef9b366a4efb64e7f1d214ade50fb")
 
 additional_build_targets.append("render_raytracing")
 
@@ -207,9 +219,9 @@ unirender_root = root +"/external_libs/util_raytracing"
 if not Path(unirender_root).is_dir():
     print_msg("Unirender not found. Downloading...")
     os.chdir(root +"/external_libs")
-    git_clone("https://github.com/Silverlan/UniRender.git","util_raytracing")
+    git_clone("https://github.com/Slaweknowy/UniRender.git","util_raytracing")
 
 os.chdir(unirender_root)
-reset_to_commit("fd00e0b8d767a1dda28bf99f1fe9a126764d3687")
+reset_to_commit("a9fde7ec09ee3da8cac8fa99f1fe50ebfd5dbcf8")
 
 cmake_args.append("-DDEPENDENCY_UTIL_RAYTRACING_INCLUDE=" +unirender_root +"/include")
