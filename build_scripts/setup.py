@@ -207,10 +207,10 @@ os.chdir(tools)
 rr_tool_root = tools +"/render_raytracing"
 if not Path(rr_tool_root).is_dir():
     print_msg("render_raytracing tool not found. Downloading...")
-    git_clone("https://github.com/Slaweknowy/render_raytracing.git")
+    git_clone("https://github.com/Silverlan/render_raytracing.git")
 
 os.chdir(rr_tool_root)
-reset_to_commit("d59ee26cfd1ef9b366a4efb64e7f1d214ade50fb")
+reset_to_commit("ddd4bba")
 
 additional_build_targets.append("render_raytracing")
 
