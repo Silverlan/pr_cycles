@@ -219,9 +219,9 @@ unirender_root = root +"/external_libs/util_raytracing"
 if not Path(unirender_root).is_dir():
     print_msg("Unirender not found. Downloading...")
     os.chdir(root +"/external_libs")
-    git_clone("https://github.com/Slaweknowy/UniRender.git","util_raytracing")
+    git_clone("https://github.com/Silverlan/UniRender.git","util_raytracing")
 
 os.chdir(unirender_root)
-reset_to_commit("a9fde7ec09ee3da8cac8fa99f1fe50ebfd5dbcf8")
+reset_to_commit("f0e118e")
 
 cmake_args.append("-DDEPENDENCY_UTIL_RAYTRACING_INCLUDE=" +unirender_root +"/include")
