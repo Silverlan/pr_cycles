@@ -1406,17 +1406,54 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 	register_socket_methods<unirender::SocketIO::None>(defGroupNode);
 	modCycles[defGroupNode];
 
-	std::unordered_map<std::string, std::string> nodeTypes {{"NODE_MATH", unirender::NODE_MATH}, {"NODE_HSV", unirender::NODE_HSV}, {"NODE_SEPARATE_XYZ", unirender::NODE_SEPARATE_XYZ}, {"NODE_COMBINE_XYZ", unirender::NODE_COMBINE_XYZ}, {"NODE_SEPARATE_RGB", unirender::NODE_SEPARATE_RGB},
-	  {"NODE_COMBINE_RGB", unirender::NODE_COMBINE_RGB}, {"NODE_GEOMETRY", unirender::NODE_GEOMETRY}, {"NODE_CAMERA_INFO", unirender::NODE_CAMERA_INFO}, {"NODE_IMAGE_TEXTURE", unirender::NODE_IMAGE_TEXTURE}, {"NODE_NORMAL_TEXTURE", unirender::NODE_NORMAL_TEXTURE},
-	  {"NODE_ENVIRONMENT_TEXTURE", unirender::NODE_ENVIRONMENT_TEXTURE}, {"NODE_MIX_CLOSURE", unirender::NODE_MIX_CLOSURE}, {"NODE_ADD_CLOSURE", unirender::NODE_ADD_CLOSURE}, {"NODE_BACKGROUND_SHADER", unirender::NODE_BACKGROUND_SHADER},
-	  {"NODE_TEXTURE_COORDINATE", unirender::NODE_TEXTURE_COORDINATE}, {"NODE_MAPPING", unirender::NODE_MAPPING}, {"NODE_SCATTER_VOLUME", unirender::NODE_SCATTER_VOLUME}, {"NODE_EMISSION", unirender::NODE_EMISSION}, {"NODE_COLOR", unirender::NODE_COLOR},
-	  {"NODE_ATTRIBUTE", unirender::NODE_ATTRIBUTE}, {"NODE_LIGHT_PATH", unirender::NODE_LIGHT_PATH}, {"NODE_TRANSPARENT_BSDF", unirender::NODE_TRANSPARENT_BSDF}, {"NODE_TRANSLUCENT_BSDF", unirender::NODE_TRANSLUCENT_BSDF}, {"NODE_DIFFUSE_BSDF", unirender::NODE_DIFFUSE_BSDF},
-	  {"NODE_NORMAL_MAP", unirender::NODE_NORMAL_MAP}, {"NODE_PRINCIPLED_BSDF", unirender::NODE_PRINCIPLED_BSDF}, {"NODE_PRINCIPLED_VOLUME", unirender::NODE_PRINCIPLED_VOLUME}, {"NODE_TOON_BSDF", unirender::NODE_TOON_BSDF}, {"NODE_GLOSSY_BSDF", unirender::NODE_GLOSSY_BSDF},
-	  {"NODE_GLASS_BSDF", unirender::NODE_GLASS_BSDF}, {"NODE_OUTPUT", unirender::NODE_OUTPUT}, {"NODE_VECTOR_MATH", unirender::NODE_VECTOR_MATH}, {"NODE_MIX", unirender::NODE_MIX}, {"NODE_INVERT", unirender::NODE_INVERT}, {"NODE_RGB_TO_BW", unirender::NODE_RGB_TO_BW},
-	  {"NODE_VECTOR_TRANSFORM", unirender::NODE_VECTOR_TRANSFORM}, {"NODE_RGB_RAMP", unirender::NODE_RGB_RAMP}, {"NODE_LAYER_WEIGHT", unirender::NODE_LAYER_WEIGHT}, {"NODE_NOISE_TEXTURE", unirender::NODE_NOISE_TEXTURE}, {"NODE_AMBIENT_OCCLUSION", unirender::NODE_AMBIENT_OCCLUSION},
+	std::unordered_map<std::string, std::string> nodeTypes {
+	  {"NODE_MATH", unirender::NODE_MATH},
+	  {"NODE_HSV", unirender::NODE_HSV},
+	  {"NODE_SEPARATE_XYZ", unirender::NODE_SEPARATE_XYZ},
+	  {"NODE_COMBINE_XYZ", unirender::NODE_COMBINE_XYZ},
+	  {"NODE_SEPARATE_RGB", unirender::NODE_SEPARATE_RGB},
+	  {"NODE_COMBINE_RGB", unirender::NODE_COMBINE_RGB},
+	  {"NODE_GEOMETRY", unirender::NODE_GEOMETRY},
+	  {"NODE_CAMERA_INFO", unirender::NODE_CAMERA_INFO},
+	  {"NODE_IMAGE_TEXTURE", unirender::NODE_IMAGE_TEXTURE},
+	  {"NODE_NORMAL_TEXTURE", unirender::NODE_NORMAL_TEXTURE},
+	  {"NODE_ENVIRONMENT_TEXTURE", unirender::NODE_ENVIRONMENT_TEXTURE},
+	  {"NODE_MIX_CLOSURE", unirender::NODE_MIX_CLOSURE},
+	  {"NODE_ADD_CLOSURE", unirender::NODE_ADD_CLOSURE},
+	  {"NODE_BACKGROUND_SHADER", unirender::NODE_BACKGROUND_SHADER},
+	  {"NODE_TEXTURE_COORDINATE", unirender::NODE_TEXTURE_COORDINATE},
+	  {"NODE_UVMAP", unirender::NODE_UVMAP},
+	  {"NODE_MAPPING", unirender::NODE_MAPPING},
+	  {"NODE_SCATTER_VOLUME", unirender::NODE_SCATTER_VOLUME},
+	  {"NODE_EMISSION", unirender::NODE_EMISSION},
+	  {"NODE_COLOR", unirender::NODE_COLOR},
+	  {"NODE_ATTRIBUTE", unirender::NODE_ATTRIBUTE},
+	  {"NODE_LIGHT_PATH", unirender::NODE_LIGHT_PATH},
+	  {"NODE_TRANSPARENT_BSDF", unirender::NODE_TRANSPARENT_BSDF},
+	  {"NODE_TRANSLUCENT_BSDF", unirender::NODE_TRANSLUCENT_BSDF},
+	  {"NODE_DIFFUSE_BSDF", unirender::NODE_DIFFUSE_BSDF},
+	  {"NODE_NORMAL_MAP", unirender::NODE_NORMAL_MAP},
+	  {"NODE_PRINCIPLED_BSDF", unirender::NODE_PRINCIPLED_BSDF},
+	  {"NODE_PRINCIPLED_VOLUME", unirender::NODE_PRINCIPLED_VOLUME},
+	  {"NODE_TOON_BSDF", unirender::NODE_TOON_BSDF},
+	  {"NODE_GLOSSY_BSDF", unirender::NODE_GLOSSY_BSDF},
+	  {"NODE_GLASS_BSDF", unirender::NODE_GLASS_BSDF},
+	  {"NODE_OUTPUT", unirender::NODE_OUTPUT},
+	  {"NODE_VECTOR_MATH", unirender::NODE_VECTOR_MATH},
+	  {"NODE_MIX", unirender::NODE_MIX},
+	  {"NODE_INVERT", unirender::NODE_INVERT},
+	  {"NODE_RGB_TO_BW", unirender::NODE_RGB_TO_BW},
+	  {"NODE_VECTOR_TRANSFORM", unirender::NODE_VECTOR_TRANSFORM},
+	  {"NODE_RGB_RAMP", unirender::NODE_RGB_RAMP},
+	  {"NODE_LAYER_WEIGHT", unirender::NODE_LAYER_WEIGHT},
+	  {"NODE_NOISE_TEXTURE", unirender::NODE_NOISE_TEXTURE},
+	  {"NODE_AMBIENT_OCCLUSION", unirender::NODE_AMBIENT_OCCLUSION},
 
-	  {"NODE_VOLUME_CLEAR", unirender::NODE_VOLUME_CLEAR}, {"NODE_VOLUME_HOMOGENEOUS", unirender::NODE_VOLUME_HOMOGENEOUS}, {"NODE_VOLUME_HETEROGENEOUS", unirender::NODE_VOLUME_HETEROGENEOUS}};
-	static_assert(unirender::NODE_COUNT == 43, "Increase this number if new node types are added!");
+	  {"NODE_VOLUME_CLEAR", unirender::NODE_VOLUME_CLEAR},
+	  {"NODE_VOLUME_HOMOGENEOUS", unirender::NODE_VOLUME_HOMOGENEOUS},
+	  {"NODE_VOLUME_HETEROGENEOUS", unirender::NODE_VOLUME_HETEROGENEOUS},
+	};
+	static_assert(unirender::NODE_COUNT == 44, "Increase this number if new node types are added!");
 	Lua::RegisterLibraryValues<std::string>(l.GetState(), "unirender", nodeTypes);
 
 	Lua::RegisterLibraryValues<uint32_t>(l.GetState(), "unirender",
@@ -1651,6 +1688,9 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 	t["IN_ROTATION"] = unirender::nodes::mapping::IN_ROTATION;
 	t["IN_SCALE"] = unirender::nodes::mapping::IN_SCALE;
 	t["OUT_VECTOR"] = unirender::nodes::mapping::OUT_VECTOR;
+
+	t = nodeTypeEnums[unirender::NODE_UVMAP] = luabind::newtable(l.GetState());
+	t["OUT_UV"] = unirender::nodes::uvmap::OUT_UV;
 
 	t = nodeTypeEnums[unirender::NODE_SCATTER_VOLUME] = luabind::newtable(l.GetState());
 	t["IN_COLOR"] = unirender::nodes::scatter_volume::IN_COLOR;
@@ -2029,7 +2069,7 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 
 	t["OUT_COLOR"] = unirender::nodes::ambient_occlusion::OUT_COLOR;
 	t["OUT_AO"] = unirender::nodes::ambient_occlusion::OUT_AO;
-	static_assert(unirender::NODE_COUNT == 43, "Increase this number if new node types are added!");
+	static_assert(unirender::NODE_COUNT == 44, "Increase this number if new node types are added!");
 	Lua::RegisterLibraryValues<luabind::object>(l.GetState(), "unirender.Node", nodeTypeEnums);
 
 	auto defShader = luabind::class_<pragma::modules::cycles::LuaShader>("Shader");
