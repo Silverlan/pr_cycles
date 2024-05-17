@@ -43,7 +43,7 @@ os.chdir(deps_dir)
 oidn_root = deps_dir +"/oidn"
 if not Path(oidn_root).is_dir():
     print_msg("oidn not found. Downloading...")
-    git_clone("https://github.com/OpenImageDenoise/oidn.git")
+    git_clone("https://github.com/RenderKit/oidn.git")
 
 os.chdir(oidn_root)
 reset_to_commit("d959bac5b7130b31c41095811ddfbe58c4cf03f4")
