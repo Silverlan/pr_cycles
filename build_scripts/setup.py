@@ -154,9 +154,9 @@ utilocio_root = root +"/external_libs/util_ocio"
 if not Path(utilocio_root).is_dir():
     print_msg("util_ocio not found. Downloading...")
     os.chdir(root +"/external_libs")
-    git_clone("https://github.com/Silverlan/util_ocio.git","util_ocio","feat/cxx_modules")
+    git_clone("https://github.com/Silverlan/util_ocio.git","util_ocio")
 os.chdir(utilocio_root)
-reset_to_commit("b4e82ce6799438b18718deef9b90142cf6c01336")
+reset_to_commit("54900c9bdedbbecfe954a33ee1848aefeb3a37dd")
 
 cmake_args.append("-DDEPENDENCY_UTIL_OCIO_INCLUDE=" +utilocio_root +"/include")
 
@@ -212,7 +212,7 @@ if not Path(rr_tool_root).is_dir():
     git_clone("https://github.com/Silverlan/render_raytracing.git")
 
 os.chdir(rr_tool_root)
-reset_to_commit("0fbd7b3e4e4c27967a4b5e3a0fd50166f6d49c90")
+reset_to_commit("f0223483207962d93a52b6e86df561b9439246b2")
 
 additional_build_targets.append("render_raytracing")
 
@@ -224,6 +224,6 @@ if not Path(unirender_root).is_dir():
     git_clone("https://github.com/Silverlan/UniRender.git","util_raytracing")
 
 os.chdir(unirender_root)
-reset_to_commit("6dc26132832fe71c3663ed640ca772ece68812d6")
+reset_to_commit("9475e0d94eb1f8455208dd1ffd9553c383edd513")
 
 cmake_args.append("-DDEPENDENCY_UTIL_RAYTRACING_INCLUDE=" +unirender_root +"/include")
