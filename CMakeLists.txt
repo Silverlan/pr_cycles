@@ -14,7 +14,6 @@ pr_add_compile_definitions(${PROJ_NAME} -DOIIO_STATIC_BUILD -DRT_ENABLE_SUBDIVIS
 
 if(${PR_UNIRENDER_ENABLE_DEPENDENCIES})
 	pr_add_dependency(${PROJ_NAME} util_raytracing TARGET PUBLIC)
-	pr_add_dependency(${PROJ_NAME} UniRender_cycles TARGET PUBLIC)
 	add_subdirectory(external_libs/cycles)
 	add_subdirectory(external_libs/luxcorerender)
 	
