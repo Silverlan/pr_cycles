@@ -212,7 +212,7 @@ if not Path(rr_tool_root).is_dir():
     git_clone("https://github.com/Silverlan/render_raytracing.git")
 
 os.chdir(rr_tool_root)
-reset_to_commit("893efd99484fd30cc1adad14576b971d1690e875")
+reset_to_commit("92d2e11")
 
 additional_build_targets.append("render_raytracing")
 
