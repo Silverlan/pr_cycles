@@ -113,6 +113,7 @@ args = vars(args)
 
 if build_all or args["build_cycles"]:
 	print_msg("Running cycles build script...")
+	cmake_args.append("-DPR_UNIRENDER_WITH_CYCLES=1")
 	execbuildscript(os.path.dirname(os.path.realpath(__file__)) +"/build_cycles.py")
 else:
 	print_msg("Downloading prebuilt cycles binaries...")
