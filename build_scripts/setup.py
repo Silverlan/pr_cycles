@@ -111,7 +111,8 @@ parser.add_argument("--build-cycles", type=str2bool, nargs='?', const=True, defa
 args,unknown = parser.parse_known_args()
 args = vars(args)
 
-if build_all or args["build_cycles"]:
+build_cycles = build_all or args["build_cycles"]
+if build_cycles:
 	print_msg("Running cycles build script...")
 	cmake_args.append("-DPR_UNIRENDER_WITH_CYCLES=1")
 	execbuildscript(os.path.dirname(os.path.realpath(__file__)) +"/build_cycles.py")
@@ -206,16 +207,19 @@ if platform == "win32":
 	cmake_args.append("-DDEPENDENCY_GFLAGS_LIBRARY=" +gflags_root +"/build_files/lib/" +build_config +"/gflags_static.lib")
 
 ########## render_raytracing tool ##########
-os.chdir(tools)
-rr_tool_root = tools +"/render_raytracing"
-if not Path(rr_tool_root).is_dir():
-    print_msg("render_raytracing tool not found. Downloading...")
-    git_clone("https://github.com/Silverlan/render_raytracing.git")
+if build_cycles:
+    os.chdir(tools)
+    rr_tool_root = tools +"/render_raytracing"
+    if not Path(rr_tool_root).is_dir():
+        print_msg("render_raytracing tool not found. Downloading...")
+        git_clone("https://github.com/Silverlan/render_raytracing.git")
 
-os.chdir(rr_tool_root)
-reset_to_commit("92d2e11")
+    os.chdir(rr_tool_root)
+    reset_to_commit("92d2e11")
 
-additional_build_targets.append("render_raytracing")
+    additional_build_targets.append("render_raytracing")
+#else:
+# TODO: Download pre-built version of render_raytracing tool
 
 ########## Unirender ##########
 unirender_root = root +"/external_libs/util_raytracing"
