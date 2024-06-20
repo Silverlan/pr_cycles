@@ -1,0 +1,6 @@
+{
+    "name": "Unirender",
+    "module_name": "pr_unirender",
+    "install_directory": "modules/unirender/",
+    "release_directory": "modules/unirender/"
+}

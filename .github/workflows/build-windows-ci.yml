@@ -1,47 +1,16 @@
-name: Build Windows
+name: Build - Windows
+
 on:
   push:
-    branches: [ master ]
-  pull_request:
-    branches: [ master ]
-
-concurrency:
-  group: environment-win-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
-  build:
-    name: Build - ${{ matrix.config.os }}
-    runs-on: ${{ matrix.config.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        config:
-          - os: windows-latest
-            name: "Windows x64 MSVC"
-            artifact: "Windows-MSVC.tar.xz"
-            build_type: "RelWithDebInfo"
-            environment_script: "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Auxiliary/Build/vcvars64.bat"
-            cc: "cl"
-            cxx: "cl"
-            archiver: "7z a"
-            generators: "Visual Studio 16 2022"
-            build_dir: 'build'
-    steps:
-      - name: Build Module
-        id: build-module
-        uses: Silverlan/pragma/github_actions/build_generic_module@master
-        with:
-          module: 'pr_unirender'
-
-      - name: Create Release Files
-        shell: bash
-        run: |
-          mkdir -p release/modules
-          cp -R "${{ steps.build-module.outputs.install-dir }}/modules/unirender" "release/modules/"
-
-      - name: Release Binaries
-        uses: Silverlan/common_actions/release_nightly_binaries@main
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit: ${{ github.ref_name }}
+  call-workflow:
+    uses: Silverlan/pragma/.github/workflows/build-module.yml@main
+    if: github.repository != 'Silverlan/pr_module_template'
+    with:
+      repository: '${{ github.repository }}'
+      os: windows
+    secrets:
+      repository_token: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: write
