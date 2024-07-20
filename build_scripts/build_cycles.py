@@ -272,6 +272,7 @@ if platform == "linux":
 	cmake_args.append("-DDEPENDENCY_CYCLES_TBB_LIBRARY=" +cyclesDepsRoot + "/tbb/lib/libtbb.so")
 	cmake_args.append("-DDEPENDENCY_JPEG_LIBRARY=" +cyclesDepsRoot + "/jpeg/build/libjpeg.a")
 	cmake_args.append("-DDEPENDENCY_TIFF_LIBRARY=" +cyclesDepsRoot + "/tiff/build/libtiff/libtiff.so")
+	cmake_args.append("-DDEPENDENCY_CYCLES_LPNG_LIBRARY=" +cyclesDepsRoot + "/png/lib/libpng.a")
 	cmake_args.append("-DDEPENDENCY_OPENEXR_IMATH_LIBRARY=" +cyclesDepsRoot + "/Imath/build/src/Imath/libImath-3_1.so")
 	cmake_args.append("-DDEPENDENCY_OPENEXR_UTIL_LIBRARY=" +cyclesDepsRoot + "/openexr/lib/libOpenEXR.so")
 	cmake_args.append("-DDEPENDENCY_OPENEXR_ILMTHREAD_LIBRARY=" +cyclesDepsRoot + "/openexr/lib/libIlmThread.so")
@@ -295,6 +296,7 @@ else:
 
 	cmake_args.append("-DDEPENDENCY_JPEG_LIBRARY=" +cyclesDepsRoot + "/jpeg/lib/libjpeg.lib")
 	cmake_args.append("-DDEPENDENCY_TIFF_LIBRARY=" +cyclesDepsRoot + "/tiff/lib/libtiff.lib")
+	cmake_args.append("-DDEPENDENCY_CYCLES_LPNG_LIBRARY=" +cyclesDepsRoot + "/png/lib/libpng.lib")
 
 additional_build_targets.append("UniRender_cycles")
 
