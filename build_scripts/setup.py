@@ -8,18 +8,19 @@ from pathlib import Path
 os.chdir(deps_dir)
 
 ########## ISPC ##########
+ispc_version = "v1.21.0"
 if platform == "linux":
-	ispc_root = deps_dir +"/ispc-v1.17.0-linux.tar.gz"
+	ispc_root = deps_dir +"/ispc-" +ispc_version +"-linux.tar.gz"
 	if not Path(ispc_root).is_dir():
 	    print_msg("ISPC not found. Downloading...")
-	    zip_name = "ispc-v1.17.0-linux.tar.gz"
-	    http_extract("https://github.com/ispc/ispc/releases/download/v1.17.0/" +zip_name,format="tar.gz")
+	    zip_name = "ispc-" +ispc_version +"-linux.tar.gz"
+	    http_extract("https://github.com/ispc/ispc/releases/download/" +ispc_version +"/" +zip_name,format="tar.gz")
 else:
-	ispc_root = deps_dir +"/ispc-v1.17.0-windows"
+	ispc_root = deps_dir +"/ispc-" +ispc_version +"-windows"
 	if not Path(ispc_root).is_dir():
 	    print_msg("ISPC not found. Downloading...")
-	    zip_name = "ispc-v1.17.0-windows.zip"
-	    http_extract("https://github.com/ispc/ispc/releases/download/v1.17.0/" +zip_name)
+	    zip_name = "ispc-" +ispc_version +"-windows.zip"
+	    http_extract("https://github.com/ispc/ispc/releases/download/" +ispc_version +"/" +zip_name)
 
 ########## TBB ##########
 one_tbb_root = deps_dir +"/tbb2019_20190605oss"
@@ -46,7 +47,7 @@ if not Path(oidn_root).is_dir():
     git_clone("https://github.com/RenderKit/oidn.git")
 
 os.chdir(oidn_root)
-reset_to_commit("d959bac5b7130b31c41095811ddfbe58c4cf03f4")
+reset_to_commit("713ec7838ba650f99e0a896549c0dca5eeb3652d") # v2.2.2
 
 print_msg("Build oidn")
 mkdir("build",cd=True)
@@ -131,7 +132,7 @@ if not Path(subdiv_root).is_dir():
     git_clone("https://github.com/PixarAnimationStudios/OpenSubdiv.git")
 
 os.chdir(subdiv_root)
-reset_to_commit("82ab1b9f54c87fdd7e989a3470d53e137b8ca270")
+reset_to_commit("7d0ab5530feef693ac0a920585b5c663b80773b3") # v3.6.0
 
 print_msg("Build OpenSubdiv")
 mkdir("build",cd=True)
@@ -229,6 +230,6 @@ if not Path(unirender_root).is_dir():
     git_clone("https://github.com/Silverlan/UniRender.git","util_raytracing")
 
 os.chdir(unirender_root)
-reset_to_commit("9475e0d94eb1f8455208dd1ffd9553c383edd513")
+reset_to_commit("a0b5189651b703b64c271687545c0a8bd94b395a")
 
 cmake_args.append("-DDEPENDENCY_UTIL_RAYTRACING_INCLUDE=" +unirender_root +"/include")
