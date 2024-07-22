@@ -55,15 +55,22 @@ mkdir("build",cd=True)
 cmake_configure("..",generator,["-DTBB_ROOT=" +one_tbb_root,"-DTBB_INCLUDE_DIR=" +one_tbb_root +"/include"])
 cmake_build(build_config,["OpenImageDenoise"])
 
-cmake_args.append("-DDEPENDENCY_OPENIMAGEDENOISE_INCLUDE=" +oidn_root +"/include")
-if platform == "linux":
-	if generator=="Ninja Multi-Config":
-		cmake_args.append("-DDEPENDENCY_OPENIMAGEDENOISE_LIBRARY=" +oidn_root +"/build/"+build_config +"/libOpenImageDenoise.so")
-	else:
-		cmake_args.append("-DDEPENDENCY_OPENIMAGEDENOISE_LIBRARY=" +oidn_root +"/build/libOpenImageDenoise.so")
-
-else:
-	cmake_args.append("-DDEPENDENCY_OPENIMAGEDENOISE_LIBRARY=" +oidn_root +"/build/" +build_config +"/OpenImageDenoise.lib")
+# TODO: util_raytracing uses OpenImageDenoise, but so does cycles.
+# The version above should match the version used by cycles, but for some reason the generated binaries differ.
+# For now, we'll ignore these binaries and use the ones shipped with cycles instead.
+# See build_cycles.py for the DEPENDENCY_* definitions
+#cmake_args.append("-DDEPENDENCY_OPENIMAGEDENOISE_INCLUDE=" +oidn_root +"/include")
+#if platform == "linux":
+#	if generator=="Ninja Multi-Config":
+#		cmake_args.append("-DDEPENDENCY_OPENIMAGEDENOISE_LIBRARY=" +oidn_root +"/build/"+build_config +"/libOpenImageDenoise.so")
+#		cmake_args.append("-DDEPENDENCY_OPENIMAGEDENOISE_CORE_LIBRARY=" +oidn_root +"/build/"+build_config +"/libOpenImageDenoise_core.so")
+#	else:
+#		cmake_args.append("-DDEPENDENCY_OPENIMAGEDENOISE_LIBRARY=" +oidn_root +"/build/libOpenImageDenoise.so")
+#		cmake_args.append("-DDEPENDENCY_OPENIMAGEDENOISE_CORE_LIBRARY=" +oidn_root +"/build/libOpenImageDenoise_core.so")
+#
+#else:
+#	cmake_args.append("-DDEPENDENCY_OPENIMAGEDENOISE_LIBRARY=" +oidn_root +"/build/" +build_config +"/OpenImageDenoise.lib")
+#	cmake_args.append("-DDEPENDENCY_OPENIMAGEDENOISE_CORE_LIBRARY=" +oidn_root +"/build/" +build_config +"/OpenImageDenoise_core.lib")
 
 ########## OCIO ##########
 os.chdir(deps_dir)

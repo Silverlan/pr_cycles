@@ -67,17 +67,18 @@ import subprocess
 
 # To update Cycles to a newer version, follow these steps:
 # - Find the latest stable release on Cycles on https://github.com/blender/cycles/tags
+# - Update the fork https://github.com/Silverlan/cycles to that commit
 # - Copy the commit id to "cycles_commit_sha" below
 # - Update preprocessor definitions for cycles in CMakeLists.txt of external_libs/cycles/CMakeLists.txt
 # - Update the versions of tbb, oidn, ocio, oiio, opensubdiv libraries in setup.py to match cycles versions
-cycles_commit_sha = "b364692812269d7a67e7ebccc5dd02f53e79ef48" # Version 4.1.1
+cycles_commit_sha = "ee4a5f249e43e02aef439877e747f14fa5c8c3c9" # Version 4.1.1
 
 ########## cycles ##########
 os.chdir(deps_dir)
 cyclesRoot = deps_dir +"/cycles"
 if not Path(cyclesRoot).is_dir():
 	print_msg("cycles not found. Downloading...")
-	git_clone("https://github.com/blender/cycles.git")
+	git_clone("https://github.com/Silverlan/cycles.git")
 
 os.chdir(cyclesRoot)
 
@@ -227,6 +228,8 @@ cmake_args.append("-DDEPENDENCY_CYCLES_DEPENDENCIES_LOCATION=" +cyclesDepsRoot +
 cmake_args.append("-DDEPENDENCY_OPENEXR_INCLUDE=" +cyclesDepsRoot + "/openexr/include")
 cmake_args.append("-DDEPENDENCY_OPENEXR_IMATH_INCLUDE=" +cyclesDepsRoot + "/imath/include")
 
+cmake_args.append("-DDEPENDENCY_OPENIMAGEDENOISE_INCLUDE=" +cyclesDepsRoot + "/openimagedenoise/include")
+
 if platform == "linux":
 	cmake_args.append("-DDEPENDENCY_CYCLES_LIBRARY_LOCATION=" +cyclesRoot +"/build/lib")
 
@@ -243,6 +246,8 @@ if platform == "linux":
 	cmake_args.append("-DDEPENDENCY_OPENEXR_UTIL_LIBRARY=" +cyclesDepsRoot + "/openexr/lib/libOpenEXR.so")
 	cmake_args.append("-DDEPENDENCY_OPENEXR_ILMTHREAD_LIBRARY=" +cyclesDepsRoot + "/openexr/lib/libIlmThread.so")
 	cmake_args.append("-DDEPENDENCY_OPENEXR_IEX_LIBRARY=" +cyclesDepsRoot + "/openexr/lib/libIex.so")
+	cmake_args.append("-DDEPENDENCY_OPENIMAGEDENOISE_LIBRARY=" +cyclesDepsRoot + "/openimagedenoise/lib/libopenimagedenoise.so")
+	cmake_args.append("-DDEPENDENCY_OPENIMAGEDENOISE_CORE_LIBRARY=" +cyclesDepsRoot + "/openimagedenoise/lib/libOpenImageDenoise_core.so")
 
 	# Prebuilt binary locations
 	# cmake_args.append("-DDEPENDENCY_CYCLES_TBB_LIBRARY=" +cyclesDepsRoot + "/tbb/lib/libtbb.a")
@@ -264,6 +269,8 @@ else:
 	cmake_args.append("-DDEPENDENCY_OPENEXR_IMATH_LIBRARY=" +cyclesDepsRoot + "/imath/lib/Imath.lib")
 	cmake_args.append("-DDEPENDENCY_OPENEXR_ILMTHREAD_LIBRARY=" +cyclesDepsRoot + "/openexr/lib/IlmThread_s.lib")
 	cmake_args.append("-DDEPENDENCY_OPENEXR_IEX_LIBRARY=" +cyclesDepsRoot + "/openexr/lib/Iex_s.lib")
+	cmake_args.append("-DDEPENDENCY_OPENIMAGEDENOISE_LIBRARY=" +cyclesDepsRoot + "/openimagedenoise/lib/openimagedenoise.lib")
+	cmake_args.append("-DDEPENDENCY_OPENIMAGEDENOISE_CORE_LIBRARY=" +cyclesDepsRoot + "/openimagedenoise/lib/openimagedenoise_core.lib")
 
 	cmake_args.append("-DDEPENDENCY_JPEG_LIBRARY=" +cyclesDepsRoot + "/jpeg/lib/libjpeg.lib")
 	cmake_args.append("-DDEPENDENCY_TIFF_LIBRARY=" +cyclesDepsRoot + "/tiff/lib/libtiff.lib")

@@ -6,7 +6,9 @@ pr_install_targets(pr_unirender INSTALL_DIR "${INSTALL_PATH}")
 # Install util_raytracing
 pr_install_targets(util_raytracing)
 pr_install_binary(opencolorio WIN "OpenColorIO_2_4.dll" LIN "libOpenColorIO_2_4.so")
-pr_install_binary(openimagedenoise WIN "OpenImageDenoise.dll" LIN "libOpenImageDenoise.so")
+
+pr_install_binary(openimagedenoise WIN "openimagedenoise.dll" LIN "libopenimagedenoise.so" BIN_DIR "${DEPENDENCY_CYCLES_DEPENDENCIES_LOCATION}/openimagedenoise/bin/")
+pr_install_binary(openimagedenoise_core WIN "OpenImageDenoise_core.dll" LIN "libOpenImageDenoise_core.so" BIN_DIR "${DEPENDENCY_CYCLES_DEPENDENCIES_LOCATION}/openimagedenoise/bin/")
 
 # assets
 pr_install_directory("${CMAKE_CURRENT_LIST_DIR}/assets/" INSTALL_DIR "modules/")
