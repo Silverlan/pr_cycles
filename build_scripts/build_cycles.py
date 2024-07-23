@@ -4,73 +4,14 @@ from pathlib import Path
 from sys import platform
 import subprocess
 
-# TMP
-#deps_dir = "E:/projects/pragma/deps"
-#zlib_root = "E:/projects/pragma/deps/zlib"
-#zlib_lib = "E:/projects/pragma/deps/zlib/build/RelWithDebInfo/zlibstatic.lib"
-#generator = "Visual Studio 17 2022"
-#build_config = "RelWithDebInfo"
-#import multiprocessing
-#def print_msg(msg):
-#	print(msg)
-#def git_clone(url,directory=None,branch=None):
-#	args = ["git", "clone", url, "--recurse-submodules"]
-#	if branch:
-#		args.extend(["-b", branch])
-#	if directory:
-#		args.append(directory)
-#	subprocess.run(args, check=True)
-#def replace_text_in_file(filepath,srcStr,dstStr):
-#	filedata = None
-#	with open(filepath, 'r') as file :
-#		filedata = file.read()
-#
-#	if filedata:
-#		# Replace the target string
-#		filedata = filedata.replace(srcStr, dstStr)
-#
-#		# Write the file out again
-#		with open(filepath, 'w') as file:
-#			file.write(filedata)
-#def mkdir(dirName,cd=False):
-#	if not Path(dirName).is_dir():
-#		os.makedirs(dirName)
-#	if cd:
-#		os.chdir(dirName)
-#def cmake_configure(scriptPath,generator,additionalArgs=[]):
-#	args = ["cmake",scriptPath,"-G",generator]
-#	args += additionalArgs
-#	print("Running CMake configure command:", ' '.join(f'"{arg}"' for arg in args))
-#	subprocess.run(args,check=True)
-#def cmake_build(buildConfig,targets=None):
-#	args = ["cmake","--build",".","--config",buildConfig]
-#	if targets:
-#		args.append("--target")
-#		args += targets
-#	args.append("--parallel")
-#	args.append(str(multiprocessing.cpu_count()))
-#	print("Running CMake build command:", ' '.join(f'"{arg}"' for arg in args))
-#	subprocess.run(args,check=True)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # To update Cycles to a newer version, follow these steps:
 # - Find the latest stable release on Cycles on https://github.com/blender/cycles/tags
 # - Update the fork https://github.com/Silverlan/cycles to that commit
 # - Copy the commit id to "cycles_commit_sha" below
 # - Update preprocessor definitions for cycles in CMakeLists.txt of external_libs/cycles/CMakeLists.txt
 # - Update the versions of tbb, oidn, ocio, oiio, opensubdiv libraries in setup.py to match cycles versions
+# - Go to https://github.com/blender/cycles/tree/main/lib for the commit of the cycles version
+#   - Grab the commit ids for linux_x64 and windows_x64 and apply them to cycles_lib_*_x64_commit_sha in setup.py
 cycles_commit_sha = "ee4a5f249e43e02aef439877e747f14fa5c8c3c9" # Version 4.1.1
 
 ########## cycles ##########
@@ -228,8 +169,6 @@ cmake_args.append("-DDEPENDENCY_CYCLES_DEPENDENCIES_LOCATION=" +cyclesDepsRoot +
 cmake_args.append("-DDEPENDENCY_OPENEXR_INCLUDE=" +cyclesDepsRoot + "/openexr/include")
 cmake_args.append("-DDEPENDENCY_OPENEXR_IMATH_INCLUDE=" +cyclesDepsRoot + "/imath/include")
 
-cmake_args.append("-DDEPENDENCY_OPENIMAGEDENOISE_INCLUDE=" +cyclesDepsRoot + "/openimagedenoise/include")
-
 if platform == "linux":
 	cmake_args.append("-DDEPENDENCY_CYCLES_LIBRARY_LOCATION=" +cyclesRoot +"/build/lib")
 
@@ -246,8 +185,6 @@ if platform == "linux":
 	cmake_args.append("-DDEPENDENCY_OPENEXR_UTIL_LIBRARY=" +cyclesDepsRoot + "/openexr/lib/libOpenEXR.so")
 	cmake_args.append("-DDEPENDENCY_OPENEXR_ILMTHREAD_LIBRARY=" +cyclesDepsRoot + "/openexr/lib/libIlmThread.so")
 	cmake_args.append("-DDEPENDENCY_OPENEXR_IEX_LIBRARY=" +cyclesDepsRoot + "/openexr/lib/libIex.so")
-	cmake_args.append("-DDEPENDENCY_OPENIMAGEDENOISE_LIBRARY=" +cyclesDepsRoot + "/openimagedenoise/lib/libopenimagedenoise.so")
-	cmake_args.append("-DDEPENDENCY_OPENIMAGEDENOISE_CORE_LIBRARY=" +cyclesDepsRoot + "/openimagedenoise/lib/libOpenImageDenoise_core.so")
 
 	# Prebuilt binary locations
 	# cmake_args.append("-DDEPENDENCY_CYCLES_TBB_LIBRARY=" +cyclesDepsRoot + "/tbb/lib/libtbb.a")
@@ -269,8 +206,6 @@ else:
 	cmake_args.append("-DDEPENDENCY_OPENEXR_IMATH_LIBRARY=" +cyclesDepsRoot + "/imath/lib/Imath.lib")
 	cmake_args.append("-DDEPENDENCY_OPENEXR_ILMTHREAD_LIBRARY=" +cyclesDepsRoot + "/openexr/lib/IlmThread_s.lib")
 	cmake_args.append("-DDEPENDENCY_OPENEXR_IEX_LIBRARY=" +cyclesDepsRoot + "/openexr/lib/Iex_s.lib")
-	cmake_args.append("-DDEPENDENCY_OPENIMAGEDENOISE_LIBRARY=" +cyclesDepsRoot + "/openimagedenoise/lib/openimagedenoise.lib")
-	cmake_args.append("-DDEPENDENCY_OPENIMAGEDENOISE_CORE_LIBRARY=" +cyclesDepsRoot + "/openimagedenoise/lib/openimagedenoise_core.lib")
 
 	cmake_args.append("-DDEPENDENCY_JPEG_LIBRARY=" +cyclesDepsRoot + "/jpeg/lib/libjpeg.lib")
 	cmake_args.append("-DDEPENDENCY_TIFF_LIBRARY=" +cyclesDepsRoot + "/tiff/lib/libtiff.lib")
