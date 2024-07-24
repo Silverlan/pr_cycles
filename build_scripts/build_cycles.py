@@ -63,29 +63,30 @@ if lastBuildCommit != targetCommit:
 		subprocess.run(command)
 	else:
 		# Reset our changes from previous versions
-		subprocess.run(["git","reset","--hard"],check=True)
+		#subprocess.run(["git","reset","--hard"],check=True)
 		
 		# On Linux we want to use our own build dependencies, so we have to run
 		# the make update script manually with the --no-libraries argument to disable the default
 		# behavior of downloading the prebuilt binaries.
-		scriptPath = cyclesRoot +"/src/cmake/make_update.py"
-		python_interpreter = sys.executable
-		command = [python_interpreter, scriptPath, "--no-libraries"]
-		subprocess.run(command)
+		#scriptPath = cyclesRoot +"/src/cmake/make_update.py"
+		#python_interpreter = sys.executable
+		#command = [python_interpreter, scriptPath, "--no-libraries"]
+		#subprocess.run(command)
 
 		# The update commit above will unfortunately update Cycles to the last commit. This behavior
 		# can't be disabled, so we have to reset the commit back to the one we want here.
 		# This can cause issues if the Cycles update-script updates the dependencies to newer versions
 		# that aren't compatible with the commit we're using, but it can't be helped.
-		subprocess.run(["git","reset","--hard",targetCommit],check=True)
+		#subprocess.run(["git","reset","--hard",targetCommit],check=True)
 
 if platform == "linux":
 	# Building the cycles executable causes build errors. We don't need it, but unfortunately cycles doesn't provide us with a
 	# way to disable it, so we'll have to make some changes to the CMake configuration file.
-	appCmakePath = cyclesRoot +"/src/app/CMakeLists.txt"
-	strIdx = open(appCmakePath, 'r').read().find('if(WITH_CYCLES_STANDALONE)')
-	if strIdx != -1:
-		replace_text_in_file(appCmakePath,'if(WITH_CYCLES_STANDALONE)','if(false)')
+	#appCmakePath = cyclesRoot +"/src/app/CMakeLists.txt"
+	#strIdx = open(appCmakePath, 'r').read().find('if(WITH_CYCLES_STANDALONE)')
+	#if strIdx != -1:
+	#	replace_text_in_file(appCmakePath,'if(WITH_CYCLES_STANDALONE)','if(false)')
+	print("")
 else:
 	# We need to add the --allow-unsupported-compiler flag to a cycles CMake configuration file manually,
 	# otherwise compilation will fail for newer versions of Visual Studio.
@@ -95,17 +96,13 @@ else:
 		replace_text_in_file(kernelCmakePath,'${CUDA_NVCC_FLAGS}','${CUDA_NVCC_FLAGS} --allow-unsupported-compiler')
 
 print_msg("Download dependencies")
-subprocess.run(["make","update"],check=True,shell=True)
+subprocess.run(["make","update"],check=True)
 
 print_msg("Build cycles")
-mkdir("build",cd=True)
 
-if platform == "linux":
-	oiio_root_dir = cyclesDepsRoot +"/oiio"
-	oidn_root_dir = cyclesDepsRoot +"/oidn"
-else:
-	oiio_root_dir = cyclesDepsRoot + "/openimageio"
-	oidn_root_dir = cyclesDepsRoot + "/openimagedenoise"
+mkdir("build",cd=True)
+oiio_root_dir = cyclesDepsRoot + "/openimageio"
+oidn_root_dir = cyclesDepsRoot + "/openimagedenoise"
 
 # Building cycles rebuilds shaders every time, which can take a very long time.
 # Since there's usually no reason to rebuild the shaders, we'll only build if the head commit has
@@ -116,7 +113,7 @@ if lastBuildCommit != curCommitId:
 		zlib = zlib_root +"/build/libz.a"
 	else:
 		zlib = zlib_lib
-	args = ["-DWITH_CYCLES_CUDA_BINARIES=ON","-DWITH_CYCLES_DEVICE_OPTIX=ON","-DWITH_CYCLES_DEVICE_CUDA=ON","-DZLIB_INCLUDE_DIR=" +zlib_root,"-DZLIB_LIBRARY=" +zlib]
+	args = ["-DWITH_CYCLES_CUDA_BINARIES=ON","-DWITH_CYCLES_DEVICE_OPTIX=ON","-DWITH_CYCLES_DEVICE_CUDA=ON"]
 	
 	# OSL is disabled because we don't need it and it causes build errors on the GitHub runner.
 	args.append("-DWITH_CYCLES_OSL=OFF")
@@ -126,26 +123,30 @@ if lastBuildCommit != curCommitId:
 	args.append("-DWITH_CYCLES_USD=OFF")
 	
 	args.append("-DOPENIMAGEIO_ROOT_DIR:PATH=" +oiio_root_dir)
-	if platform == "linux":
+	#if platform == "linux":
 		# Unfortunately, when building the dependencies ourselves, some of the lookup
 		# locations don't match what cycles expects, so we have to tell cycles where to
 		# look for those dependencies here.
-		args.append("-DOPENCOLORIO_ROOT_DIR:PATH=" +cyclesDepsInstallLocation +"/ocio")
-		args.append("-DOPENSUBDIV_ROOT_DIR:PATH=" +cyclesDepsInstallLocation +"/osd")
-		args.append("-DOPENIMAGEDENOISE_ROOT_DIR:PATH=" +oidn_root_dir)
+	#	args.append("-DOPENCOLORIO_ROOT_DIR:PATH=" +cyclesDepsInstallLocation +"/ocio")
+	#	args.append("-DOPENSUBDIV_ROOT_DIR:PATH=" +cyclesDepsInstallLocation +"/osd")
+	#	args.append("-DOPENIMAGEDENOISE_ROOT_DIR:PATH=" +oidn_root_dir)
 
 		# pugixml is required for the standalone executable of cycles, which we don't care about.
 		# Unfortunately cycles doesn't provide an option to build without pugixml, and it's also
 		# not included in the dependencies, so we just set the pugixml variables
 		# to bogus values here to shut CMake up.
-		args.append("-DPUGIXML_INCLUDE_DIR:PATH=/usr/include")
-		args.append("-DPUGIXML_LIBRARY:PATH=/usr/lib")
+	#	args.append("-DPUGIXML_INCLUDE_DIR:PATH=/usr/include")
+	#	args.append("-DPUGIXML_LIBRARY:PATH=/usr/lib")
 
-		args.append("-DTIFF_INCLUDE_DIR:PATH=" +cyclesDepsInstallLocation +"/tiff/libtiff")
-		args.append("-DTIFF_LIBRARY:FILEPATH=" +cyclesDepsInstallLocation +"/tiff/build/libtiff/libtiff.so")
+	#	args.append("-DTIFF_INCLUDE_DIR:PATH=" +cyclesDepsInstallLocation +"/tiff/libtiff")
+	#	args.append("-DTIFF_LIBRARY:FILEPATH=" +cyclesDepsInstallLocation +"/tiff/build/libtiff/libtiff.so")
 
-	cmake_configure("..",generator,args)
-	cmake_build(build_config)
+	if platform == "linux":
+		cmake_configure("..","Unix Makefiles",args)
+		cmake_build(build_config,targets=["install"])
+	else:
+		cmake_configure("..",generator,args)
+		cmake_build(build_config)
 
 	with open(lastbuildshaFile, 'w') as filetowrite:
 		filetowrite.write(curCommitId)
@@ -175,16 +176,18 @@ if platform == "linux":
 	cmake_args.append("-DDEPENDENCY_CYCLES_TBB_LIBRARY=" +cyclesDepsRoot + "/tbb/lib/libtbb.so")
 	cmake_args.append("-DDEPENDENCY_CYCLES_EMBREE_LIBRARY=" +cyclesDepsRoot + "/embree/lib/libembree4.so")
 	cmake_args.append("-DDEPENDENCY_CYCLES_OPENCOLORIO_LIBRARY=" +cyclesDepsRoot + "/opencolorio/lib/libOpenColorIO.so")
-	cmake_args.append("-DDEPENDENCY_CYCLES_OPENIMAGEIO_LIBRARY=" +cyclesDepsRoot + "/OpenImageIO/lib/libOpenImageIO.so")
+	cmake_args.append("-DDEPENDENCY_CYCLES_OPENIMAGEIO_LIBRARY=" +cyclesDepsRoot + "/openimageio/lib/libOpenImageIO.so")
 	cmake_args.append("-DDEPENDENCY_CYCLES_OPENIMAGEDENOISE_LIBRARY=" +cyclesDepsRoot + "/openimagedenoise/lib/libopenimagedenoise.so")
-	cmake_args.append("-DDEPENDENCY_CYCLES_IMATH_LIBRARY=" +cyclesDepsRoot + "/imath/lib/libimath.so")
-	cmake_args.append("-DDEPENDENCY_JPEG_LIBRARY=" +cyclesDepsRoot + "/jpeg/build/libjpeg.a")
-	cmake_args.append("-DDEPENDENCY_TIFF_LIBRARY=" +cyclesDepsRoot + "/tiff/build/libtiff/libtiff.so")
+	cmake_args.append("-DDEPENDENCY_CYCLES_IMATH_LIBRARY=" +cyclesDepsRoot + "/imath/lib/libImath.so")
+	cmake_args.append("-DDEPENDENCY_JPEG_LIBRARY=" +cyclesDepsRoot + "/jpeg/lib/libjpeg.a")
+	cmake_args.append("-DDEPENDENCY_TIFF_LIBRARY=" +cyclesDepsRoot + "/tiff/lib/libtiff.a")
 	cmake_args.append("-DDEPENDENCY_CYCLES_LPNG_LIBRARY=" +cyclesDepsRoot + "/png/lib/libpng.a")
-	cmake_args.append("-DDEPENDENCY_OPENEXR_IMATH_LIBRARY=" +cyclesDepsRoot + "/Imath/build/src/Imath/libImath-3_1.so")
+	cmake_args.append("-DDEPENDENCY_OPENEXR_IMATH_LIBRARY=" +cyclesDepsRoot + "/imath/lib/libImath.so")
 	cmake_args.append("-DDEPENDENCY_OPENEXR_UTIL_LIBRARY=" +cyclesDepsRoot + "/openexr/lib/libOpenEXR.so")
 	cmake_args.append("-DDEPENDENCY_OPENEXR_ILMTHREAD_LIBRARY=" +cyclesDepsRoot + "/openexr/lib/libIlmThread.so")
 	cmake_args.append("-DDEPENDENCY_OPENEXR_IEX_LIBRARY=" +cyclesDepsRoot + "/openexr/lib/libIex.so")
+	cmake_args.append("-DDEPENDENCY_OPENEXR_LIBRARY=" +cyclesDepsRoot + "/openexr/lib/libOpenEXR.so")
+	cmake_args.append("-DDEPENDENCY_BOOST_THREAD_SHARED_LIBRARY=" +cyclesDepsRoot + "/boost/lib/libboost_thread.so")
 
 	# Prebuilt binary locations
 	# cmake_args.append("-DDEPENDENCY_CYCLES_TBB_LIBRARY=" +cyclesDepsRoot + "/tbb/lib/libtbb.a")
