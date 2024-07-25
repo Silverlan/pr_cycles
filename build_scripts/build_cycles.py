@@ -61,23 +61,6 @@ if lastBuildCommit != targetCommit:
 		python_interpreter = sys.executable
 		command = [python_interpreter, scriptPath, "--no-cycles"]
 		subprocess.run(command)
-	else:
-		# Reset our changes from previous versions
-		#subprocess.run(["git","reset","--hard"],check=True)
-		
-		# On Linux we want to use our own build dependencies, so we have to run
-		# the make update script manually with the --no-libraries argument to disable the default
-		# behavior of downloading the prebuilt binaries.
-		#scriptPath = cyclesRoot +"/src/cmake/make_update.py"
-		#python_interpreter = sys.executable
-		#command = [python_interpreter, scriptPath, "--no-libraries"]
-		#subprocess.run(command)
-
-		# The update commit above will unfortunately update Cycles to the last commit. This behavior
-		# can't be disabled, so we have to reset the commit back to the one we want here.
-		# This can cause issues if the Cycles update-script updates the dependencies to newer versions
-		# that aren't compatible with the commit we're using, but it can't be helped.
-		#subprocess.run(["git","reset","--hard",targetCommit],check=True)
 
 if platform == "linux":
 	# Building the cycles executable causes build errors. We don't need it, but unfortunately cycles doesn't provide us with a
