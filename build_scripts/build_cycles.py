@@ -79,7 +79,11 @@ else:
 		replace_text_in_file(kernelCmakePath,'${CUDA_NVCC_FLAGS}','${CUDA_NVCC_FLAGS} --allow-unsupported-compiler')
 
 print_msg("Download dependencies")
-subprocess.run(["make","update"],check=True)
+os.chdir(cyclesRoot)
+if platform == "linux":
+	subprocess.run(["make","update"],check=True)
+else:
+	subprocess.run(["make.bat","update"],check=True)
 
 print_msg("Build cycles")
 
