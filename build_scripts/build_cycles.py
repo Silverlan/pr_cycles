@@ -12,7 +12,7 @@ import subprocess
 # - Update the versions of tbb, oidn, ocio, oiio, opensubdiv libraries in setup.py to match cycles versions
 # - Go to https://github.com/blender/cycles/tree/main/lib for the commit of the cycles version
 #   - Grab the commit ids for linux_x64 and windows_x64 and apply them to cycles_lib_*_x64_commit_sha in setup.py
-cycles_commit_sha = "ee4a5f249e43e02aef439877e747f14fa5c8c3c9" # Version 4.1.1
+cycles_commit_sha = "14bb716d745b960b05e2ffcdaf6f067d9436498c" # Version 4.2
 
 ########## cycles ##########
 os.chdir(deps_dir)
@@ -76,7 +76,7 @@ else:
 	kernelCmakePath = cyclesRoot +"/src/kernel/CMakeLists.txt"
 	strIdx = open(kernelCmakePath, 'r').read().find('--allow-unsupported-compiler')
 	if strIdx == -1:
-		replace_text_in_file(kernelCmakePath,'${CUDA_NVCC_FLAGS}','${CUDA_NVCC_FLAGS} --allow-unsupported-compiler')
+		replace_text_in_file(kernelCmakePath,'${CUDA_NVCC_FLAGS}','${CUDA_NVCC_FLAGS} --allow-unsupported-compiler -D _ALLOW_COMPILER_AND_STL_VERSION_MISMATCH')
 
 print_msg("Download dependencies")
 os.chdir(cyclesRoot)
@@ -151,6 +151,7 @@ cmake_args.append("-DDEPENDENCY_CYCLES_OPENEXR_INCLUDE=" +cyclesDepsRoot + "/ope
 cmake_args.append("-DDEPENDENCY_CYCLES_EMBREE_INCLUDE=" +cyclesDepsRoot + "/embree/include")
 cmake_args.append("-DDEPENDENCY_CYCLES_OSL_INCLUDE=" +cyclesDepsRoot + "/osl/include")
 cmake_args.append("-DDEPENDENCY_CYCLES_TBB_INCLUDE=" +cyclesDepsRoot + "/tbb/include")
+cmake_args.append("-DDEPENDENCY_CYCLES_ZSTD_INCLUDE=" +cyclesDepsRoot + "/zstd/include")
 cmake_args.append("-DDEPENDENCY_CYCLES_OPENVDB_LIBRARY_PATH=" +cyclesDepsRoot + "/openvdb/lib")
 cmake_args.append("-DDEPENDENCY_CYCLES_DEPENDENCIES_LOCATION=" +cyclesDepsRoot + "")
 
@@ -161,6 +162,7 @@ if platform == "linux":
 	cmake_args.append("-DDEPENDENCY_CYCLES_LIBRARY_LOCATION=" +cyclesRoot +"/build/lib")
 
 	cmake_args.append("-DDEPENDENCY_CYCLES_TBB_LIBRARY=" +cyclesDepsRoot + "/tbb/lib/libtbb.so")
+	cmake_args.append("-DDEPENDENCY_CYCLES_ZSTD_LIBRARY=" +cyclesDepsRoot + "/zstd/lib/libzstd.a")
 	cmake_args.append("-DDEPENDENCY_CYCLES_EMBREE_LIBRARY=" +cyclesDepsRoot + "/embree/lib/libembree4.so")
 	cmake_args.append("-DDEPENDENCY_CYCLES_OPENCOLORIO_LIBRARY=" +cyclesDepsRoot + "/opencolorio/lib/libOpenColorIO.so")
 	cmake_args.append("-DDEPENDENCY_CYCLES_OPENIMAGEIO_LIBRARY=" +cyclesDepsRoot + "/openimageio/lib/libOpenImageIO.so")
@@ -187,6 +189,7 @@ if platform == "linux":
 else:
 	cmake_args.append("-DDEPENDENCY_CYCLES_LIBRARY_LOCATION=" +cyclesRoot +"/build/lib/" +build_config +"")
 	cmake_args.append("-DDEPENDENCY_CYCLES_TBB_LIBRARY=" +cyclesDepsRoot + "/tbb/lib/tbb.lib")
+	cmake_args.append("-DDEPENDENCY_CYCLES_ZSTD_LIBRARY=" +cyclesDepsRoot + "/zstd/lib/zstd_static.lib")
 	cmake_args.append("-DDEPENDENCY_CYCLES_EMBREE_LIBRARY=" +cyclesDepsRoot + "/embree/lib/embree4.lib")
 	cmake_args.append("-DDEPENDENCY_CYCLES_OPENCOLORIO_LIBRARY=" +cyclesDepsRoot + "/opencolorio/lib/OpenColorIO.lib")
 	cmake_args.append("-DDEPENDENCY_CYCLES_OPENIMAGEIO_LIBRARY=" +cyclesDepsRoot + "/OpenImageIO/lib/OpenImageIO.lib")

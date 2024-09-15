@@ -8,8 +8,8 @@ from pathlib import Path
 os.chdir(deps_dir)
 
 # These need to match the cycles version that is being used (see build_cycles.py for more information)
-cycles_lib_windows_x64_commit_sha = "1a8571a"
-cycles_lib_linux_x64_commit_sha = "87f8577"
+cycles_lib_windows_x64_commit_sha = "30392df"
+cycles_lib_linux_x64_commit_sha = "4d2e4b4"
 use_prebuilt_binaries = True
 
 if use_prebuilt_binaries:
@@ -244,7 +244,7 @@ if not Path(utilocio_root).is_dir():
     os.chdir(root +"/external_libs")
     git_clone("https://github.com/Silverlan/util_ocio.git","util_ocio")
 os.chdir(utilocio_root)
-reset_to_commit("2fc6cfe1a52049f9bff7670d3c58410cc1653c13")
+reset_to_commit("19d48ea21c58f79d7359075197c786c705d7817f")
 
 cmake_args.append("-DDEPENDENCY_UTIL_OCIO_INCLUDE=" +utilocio_root +"/include")
 
