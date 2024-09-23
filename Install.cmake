@@ -18,6 +18,10 @@ pr_install_binary(imath WIN "imath.dll" LIN "libImath.so" INSTALL_DIR "${CYCLES_
 
 pr_install_binary(openimagedenoise WIN "OpenImageDenoise.dll" LIN "libOpenImageDenoise.so" BIN_DIR "${UNIRENDER_PREBUILT_BINARY_LOCATION}/openimagedenoise/${BIN_DIR}")
 pr_install_binary(openimagedenoise_core WIN "OpenImageDenoise_core.dll" LIN "libOpenImageDenoise_core.so.2.3.0" BIN_DIR "${UNIRENDER_PREBUILT_BINARY_LOCATION}/openimagedenoise/${BIN_DIR}")
+pr_install_binary(openimagedenoise_device_cpu WIN "OpenImageDenoise_device_cpu.dll" LIN "liOpenImageDenoise_device_cpu.so.2.3.0" BIN_DIR "${UNIRENDER_PREBUILT_BINARY_LOCATION}/openimagedenoise/${BIN_DIR}")
+pr_install_binary(openimagedenoise_device_cuda WIN "OpenImageDenoise_device_cuda.dll" LIN "liOpenImageDenoise_device_cuda.so.2.3.0" BIN_DIR "${UNIRENDER_PREBUILT_BINARY_LOCATION}/openimagedenoise/${BIN_DIR}")
+pr_install_binary(openimagedenoise_device_hip WIN "OpenImageDenoise_device_hip.dll" LIN "liOpenImageDenoise_device_hip.so.2.3.0" BIN_DIR "${UNIRENDER_PREBUILT_BINARY_LOCATION}/openimagedenoise/${BIN_DIR}")
+pr_install_binary(openimagedenoise_device_sycl WIN "OpenImageDenoise_device_sycl.dll" LIN "liOpenImageDenoise_device_sycl.so.2.3.0" BIN_DIR "${UNIRENDER_PREBUILT_BINARY_LOCATION}/openimagedenoise/${BIN_DIR}")
 
 # assets
 pr_install_directory("${CMAKE_CURRENT_LIST_DIR}/assets/" INSTALL_DIR "modules/")
@@ -45,8 +49,14 @@ if(PR_UNIRENDER_WITH_CYCLES)
 
     pr_install_binary(cycles_openimageio WIN "OpenImageIO.dll" LIN "libOpenImageIO.so" INSTALL_DIR "${CYCLES_INSTALL_DIR}" BIN_DIR "${DEPENDENCY_CYCLES_DEPENDENCIES_LOCATION}/OpenImageIO/${BIN_DIR}")
     pr_install_binary(cycles_openimageio_util WIN "OpenImageIO_Util.dll" LIN "libOpenImageIO_Util.so" INSTALL_DIR "${CYCLES_INSTALL_DIR}" BIN_DIR "${DEPENDENCY_CYCLES_DEPENDENCIES_LOCATION}/OpenImageIO/${BIN_DIR}")
+    
     pr_install_binary(cycles_openimagedenoise WIN "openimagedenoise.dll" LIN "libOpenImageDenoise.so" INSTALL_DIR "${CYCLES_INSTALL_DIR}" BIN_DIR "${DEPENDENCY_CYCLES_DEPENDENCIES_LOCATION}/openimagedenoise/${BIN_DIR}")
     pr_install_binary(cycles_openimagedenoise_core WIN "OpenImageDenoise_core.dll" LIN "libOpenImageDenoise_core.so.2.3.0" INSTALL_DIR "${CYCLES_INSTALL_DIR}" BIN_DIR "${DEPENDENCY_CYCLES_DEPENDENCIES_LOCATION}/openimagedenoise/${BIN_DIR}")
+    pr_install_binary(cycles_openimagedenoise_device_cpu WIN "OpenImageDenoise_device_cpu.dll" LIN "libOpenImageDenoise_device_cpu.so.2.3.0" INSTALL_DIR "${CYCLES_INSTALL_DIR}" BIN_DIR "${DEPENDENCY_CYCLES_DEPENDENCIES_LOCATION}/openimagedenoise/${BIN_DIR}")
+    pr_install_binary(cycles_openimagedenoise_device_cuda WIN "OpenImageDenoise_device_cuda.dll" LIN "libOpenImageDenoise_device_cuda.so.2.3.0" INSTALL_DIR "${CYCLES_INSTALL_DIR}" BIN_DIR "${DEPENDENCY_CYCLES_DEPENDENCIES_LOCATION}/openimagedenoise/${BIN_DIR}")
+    pr_install_binary(cycles_openimagedenoise_device_hip WIN "OpenImageDenoise_device_hip.dll" LIN "libOpenImageDenoise_device_hip.so.2.3.0" INSTALL_DIR "${CYCLES_INSTALL_DIR}" BIN_DIR "${DEPENDENCY_CYCLES_DEPENDENCIES_LOCATION}/openimagedenoise/${BIN_DIR}")
+    pr_install_binary(cycles_openimagedenoise_device_sycl WIN "OpenImageDenoise_device_sycl.dll" LIN "libOpenImageDenoise_device_sycl.so.2.3.0" INSTALL_DIR "${CYCLES_INSTALL_DIR}" BIN_DIR "${DEPENDENCY_CYCLES_DEPENDENCIES_LOCATION}/openimagedenoise/${BIN_DIR}")
+
     pr_install_binary(cycles_tbb WIN "tbb.dll" LIN "libtbb.so" INSTALL_DIR "${CYCLES_INSTALL_DIR}" BIN_DIR "${DEPENDENCY_CYCLES_DEPENDENCIES_LOCATION}/tbb/${BIN_DIR}")
     pr_install_binary(cycles_embree WIN "embree4.dll" LIN "libembree4.so" INSTALL_DIR "${CYCLES_INSTALL_DIR}" BIN_DIR "${DEPENDENCY_CYCLES_DEPENDENCIES_LOCATION}/embree/${BIN_DIR}")
     pr_install_binary(cycles_opencolorio WIN "OpenColorIO_2_3.dll" LIN "libOpenColorIO.so" INSTALL_DIR "${CYCLES_INSTALL_DIR}" BIN_DIR "${DEPENDENCY_CYCLES_DEPENDENCIES_LOCATION}/opencolorio/${BIN_DIR}")
