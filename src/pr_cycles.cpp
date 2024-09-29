@@ -1806,24 +1806,6 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 	t["IN_SMOOTH"] = unirender::nodes::toon_bsdf::IN_SMOOTH;
 	t["OUT_BSDF"] = unirender::nodes::toon_bsdf::OUT_BSDF;
 
-	t = nodeTypeEnums[unirender::NODE_GLOSSY_BSDF] = luabind::newtable(l.GetState());
-	t["IN_COLOR"] = unirender::nodes::glossy_bsdf::IN_COLOR;
-	t["IN_ALPHA"] = unirender::nodes::glossy_bsdf::IN_ALPHA;
-	t["IN_NORMAL"] = unirender::nodes::glossy_bsdf::IN_NORMAL;
-	t["IN_SURFACE_MIX_WEIGHT"] = unirender::nodes::glossy_bsdf::IN_SURFACE_MIX_WEIGHT;
-	t["IN_DISTRIBUTION"] = unirender::nodes::glossy_bsdf::IN_DISTRIBUTION;
-	t["IN_ROUGHNESS"] = unirender::nodes::glossy_bsdf::IN_ROUGHNESS;
-	t["OUT_BSDF"] = unirender::nodes::glossy_bsdf::OUT_BSDF;
-
-	t = nodeTypeEnums[unirender::NODE_GLASS_BSDF] = luabind::newtable(l.GetState());
-	t["IN_DISTRIBUTION"] = unirender::nodes::glass_bsdf::IN_DISTRIBUTION;
-	t["IN_COLOR"] = unirender::nodes::glass_bsdf::IN_COLOR;
-	t["IN_NORMAL"] = unirender::nodes::glass_bsdf::IN_NORMAL;
-	t["IN_SURFACE_MIX_WEIGHT"] = unirender::nodes::glass_bsdf::IN_SURFACE_MIX_WEIGHT;
-	t["IN_ROUGHNESS"] = unirender::nodes::glass_bsdf::IN_ROUGHNESS;
-	t["IN_IOR"] = unirender::nodes::glass_bsdf::IN_IOR;
-	t["OUT_BSDF"] = unirender::nodes::glass_bsdf::OUT_BSDF;
-
 	typedef enum ClosureType {
 		/* Special type, flags generic node as a non-BSDF. */
 		CLOSURE_NONE_ID,
@@ -1885,6 +1867,29 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 
 		NBUILTIN_CLOSURES
 	} ClosureType;
+
+	t = nodeTypeEnums[unirender::NODE_GLOSSY_BSDF] = luabind::newtable(l.GetState());
+	t["IN_COLOR"] = unirender::nodes::glossy_bsdf::IN_COLOR;
+	t["IN_ALPHA"] = unirender::nodes::glossy_bsdf::IN_ALPHA;
+	t["IN_NORMAL"] = unirender::nodes::glossy_bsdf::IN_NORMAL;
+	t["IN_SURFACE_MIX_WEIGHT"] = unirender::nodes::glossy_bsdf::IN_SURFACE_MIX_WEIGHT;
+	t["IN_DISTRIBUTION"] = unirender::nodes::glossy_bsdf::IN_DISTRIBUTION;
+	t["IN_ROUGHNESS"] = unirender::nodes::glossy_bsdf::IN_ROUGHNESS;
+	t["OUT_BSDF"] = unirender::nodes::glossy_bsdf::OUT_BSDF;
+
+	t["DISTRIBUTION_BECKMANN"] = ClosureType::CLOSURE_BSDF_MICROFACET_BECKMANN_ID;
+	t["DISTRIBUTION_MICROFACET_GGX"] = ClosureType::CLOSURE_BSDF_MICROFACET_GGX_ID;
+	t["DISTRIBUTION_ASHIKHMIN_SHIRLEY"] = ClosureType::CLOSURE_BSDF_ASHIKHMIN_SHIRLEY_ID;
+	t["DISTRIBUTION_MICROFACET_MULTI_GGX"] = ClosureType::CLOSURE_BSDF_MICROFACET_MULTI_GGX_ID;
+
+	t = nodeTypeEnums[unirender::NODE_GLASS_BSDF] = luabind::newtable(l.GetState());
+	t["IN_DISTRIBUTION"] = unirender::nodes::glass_bsdf::IN_DISTRIBUTION;
+	t["IN_COLOR"] = unirender::nodes::glass_bsdf::IN_COLOR;
+	t["IN_NORMAL"] = unirender::nodes::glass_bsdf::IN_NORMAL;
+	t["IN_SURFACE_MIX_WEIGHT"] = unirender::nodes::glass_bsdf::IN_SURFACE_MIX_WEIGHT;
+	t["IN_ROUGHNESS"] = unirender::nodes::glass_bsdf::IN_ROUGHNESS;
+	t["IN_IOR"] = unirender::nodes::glass_bsdf::IN_IOR;
+	t["OUT_BSDF"] = unirender::nodes::glass_bsdf::OUT_BSDF;
 
 	t["DISTRIBUTION_SHARP"] = ClosureType::CLOSURE_BSDF_SHARP_GLASS_ID;
 	t["DISTRIBUTION_BECKMANN"] = ClosureType::CLOSURE_BSDF_MICROFACET_BECKMANN_GLASS_ID;
@@ -1966,6 +1971,27 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 	t["IN_COLOR1"] = unirender::nodes::mix::IN_COLOR1;
 	t["IN_COLOR2"] = unirender::nodes::mix::IN_COLOR2;
 	t["OUT_COLOR"] = unirender::nodes::mix::OUT_COLOR;
+
+	t["TYPE_BLEND"] = unirender::nodes::mix::Mix::Blend;
+	t["TYPE_ADD"] = unirender::nodes::mix::Mix::Add;
+	t["TYPE_MUL"] = unirender::nodes::mix::Mix::Mul;
+	t["TYPE_SUB"] = unirender::nodes::mix::Mix::Sub;
+	t["TYPE_SCREEN"] = unirender::nodes::mix::Mix::Screen;
+	t["TYPE_DIV"] = unirender::nodes::mix::Mix::Div;
+	t["TYPE_DIFF"] = unirender::nodes::mix::Mix::Diff;
+	t["TYPE_DARK"] = unirender::nodes::mix::Mix::Dark;
+	t["TYPE_LIGHT"] = unirender::nodes::mix::Mix::Light;
+	t["TYPE_OVERLAY"] = unirender::nodes::mix::Mix::Overlay;
+	t["TYPE_DODGE"] = unirender::nodes::mix::Mix::Dodge;
+	t["TYPE_BURN"] = unirender::nodes::mix::Mix::Burn;
+	t["TYPE_HUE"] = unirender::nodes::mix::Mix::Hue;
+	t["TYPE_SAT"] = unirender::nodes::mix::Mix::Sat;
+	t["TYPE_VAL"] = unirender::nodes::mix::Mix::Val;
+	t["TYPE_COLOR"] = unirender::nodes::mix::Mix::Color;
+	t["TYPE_SOFT"] = unirender::nodes::mix::Mix::Soft;
+	t["TYPE_LINEAR"] = unirender::nodes::mix::Mix::Linear;
+	t["TYPE_EXCLUSION"] = unirender::nodes::mix::Mix::Exclusion;
+	t["TYPE_CLAMP"] = unirender::nodes::mix::Mix::Clamp;
 
 	t = nodeTypeEnums[unirender::NODE_RGB_TO_BW] = luabind::newtable(l.GetState());
 	t["IN_COLOR"] = unirender::nodes::rgb_to_bw::IN_COLOR;
