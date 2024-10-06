@@ -17,6 +17,7 @@ pr_add_compile_definitions(${PROJ_NAME} -DOIIO_STATIC_BUILD -DRT_ENABLE_SUBDIVIS
 if(${PR_UNIRENDER_ENABLE_DEPENDENCIES})
 	pr_add_dependency(${PROJ_NAME} util_raytracing TARGET PUBLIC)
 	if(PR_UNIRENDER_WITH_CYCLES)
+		set(ROLLBACK_CYCLES_4_1_1 ON CACHE BOOL "Enable Rollback to Cycles 4.1.1")
 		add_subdirectory(external_libs/cycles)
 		set_target_properties(UniRender_cycles PROPERTIES FOLDER modules/offline_render/unirender)
 	endif()

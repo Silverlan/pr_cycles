@@ -12,14 +12,14 @@ import subprocess
 # - Update the versions of tbb, oidn, ocio, oiio, opensubdiv libraries in setup.py to match cycles versions
 # - Go to https://github.com/blender/cycles/tree/main/lib for the commit of the cycles version
 #   - Grab the commit ids for linux_x64 and windows_x64 and apply them to cycles_lib_*_x64_commit_sha in setup.py
-cycles_commit_sha = "14bb716d745b960b05e2ffcdaf6f067d9436498c" # Version 4.2
+cycles_commit_sha = "f0d593ed7d0574fe113557612b78dfdaf4ee4203" # Version 4.1.1
 
 ########## cycles ##########
 os.chdir(deps_dir)
 cyclesRoot = deps_dir +"/cycles"
 if not Path(cyclesRoot).is_dir():
 	print_msg("cycles not found. Downloading...")
-	git_clone("https://github.com/Silverlan/cycles.git")
+	git_clone("https://github.com/Silverlan/cycles.git",branch="rollback/4.1.1")
 
 os.chdir(cyclesRoot)
 
