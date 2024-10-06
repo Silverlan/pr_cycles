@@ -346,8 +346,8 @@ static void sync_camera(BaseEntity &ent, unirender::Camera &cam)
 		return;
 	cam.SetPos(ent.GetPosition());
 	cam.SetRotation(ent.GetRotation());
-	cam.SetNearZ(util::pragma::units_to_metres(hCam->GetNearZ()));
-	cam.SetFarZ(util::pragma::units_to_metres(hCam->GetFarZ()));
+	cam.SetNearZ(pragma::units_to_metres(hCam->GetNearZ()));
+	cam.SetFarZ(pragma::units_to_metres(hCam->GetFarZ()));
 	cam.SetFOV(hCam->GetFOV());
 }
 static void initialize_cycles_scene_from_game_scene(pragma::CSceneComponent &gameScene, pragma::modules::cycles::Scene &scene, const Vector3 &camPos, const Quat &camRot, bool equirect, const Mat4 &vp, float nearZ, float farZ, float fov, float aspectRatio, SceneFlags sceneFlags,
@@ -371,8 +371,8 @@ static void initialize_cycles_scene_from_game_scene(pragma::CSceneComponent &gam
 	auto &cam = scene->GetCamera();
 	cam.SetPos(camPos);
 	cam.SetRotation(camRot);
-	cam.SetNearZ(util::pragma::units_to_metres(nearZ));
-	cam.SetFarZ(util::pragma::units_to_metres(farZ));
+	cam.SetNearZ(pragma::units_to_metres(nearZ));
+	cam.SetFarZ(pragma::units_to_metres(farZ));
 	cam.SetFOV(fov);
 
 	auto &hCam = gameScene.GetActiveCamera();
