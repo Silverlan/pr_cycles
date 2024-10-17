@@ -11,6 +11,9 @@
 #include <image/prosper_texture.hpp>
 #include <prosper_command_buffer.hpp>
 #include <prosper_fence.hpp>
+#include <future>
+#include <deque>
+#include <queue>
 
 extern DLLCLIENT CEngine *c_engine;
 
@@ -49,7 +52,7 @@ void DenoiseTexture::UpdatePendingTiles()
 	}
 }
 
-void DenoiseTexture::AppendTile(unirender::TileManager::TileData &&tileData)
+void DenoiseTexture::AppendTile(pragma::scenekit::TileManager::TileData &&tileData)
 {
 	m_tileMutex.lock();
 	m_pendingTiles.push(std::move(tileData));
@@ -65,16 +68,16 @@ void DenoiseTexture::RunDenoise()
 {
 	auto w = m_denoisedImage->GetWidth();
 	auto h = m_denoisedImage->GetHeight();
-	unirender::denoise::Info denoiseInfo {};
+	pragma::scenekit::denoise::Info denoiseInfo {};
 	denoiseInfo.hdr = true;
 	denoiseInfo.width = w;
 	denoiseInfo.height = h;
 
-	unirender::denoise::ImageData output {};
+	pragma::scenekit::denoise::ImageData output {};
 	output.data = static_cast<uint8_t *>(m_inputImage->GetData());
 	output.format = m_inputImage->GetFormat();
 
-	unirender::denoise::ImageInputs inputs {};
+	pragma::scenekit::denoise::ImageInputs inputs {};
 	inputs.beautyImage = output;
 
 	m_denoiser.Denoise(denoiseInfo, inputs, output);
@@ -96,7 +99,7 @@ ProgressiveTexture::~ProgressiveTexture()
 	c_engine->GetRenderContext().KeepResourceAliveUntilPresentationComplete(m_cmdBuffer);
 }
 std::shared_ptr<prosper::Texture> ProgressiveTexture::GetTexture() const { return m_texture; }
-void ProgressiveTexture::Initialize(unirender::Renderer &renderer)
+void ProgressiveTexture::Initialize(pragma::scenekit::Renderer &renderer)
 {
 	m_renderer = renderer.shared_from_this();
 	auto &scene = m_renderer->GetScene();

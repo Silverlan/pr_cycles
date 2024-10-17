@@ -21,7 +21,7 @@ template __declspec(dllimport) util::TWeakSharedHandle<BaseEntity>::~TWeakShared
 //
 #endif
 
-void Shader::Initialize(unirender::NodeManager &nodeManager, BaseEntity *ent, ModelSubMesh *mesh, Material &mat)
+void Shader::Initialize(pragma::scenekit::NodeManager &nodeManager, BaseEntity *ent, ModelSubMesh *mesh, Material &mat)
 {
 	m_nodeManager = &nodeManager;
 	m_hEntity = ent ? ent->GetHandle() : EntityHandle {};
@@ -29,10 +29,10 @@ void Shader::Initialize(unirender::NodeManager &nodeManager, BaseEntity *ent, Mo
 	m_mesh = mesh ? mesh->shared_from_this() : nullptr;
 }
 
-std::shared_ptr<unirender::GroupNodeDesc> Shader::InitializeCombinedPass() { return nullptr; }
-std::shared_ptr<unirender::GroupNodeDesc> Shader::InitializeAlbedoPass() { return nullptr; }
-std::shared_ptr<unirender::GroupNodeDesc> Shader::InitializeNormalPass() { return nullptr; }
-std::shared_ptr<unirender::GroupNodeDesc> Shader::InitializeDepthPass() { return nullptr; }
+std::shared_ptr<pragma::scenekit::GroupNodeDesc> Shader::InitializeCombinedPass() { return nullptr; }
+std::shared_ptr<pragma::scenekit::GroupNodeDesc> Shader::InitializeAlbedoPass() { return nullptr; }
+std::shared_ptr<pragma::scenekit::GroupNodeDesc> Shader::InitializeNormalPass() { return nullptr; }
+std::shared_ptr<pragma::scenekit::GroupNodeDesc> Shader::InitializeDepthPass() { return nullptr; }
 BaseEntity *Shader::GetEntity() const { return m_hEntity.get(); }
 Material *Shader::GetMaterial() const { return m_hMaterial.get(); }
 ModelSubMesh *Shader::GetMesh() const { return m_mesh.get(); }
@@ -41,7 +41,7 @@ ModelSubMesh *Shader::GetMesh() const { return m_mesh.get(); }
 
 std::shared_ptr<ShaderManager> ShaderManager::Create() { return std::shared_ptr<ShaderManager> {new ShaderManager {}}; }
 void ShaderManager::RegisterShader(const std::string &name, luabind::object oClass) { m_shaders[name] = oClass; }
-std::shared_ptr<Shader> ShaderManager::CreateShader(unirender::NodeManager &nodeManager, const std::string &name, BaseEntity *ent, ModelSubMesh *mesh, Material &mat)
+std::shared_ptr<Shader> ShaderManager::CreateShader(pragma::scenekit::NodeManager &nodeManager, const std::string &name, BaseEntity *ent, ModelSubMesh *mesh, Material &mat)
 {
 	auto it = m_shaders.find(name);
 	if(it == m_shaders.end())
@@ -81,36 +81,36 @@ std::shared_ptr<Shader> ShaderManager::CreateShader(unirender::NodeManager &node
 //////////////
 
 void LuaShader::Initialize(const luabind::object &o) { m_baseLuaObj = std::shared_ptr<luabind::object>(new luabind::object(o)); }
-void LuaShader::Initialize(unirender::NodeManager &nodeManager, BaseEntity *ent, ModelSubMesh *mesh, Material &mat)
+void LuaShader::Initialize(pragma::scenekit::NodeManager &nodeManager, BaseEntity *ent, ModelSubMesh *mesh, Material &mat)
 {
 	Shader::Initialize(nodeManager, ent, mesh, mat);
 	CallLuaMember<void>("Initialize");
 }
-std::shared_ptr<unirender::GroupNodeDesc> LuaShader::InitializeCombinedPass()
+std::shared_ptr<pragma::scenekit::GroupNodeDesc> LuaShader::InitializeCombinedPass()
 {
-	auto desc = unirender::GroupNodeDesc::Create(*m_nodeManager);
-	auto &nodeOutput = desc->AddNode(unirender::NODE_OUTPUT);
-	CallLuaMember<void, std::shared_ptr<unirender::GroupNodeDesc>, std::shared_ptr<unirender::NodeDesc>>("InitializeCombinedPass", desc, nodeOutput.shared_from_this());
+	auto desc = pragma::scenekit::GroupNodeDesc::Create(*m_nodeManager);
+	auto &nodeOutput = desc->AddNode(pragma::scenekit::NODE_OUTPUT);
+	CallLuaMember<void, std::shared_ptr<pragma::scenekit::GroupNodeDesc>, std::shared_ptr<pragma::scenekit::NodeDesc>>("InitializeCombinedPass", desc, nodeOutput.shared_from_this());
 	return desc;
 }
-std::shared_ptr<unirender::GroupNodeDesc> LuaShader::InitializeAlbedoPass()
+std::shared_ptr<pragma::scenekit::GroupNodeDesc> LuaShader::InitializeAlbedoPass()
 {
-	auto desc = unirender::GroupNodeDesc::Create(*m_nodeManager);
-	auto &nodeOutput = desc->AddNode(unirender::NODE_OUTPUT);
-	CallLuaMember<void, std::shared_ptr<unirender::GroupNodeDesc>, std::shared_ptr<unirender::NodeDesc>>("InitializeAlbedoPass", desc, nodeOutput.shared_from_this());
+	auto desc = pragma::scenekit::GroupNodeDesc::Create(*m_nodeManager);
+	auto &nodeOutput = desc->AddNode(pragma::scenekit::NODE_OUTPUT);
+	CallLuaMember<void, std::shared_ptr<pragma::scenekit::GroupNodeDesc>, std::shared_ptr<pragma::scenekit::NodeDesc>>("InitializeAlbedoPass", desc, nodeOutput.shared_from_this());
 	return desc;
 }
-std::shared_ptr<unirender::GroupNodeDesc> LuaShader::InitializeNormalPass()
+std::shared_ptr<pragma::scenekit::GroupNodeDesc> LuaShader::InitializeNormalPass()
 {
-	auto desc = unirender::GroupNodeDesc::Create(*m_nodeManager);
-	auto &nodeOutput = desc->AddNode(unirender::NODE_OUTPUT);
-	CallLuaMember<void, std::shared_ptr<unirender::GroupNodeDesc>, std::shared_ptr<unirender::NodeDesc>>("InitializeNormalPass", desc, nodeOutput.shared_from_this());
+	auto desc = pragma::scenekit::GroupNodeDesc::Create(*m_nodeManager);
+	auto &nodeOutput = desc->AddNode(pragma::scenekit::NODE_OUTPUT);
+	CallLuaMember<void, std::shared_ptr<pragma::scenekit::GroupNodeDesc>, std::shared_ptr<pragma::scenekit::NodeDesc>>("InitializeNormalPass", desc, nodeOutput.shared_from_this());
 	return desc;
 }
-std::shared_ptr<unirender::GroupNodeDesc> LuaShader::InitializeDepthPass()
+std::shared_ptr<pragma::scenekit::GroupNodeDesc> LuaShader::InitializeDepthPass()
 {
-	auto desc = unirender::GroupNodeDesc::Create(*m_nodeManager);
-	auto &nodeOutput = desc->AddNode(unirender::NODE_OUTPUT);
-	CallLuaMember<void, std::shared_ptr<unirender::GroupNodeDesc>, std::shared_ptr<unirender::NodeDesc>>("InitializeDepthPass", desc, nodeOutput.shared_from_this());
+	auto desc = pragma::scenekit::GroupNodeDesc::Create(*m_nodeManager);
+	auto &nodeOutput = desc->AddNode(pragma::scenekit::NODE_OUTPUT);
+	CallLuaMember<void, std::shared_ptr<pragma::scenekit::GroupNodeDesc>, std::shared_ptr<pragma::scenekit::NodeDesc>>("InitializeDepthPass", desc, nodeOutput.shared_from_this());
 	return desc;
 }

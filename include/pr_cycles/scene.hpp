@@ -8,8 +8,6 @@
 #ifndef __PR_CYCLES_SCENE_HPP__
 #define __PR_CYCLES_SCENE_HPP__
 
-#include <util_raytracing/scene.hpp>
-#include <util_raytracing/renderer.hpp>
 #include <sharedutils/util_weak_handle.hpp>
 #include <sharedutils/util_parallel_job.hpp>
 #include <sharedutils/util_hair.hpp>
@@ -22,6 +20,8 @@
 #include <thread>
 #include <pragma/entities/baseentity_handle.h>
 #include <mathutil/vertex.hpp>
+
+import pragma.scenekit;
 
 #define ENABLE_TEST_AMBIENT_OCCLUSION
 
@@ -71,11 +71,11 @@ namespace pragma::modules::cycles {
 			std::optional<std::vector<float>> alphas {};
 			std::optional<std::vector<float>> wrinkles {};
 
-			unirender::PShader shader = nullptr;
+			pragma::scenekit::PShader shader = nullptr;
 		};
-		Cache(unirender::Scene::RenderMode renderMode);
+		Cache(pragma::scenekit::Scene::RenderMode renderMode);
 		void AddParticleSystem(pragma::CParticleSystemComponent &ptc, const Vector3 &camPos, const Mat4 &vp, float nearZ, float farZ);
-		unirender::PObject AddEntity(BaseEntity &ent, std::vector<ModelSubMesh *> *optOutTargetMeshes = nullptr, const std::function<bool(ModelMesh &, const umath::ScaledTransform &)> &meshFilter = nullptr,
+		pragma::scenekit::PObject AddEntity(BaseEntity &ent, std::vector<ModelSubMesh *> *optOutTargetMeshes = nullptr, const std::function<bool(ModelMesh &, const umath::ScaledTransform &)> &meshFilter = nullptr,
 		  const std::function<bool(ModelSubMesh &, const umath::ScaledTransform &)> &subMeshFilter = nullptr, const std::string &nameSuffix = "");
 		std::vector<std::shared_ptr<MeshData>> AddEntityMesh(BaseEntity &ent, std::vector<ModelSubMesh *> *optOutTargetMeshes = nullptr, const std::function<bool(ModelMesh &, const umath::ScaledTransform &)> &meshFilter = nullptr,
 		  const std::function<bool(ModelSubMesh &, const umath::ScaledTransform &)> &subMeshFilter = nullptr, const std::string &nameSuffix = "", const std::optional<umath::ScaledTransform> &pose = {});
@@ -84,16 +84,16 @@ namespace pragma::modules::cycles {
 		std::vector<std::shared_ptr<MeshData>> AddMeshList(Model &mdl, const std::vector<std::shared_ptr<ModelMesh>> &meshList, const std::string &meshName, BaseEntity *optEnt = nullptr, const std::optional<umath::ScaledTransform> &pose = {}, uint32_t skinId = 0,
 		  CModelComponent *optMdlC = nullptr, CAnimatedComponent *optAnimC = nullptr, const std::function<bool(ModelMesh &, const umath::ScaledTransform &)> &optMeshFilter = nullptr, const std::function<bool(ModelSubMesh &, const umath::ScaledTransform &)> &optSubMeshFilter = nullptr,
 		  const std::function<void(ModelSubMesh &)> &optOnMeshAdded = nullptr);
-		unirender::PMesh BuildMesh(const std::string &meshName, const std::vector<std::shared_ptr<MeshData>> &meshDatas, const std::optional<umath::ScaledTransform> &pose = {}) const;
-		void AddAOBakeTarget(BaseEntity &ent, uint32_t matIndex, std::shared_ptr<unirender::Object> &oAo, std::shared_ptr<unirender::Object> &oEnv);
-		void AddAOBakeTarget(Model &mdl, uint32_t matIndex, std::shared_ptr<unirender::Object> &oAo, std::shared_ptr<unirender::Object> &oEnv);
-		unirender::ModelCache &GetModelCache() const { return *m_mdlCache; }
-		unirender::ShaderCache &GetShaderCache() const { return *m_shaderCache; }
-		std::unordered_map<unirender::Shader *, std::shared_ptr<Shader>> &GetRTShaderToShaderTable() const { return m_rtShaderToShader; }
+		pragma::scenekit::PMesh BuildMesh(const std::string &meshName, const std::vector<std::shared_ptr<MeshData>> &meshDatas, const std::optional<umath::ScaledTransform> &pose = {}) const;
+		void AddAOBakeTarget(BaseEntity &ent, uint32_t matIndex, std::shared_ptr<pragma::scenekit::Object> &oAo, std::shared_ptr<pragma::scenekit::Object> &oEnv);
+		void AddAOBakeTarget(Model &mdl, uint32_t matIndex, std::shared_ptr<pragma::scenekit::Object> &oAo, std::shared_ptr<pragma::scenekit::Object> &oEnv);
+		pragma::scenekit::ModelCache &GetModelCache() const { return *m_mdlCache; }
+		pragma::scenekit::ShaderCache &GetShaderCache() const { return *m_shaderCache; }
+		std::unordered_map<pragma::scenekit::Shader *, std::shared_ptr<Shader>> &GetRTShaderToShaderTable() const { return m_rtShaderToShader; }
 	  private:
-		void AddAOBakeTarget(BaseEntity *optEnt, Model &mdl, uint32_t matIndex, std::shared_ptr<unirender::Object> &oAo, std::shared_ptr<unirender::Object> &oEnv);
+		void AddAOBakeTarget(BaseEntity *optEnt, Model &mdl, uint32_t matIndex, std::shared_ptr<pragma::scenekit::Object> &oAo, std::shared_ptr<pragma::scenekit::Object> &oEnv);
 		struct ModelCacheInstance {
-			unirender::PMesh mesh = nullptr;
+			pragma::scenekit::PMesh mesh = nullptr;
 			uint32_t skin = 0;
 		};
 		struct ShaderInfo {
@@ -108,25 +108,25 @@ namespace pragma::modules::cycles {
 		Material *GetMaterial(Model &mdl, ModelSubMesh &subMesh, uint32_t skinId) const;
 		Material *GetMaterial(pragma::CModelComponent &mdlC, ModelSubMesh &subMesh, uint32_t skinId) const;
 		Material *GetMaterial(BaseEntity &ent, ModelSubMesh &subMesh, uint32_t skinId) const;
-		void AddMeshDataToMesh(unirender::Mesh &mesh, const MeshData &meshData, const std::optional<umath::ScaledTransform> &pose = {}) const;
-		void AddMesh(Model &mdl, unirender::Mesh &mesh, ModelSubMesh &mdlMesh, pragma::CModelComponent *optMdlC = nullptr, pragma::CAnimatedComponent *optAnimC = nullptr);
+		void AddMeshDataToMesh(pragma::scenekit::Mesh &mesh, const MeshData &meshData, const std::optional<umath::ScaledTransform> &pose = {}) const;
+		void AddMesh(Model &mdl, pragma::scenekit::Mesh &mesh, ModelSubMesh &mdlMesh, pragma::CModelComponent *optMdlC = nullptr, pragma::CAnimatedComponent *optAnimC = nullptr);
 		std::string GetUniqueName() { return "internal" + std::to_string(m_uniqueNameIndex++); };
 		std::shared_ptr<MeshData> CalcMeshData(Model &mdl, ModelSubMesh &mdlMesh, bool includeAlphas, bool includeWrinkles, pragma::CModelComponent *optMdlC = nullptr, pragma::CAnimatedComponent *optAnimC = nullptr);
-		unirender::PShader CreateShader(Material &mat, const std::string &meshName, const ShaderInfo &shaderInfo = {}) const;
-		unirender::PShader CreateShader(const std::string &meshName, Model &mdl, ModelSubMesh &subMesh, BaseEntity *optEnt = nullptr, uint32_t skinId = 0) const;
+		pragma::scenekit::PShader CreateShader(Material &mat, const std::string &meshName, const ShaderInfo &shaderInfo = {}) const;
+		pragma::scenekit::PShader CreateShader(const std::string &meshName, Model &mdl, ModelSubMesh &subMesh, BaseEntity *optEnt = nullptr, uint32_t skinId = 0) const;
 		uint32_t m_uniqueNameIndex = 0;
 		std::unordered_map<std::string, std::vector<ModelCacheInstance>> m_modelCache;
 		mutable std::unordered_map<Material *, size_t> m_materialToShader;
 		std::optional<std::string> m_sky {};
-		std::shared_ptr<unirender::ModelCache> m_mdlCache = nullptr;
-		std::shared_ptr<unirender::ShaderCache> m_shaderCache = nullptr;
-		mutable std::unordered_map<unirender::Shader *, std::shared_ptr<Shader>> m_rtShaderToShader {};
-		unirender::Scene::RenderMode m_renderMode = unirender::Scene::RenderMode::RenderImage;
+		std::shared_ptr<pragma::scenekit::ModelCache> m_mdlCache = nullptr;
+		std::shared_ptr<pragma::scenekit::ShaderCache> m_shaderCache = nullptr;
+		mutable std::unordered_map<pragma::scenekit::Shader *, std::shared_ptr<Shader>> m_rtShaderToShader {};
+		pragma::scenekit::Scene::RenderMode m_renderMode = pragma::scenekit::Scene::RenderMode::RenderImage;
 	};
 
 	class Scene : public std::enable_shared_from_this<Scene> {
 	  public:
-		Scene(unirender::Scene &rtScene);
+		Scene(pragma::scenekit::Scene &rtScene);
 		void AddSkybox(const std::string &texture);
 		void Add3DSkybox(pragma::CSceneComponent &gameScene, pragma::CSkyCameraComponent &skyCam, const Vector3 &camPos);
 		void SetAOBakeTarget(Model &mdl, uint32_t matIndex);
@@ -135,44 +135,44 @@ namespace pragma::modules::cycles {
 		void SetLightmapDataCache(LightmapDataCache *cache);
 		void Finalize();
 
-		unirender::Object *FindObject(const std::string &name);
-		const unirender::Object *FindObject(const std::string &name) const { return const_cast<Scene *>(this)->FindObject(name); }
+		pragma::scenekit::Object *FindObject(const std::string &name);
+		const pragma::scenekit::Object *FindObject(const std::string &name) const { return const_cast<Scene *>(this)->FindObject(name); }
 
 		Cache &GetCache();
 
-		unirender::Scene &operator*() { return *m_rtScene; };
-		const unirender::Scene &operator*() const { return *m_rtScene; };
+		pragma::scenekit::Scene &operator*() { return *m_rtScene; };
+		const pragma::scenekit::Scene &operator*() const { return *m_rtScene; };
 
-		unirender::Scene *operator->() { return m_rtScene.get(); };
-		const unirender::Scene *operator->() const { return m_rtScene.get(); };
+		pragma::scenekit::Scene *operator->() { return m_rtScene.get(); };
+		const pragma::scenekit::Scene *operator->() const { return m_rtScene.get(); };
 	  private:
-		void AddRoughnessMapImageTextureNode(unirender::ShaderModuleRoughness &shader, Material &mat, float defaultRoughness) const;
+		void AddRoughnessMapImageTextureNode(pragma::scenekit::ShaderModuleRoughness &shader, Material &mat, float defaultRoughness) const;
 		void BuildLightMapObject();
 
 		std::vector<EntityHandle> m_lightMapTargets {};
 		std::shared_ptr<LightmapDataCache> m_lightMapDataCache {};
 		std::shared_ptr<Cache> m_cache = nullptr;
-		std::shared_ptr<unirender::Scene> m_rtScene = nullptr;
+		std::shared_ptr<pragma::scenekit::Scene> m_rtScene = nullptr;
 		bool m_finalized = false;
 	};
 
 	class Renderer : public std::enable_shared_from_this<Renderer> {
 	  public:
-		Renderer(Scene &scene, unirender::Renderer &renderer);
+		Renderer(Scene &scene, pragma::scenekit::Renderer &renderer);
 		void ReloadShaders();
 
 		Scene &GetScene() { return *m_scene; }
 		const Scene &GetScene() const { return const_cast<Renderer *>(this)->GetScene(); }
 
-		unirender::Renderer *operator->() { return m_renderer.get(); }
-		const unirender::Renderer *operator->() const { return const_cast<Renderer *>(this)->operator->(); }
-		unirender::Renderer &operator*() { return *operator->(); }
-		const unirender::Renderer &operator*() const { return const_cast<Renderer *>(this)->operator*(); }
+		pragma::scenekit::Renderer *operator->() { return m_renderer.get(); }
+		const pragma::scenekit::Renderer *operator->() const { return const_cast<Renderer *>(this)->operator->(); }
+		pragma::scenekit::Renderer &operator*() { return *operator->(); }
+		const pragma::scenekit::Renderer &operator*() const { return const_cast<Renderer *>(this)->operator*(); }
 	  private:
 		std::shared_ptr<Scene> m_scene = nullptr;
-		std::shared_ptr<unirender::Renderer> m_renderer = nullptr;
+		std::shared_ptr<pragma::scenekit::Renderer> m_renderer = nullptr;
 	};
-	unirender::NodeManager &get_node_manager();
+	pragma::scenekit::NodeManager &get_node_manager();
 };
 
 #endif

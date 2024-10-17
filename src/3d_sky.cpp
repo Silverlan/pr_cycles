@@ -5,11 +5,9 @@
 * Copyright (c) 2023 Silverlan
 */
 
+#include <sharedutils/util_event_reply.hpp>
+#include <sharedutils/ctpl_stl.h>
 #include "pr_cycles/scene.hpp"
-#include "util_raytracing/scene.hpp"
-#include "util_raytracing/mesh.hpp"
-#include "util_raytracing/object.hpp"
-#include "util_raytracing/shader.hpp"
 #include <prosper_context.hpp>
 #include <sharedutils/functioncallback.h>
 #include <pragma/rendering/c_rendermode.h>
@@ -17,6 +15,11 @@
 #include <pragma/game/c_game.h>
 #include <pragma/entities/environment/c_sky_camera.hpp>
 #include <pragma/entities/components/c_render_component.hpp>
+#include <future>
+#include <deque>
+#include <queue>
+
+import pragma.scenekit;
 
 using namespace pragma::modules;
 

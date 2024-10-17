@@ -29,12 +29,6 @@
 #include <pragma/rendering/shaders/particles/c_shader_particle.hpp>
 #include <sharedutils/util_file.h>
 #include <util_texture_info.hpp>
-#include <util_raytracing/scene.hpp>
-#include <util_raytracing/shader.hpp>
-#include <util_raytracing/mesh.hpp>
-#include <util_raytracing/object.hpp>
-#include <util_raytracing/camera.hpp>
-#include <util_raytracing/model_cache.hpp>
 #include <texturemanager/texture.h>
 #include <cmaterialmanager.h>
 #include <datasystem_color.h>
@@ -45,6 +39,8 @@
 #undef __UTIL_STRING_H__
 #include <sharedutils/util_string.h>
 
+import pragma.scenekit;
+
 using namespace pragma::modules;
 
 extern DLLCLIENT CEngine *c_engine;
@@ -52,13 +48,13 @@ extern DLLCLIENT CGame *c_game;
 
 cycles::Cache::ShaderInfo::ShaderInfo() {}
 
-cycles::Scene::Scene(unirender::Scene &rtScene) : m_rtScene {rtScene.shared_from_this()}
+cycles::Scene::Scene(pragma::scenekit::Scene &rtScene) : m_rtScene {rtScene.shared_from_this()}
 {
 	m_cache = std::make_shared<Cache>(rtScene.GetRenderMode());
 	m_cache->GetModelCache().SetUnique(true);
 }
 
-void cycles::Scene::AddRoughnessMapImageTextureNode(unirender::ShaderModuleRoughness &shader, Material &mat, float defaultRoughness) const
+void cycles::Scene::AddRoughnessMapImageTextureNode(pragma::scenekit::ShaderModuleRoughness &shader, Material &mat, float defaultRoughness) const
 {
 #if 0
 	// If no roughness map is available, just use roughness or specular factor directly
@@ -100,16 +96,16 @@ void cycles::Scene::AddRoughnessMapImageTextureNode(unirender::ShaderModuleRough
 
 void cycles::Scene::SetAOBakeTarget(BaseEntity &ent, uint32_t matIndex)
 {
-	std::shared_ptr<unirender::Object> oAo;
-	std::shared_ptr<unirender::Object> oEnv;
+	std::shared_ptr<pragma::scenekit::Object> oAo;
+	std::shared_ptr<pragma::scenekit::Object> oEnv;
 	m_cache->AddAOBakeTarget(ent, matIndex, oAo, oEnv);
 	m_rtScene->SetBakeTarget(*oAo);
 }
 
 void cycles::Scene::SetAOBakeTarget(Model &mdl, uint32_t matIndex)
 {
-	std::shared_ptr<unirender::Object> oAo;
-	std::shared_ptr<unirender::Object> oEnv;
+	std::shared_ptr<pragma::scenekit::Object> oAo;
+	std::shared_ptr<pragma::scenekit::Object> oEnv;
 	m_cache->AddAOBakeTarget(mdl, matIndex, oAo, oEnv);
 	m_rtScene->SetBakeTarget(*oAo);
 }
@@ -125,13 +121,13 @@ void cycles::Scene::Finalize()
 	m_rtScene->AddModelsFromCache(m_cache->GetModelCache());
 }
 
-unirender::Object *cycles::Scene::FindObject(const std::string &name)
+pragma::scenekit::Object *cycles::Scene::FindObject(const std::string &name)
 {
 	auto &cache = GetCache();
 	auto &mdlCache = cache.GetModelCache();
 	for(auto &chunk : mdlCache.GetChunks()) {
 		auto &objs = chunk.GetObjects();
-		auto it = std::find_if(objs.begin(), objs.end(), [&name](const unirender::PObject &obj) { return obj->GetName() == name; });
+		auto it = std::find_if(objs.begin(), objs.end(), [&name](const pragma::scenekit::PObject &obj) { return obj->GetName() == name; });
 		if(it == objs.end())
 			continue;
 		return it->get();
@@ -139,7 +135,7 @@ unirender::Object *cycles::Scene::FindObject(const std::string &name)
 	return nullptr;
 }
 
-cycles::Renderer::Renderer(Scene &scene, unirender::Renderer &renderer) : m_scene {scene.shared_from_this()}, m_renderer {renderer.shared_from_this()} {}
+cycles::Renderer::Renderer(Scene &scene, pragma::scenekit::Renderer &renderer) : m_scene {scene.shared_from_this()}, m_renderer {renderer.shared_from_this()} {}
 
 void cycles::Renderer::ReloadShaders()
 {
@@ -158,7 +154,7 @@ void cycles::Renderer::ReloadShaders()
 					if(it == shaderTranslationTable.end())
 						continue;
 					auto &shader = it->second;
-					/*auto newRtShader = unirender::Shader::Create<unirender::GenericShader>();
+					/*auto newRtShader = pragma::scenekit::Shader::Create<pragma::scenekit::GenericShader>();
 					newRtShader->combinedPass = ;
 					newRtShader->albedoPass = rtShader->albedoPass;
 					newRtShader->normalPass = rtShader->normalPass;
@@ -171,7 +167,7 @@ void cycles::Renderer::ReloadShaders()
 					// TODO: Cache
 					// TODO
 					/*auto pass = shader->InitializeCombinedPass();
-					auto cclShader = unirender::CCLShader::Create(*m_renderer,*pass);
+					auto cclShader = pragma::scenekit::CCLShader::Create(*m_renderer,*pass);
 					cclShader->Finalize(*m_scene);
 					renderMesh->GetCyclesMesh()->used_shaders.at(i) = **cclShader;
 					renderMesh->GetCyclesMesh()->tag_update(**m_scene,false);*/
@@ -214,7 +210,7 @@ void cycles::Scene::BuildLightMapObject()
 	if(mesh == nullptr)
 		return;
 
-	auto o = unirender::Object::Create(*mesh);
+	auto o = pragma::scenekit::Object::Create(*mesh);
 	if(o == nullptr)
 		return;
 	m_cache->GetModelCache().GetChunks().front().AddObject(*o);
@@ -252,7 +248,7 @@ void cycles::Scene::BuildLightMapObject()
 void cycles::Scene::AddLightmapBakeTarget(BaseEntity &ent) { m_lightMapTargets.push_back(ent.GetHandle()); }
 void cycles::Scene::SetLightmapDataCache(LightmapDataCache *cache) { m_lightMapDataCache = cache ? cache->shared_from_this() : nullptr; }
 
-unirender::PShader cycles::Cache::CreateShader(Material &mat, const std::string &meshName, const ShaderInfo &shaderInfo) const
+pragma::scenekit::PShader cycles::Cache::CreateShader(Material &mat, const std::string &meshName, const ShaderInfo &shaderInfo) const
 {
 	auto it = m_materialToShader.find(&mat);
 	if(it != m_materialToShader.end())
@@ -278,7 +274,7 @@ unirender::PShader cycles::Cache::CreateShader(Material &mat, const std::string 
 	auto shader = shaderManager.CreateShader(get_node_manager(), cyclesShader, shaderInfo.entity.has_value() ? *shaderInfo.entity : nullptr, shaderInfo.subMesh.has_value() ? *shaderInfo.subMesh : nullptr, mat);
 	if(shader == nullptr)
 		return nullptr;
-	auto rtShader = unirender::Shader::Create<unirender::GenericShader>();
+	auto rtShader = pragma::scenekit::Shader::Create<pragma::scenekit::GenericShader>();
 	m_rtShaderToShader[rtShader.get()] = shader;
 
 	auto &hairConfig = shader->GetHairConfig();
@@ -354,7 +350,7 @@ unirender::PShader cycles::Cache::CreateShader(Material &mat, const std::string 
 	}
 	*/
 
-	auto fApplyColorFactor = [&mat](unirender::ShaderAlbedoSet &albedoSet) {
+	auto fApplyColorFactor = [&mat](pragma::scenekit::ShaderAlbedoSet &albedoSet) {
 		auto &colorFactor = mat.GetDataBlock()->GetValue("color_factor");
 		if(colorFactor == nullptr || typeid(*colorFactor) != typeid(ds::Vector4))
 			return;
@@ -362,11 +358,11 @@ unirender::PShader cycles::Cache::CreateShader(Material &mat, const std::string 
 		albedoSet.SetColorFactor(color);
 	};
 
-	unirender::PShader resShader = nullptr;
+	pragma::scenekit::PShader resShader = nullptr;
 	auto renderMode = m_rtScene->GetRenderMode();
-	if(renderMode == unirender::Scene::RenderMode::SceneAlbedo)
+	if(renderMode == pragma::scenekit::Scene::RenderMode::SceneAlbedo)
 	{
-		auto shader = unirender::Shader::Create<unirender::ShaderAlbedo>(*m_rtScene,meshName +"_shader");
+		auto shader = pragma::scenekit::Shader::Create<pragma::scenekit::ShaderAlbedo>(*m_rtScene,meshName +"_shader");
 		shader->SetMeshName(meshName);
 		shader->GetAlbedoSet().SetAlbedoMap(*diffuseTexPath);
 		if(albedo2TexPath.has_value())
@@ -377,9 +373,9 @@ unirender::PShader cycles::Cache::CreateShader(Material &mat, const std::string 
 		shader->SetAlphaMode(mat.GetAlphaMode(),mat.GetAlphaCutoff());
 		resShader = shader;
 	}
-	else if(renderMode == unirender::Scene::RenderMode::SceneNormals)
+	else if(renderMode == pragma::scenekit::Scene::RenderMode::SceneNormals)
 	{
-		auto shader = unirender::Shader::Create<unirender::ShaderNormal>(*m_rtScene,meshName +"_shader");
+		auto shader = pragma::scenekit::Shader::Create<pragma::scenekit::ShaderNormal>(*m_rtScene,meshName +"_shader");
 		shader->SetMeshName(meshName);
 		shader->GetAlbedoSet().SetAlbedoMap(*diffuseTexPath);
 		if(albedo2TexPath.has_value())
@@ -393,11 +389,11 @@ unirender::PShader cycles::Cache::CreateShader(Material &mat, const std::string 
 			shader->SetNormalMap(*normalTexPath);
 		resShader = shader;
 	}
-	else if(renderMode == unirender::Scene::RenderMode::SceneDepth)
+	else if(renderMode == pragma::scenekit::Scene::RenderMode::SceneDepth)
 	{
-		auto shader = unirender::Shader::Create<unirender::ShaderDepth>(*m_rtScene,meshName +"_shader");
+		auto shader = pragma::scenekit::Shader::Create<pragma::scenekit::ShaderDepth>(*m_rtScene,meshName +"_shader");
 		shader->SetMeshName(meshName);
-		static_cast<unirender::ShaderDepth&>(*shader).SetFarZ(m_rtScene->GetCamera().GetFarZ());
+		static_cast<pragma::scenekit::ShaderDepth&>(*shader).SetFarZ(m_rtScene->GetCamera().GetFarZ());
 		shader->GetAlbedoSet().SetAlbedoMap(*diffuseTexPath);
 		if(albedo2TexPath.has_value())
 		{
@@ -425,7 +421,7 @@ unirender::PShader cycles::Cache::CreateShader(Material &mat, const std::string 
 
 		if(ustring::compare(cyclesShader,"toon",false))
 		{
-			auto shader = unirender::Shader::Create<unirender::ShaderToon>(*m_rtScene,meshName +"_shader");
+			auto shader = pragma::scenekit::Shader::Create<pragma::scenekit::ShaderToon>(*m_rtScene,meshName +"_shader");
 			fApplyColorFactor(shader->GetAlbedoSet());
 			shader->SetMeshName(meshName);
 			shader->GetAlbedoSet().SetAlbedoMap(*diffuseTexPath);
@@ -441,7 +437,7 @@ unirender::PShader cycles::Cache::CreateShader(Material &mat, const std::string 
 
 			if(cyclesShaderPropBlock)
 			{
-				auto *shaderToon = static_cast<unirender::ShaderToon*>(shader.get());
+				auto *shaderToon = static_cast<pragma::scenekit::ShaderToon*>(shader.get());
 				float value;
 				if(cyclesShaderPropBlock->GetFloat("diffuse_size",&value))
 					shaderToon->SetDiffuseSize(value);
@@ -471,7 +467,7 @@ unirender::PShader cycles::Cache::CreateShader(Material &mat, const std::string 
 		}
 		else if(ustring::compare(cyclesShader,"glass",false))
 		{
-			auto shader = unirender::Shader::Create<unirender::ShaderGlass>(*m_rtScene,meshName +"_shader");
+			auto shader = pragma::scenekit::Shader::Create<pragma::scenekit::ShaderGlass>(*m_rtScene,meshName +"_shader");
 			fApplyColorFactor(shader->GetAlbedoSet());
 			shader->SetMeshName(meshName);
 			shader->GetAlbedoSet().SetAlbedoMap(*diffuseTexPath);
@@ -494,12 +490,12 @@ unirender::PShader cycles::Cache::CreateShader(Material &mat, const std::string 
 		}
 		else
 		{
-			std::shared_ptr<unirender::ShaderPBR> shader = nullptr;
+			std::shared_ptr<pragma::scenekit::ShaderPBR> shader = nullptr;
 			auto isParticleSystemShader = (shaderInfo.particleSystem.has_value() && shaderInfo.particle.has_value());
 			if(isParticleSystemShader)
 			{
-				shader = unirender::Shader::Create<unirender::ShaderParticle>(*m_rtScene,meshName +"_shader");
-				auto *ptShader = static_cast<unirender::ShaderParticle*>(shader.get());
+				shader = pragma::scenekit::Shader::Create<pragma::scenekit::ShaderParticle>(*m_rtScene,meshName +"_shader");
+				auto *ptShader = static_cast<pragma::scenekit::ShaderParticle*>(shader.get());
 				auto *pt = static_cast<const pragma::CParticleSystemComponent::ParticleData*>(*shaderInfo.particle);
 				Color color {static_cast<int16_t>(pt->color.at(0)),static_cast<int16_t>(pt->color.at(1)),static_cast<int16_t>(pt->color.at(2)),static_cast<int16_t>(pt->color.at(3))};
 				ptShader->SetColor(color);
@@ -514,7 +510,7 @@ unirender::PShader cycles::Cache::CreateShader(Material &mat, const std::string 
 				}
 			}
 			else
-				shader = unirender::Shader::Create<unirender::ShaderPBR>(*m_rtScene,meshName +"_shader");
+				shader = pragma::scenekit::Shader::Create<pragma::scenekit::ShaderPBR>(*m_rtScene,meshName +"_shader");
 			fApplyColorFactor(shader->GetAlbedoSet());
 			shader->SetMeshName(meshName);
 
@@ -533,13 +529,13 @@ unirender::PShader cycles::Cache::CreateShader(Material &mat, const std::string 
 					shader->SetSubsurfaceColorFactor(color);
 				}
 
-				const std::unordered_map<std::string,unirender::PrincipledBSDFNode::SubsurfaceMethod> bssrdfToCclType = {
-					{"cubic",unirender::PrincipledBSDFNode::SubsurfaceMethod::Cubic},
-					{"gaussian",unirender::PrincipledBSDFNode::SubsurfaceMethod::Gaussian},
-					{"principled",unirender::PrincipledBSDFNode::SubsurfaceMethod::Principled},
-					{"burley",unirender::PrincipledBSDFNode::SubsurfaceMethod::Burley},
-					{"random_walk",unirender::PrincipledBSDFNode::SubsurfaceMethod::RandomWalk},
-					{"principled_random_walk",unirender::PrincipledBSDFNode::SubsurfaceMethod::PrincipledRandomWalk}
+				const std::unordered_map<std::string,pragma::scenekit::PrincipledBSDFNode::SubsurfaceMethod> bssrdfToCclType = {
+					{"cubic",pragma::scenekit::PrincipledBSDFNode::SubsurfaceMethod::Cubic},
+					{"gaussian",pragma::scenekit::PrincipledBSDFNode::SubsurfaceMethod::Gaussian},
+					{"principled",pragma::scenekit::PrincipledBSDFNode::SubsurfaceMethod::Principled},
+					{"burley",pragma::scenekit::PrincipledBSDFNode::SubsurfaceMethod::Burley},
+					{"random_walk",pragma::scenekit::PrincipledBSDFNode::SubsurfaceMethod::RandomWalk},
+					{"principled_random_walk",pragma::scenekit::PrincipledBSDFNode::SubsurfaceMethod::PrincipledRandomWalk}
 				};
 
 				std::string subsurfaceMethod;
@@ -571,7 +567,7 @@ unirender::PShader cycles::Cache::CreateShader(Material &mat, const std::string 
 				shader->SetUseVertexAlphasForBlending(true);
 			}
 			if(mat.GetAlphaMode() != AlphaMode::Opaque && data->GetBool("black_to_alpha"))
-				shader->SetFlags(unirender::Shader::Flags::AdditiveByColor,true);
+				shader->SetFlags(pragma::scenekit::Shader::Flags::AdditiveByColor,true);
 
 			// Normal map
 			auto normalTexPath = prepare_texture(***m_rtScene,mat.GetNormalMap(),PreparedTextureInputFlags::None);
@@ -654,7 +650,7 @@ unirender::PShader cycles::Cache::CreateShader(Material &mat, const std::string 
 	}
 	if(resShader && shaderInfo.entity.has_value() && shaderInfo.subMesh.has_value())
 	{
-		auto normalMapSpace = unirender::NormalMapNode::Space::Tangent;
+		auto normalMapSpace = pragma::scenekit::NormalMapNode::Space::Tangent;
 		if(ustring::compare(mat.GetShaderIdentifier(),"eye",false))
 		{
 			//normalMapSpace = NormalMapNode::Space::Object;
@@ -675,15 +671,15 @@ unirender::PShader cycles::Cache::CreateShader(Material &mat, const std::string 
 						auto dilationFactor = eyeballData->config.dilation;
 						auto maxDilationFactor = eyeball->maxDilationFactor;
 						auto irisUvRadius = eyeball->irisUvRadius;
-						auto uvHandler = std::make_shared<unirender::UVHandlerEye>(irisProjU,irisProjV,dilationFactor,maxDilationFactor,irisUvRadius);
-						resShader->SetUVHandler(unirender::Shader::TextureType::Albedo,uvHandler);
-						resShader->SetUVHandler(unirender::Shader::TextureType::Emission,uvHandler);
+						auto uvHandler = std::make_shared<pragma::scenekit::UVHandlerEye>(irisProjU,irisProjV,dilationFactor,maxDilationFactor,irisUvRadius);
+						resShader->SetUVHandler(pragma::scenekit::Shader::TextureType::Albedo,uvHandler);
+						resShader->SetUVHandler(pragma::scenekit::Shader::TextureType::Emission,uvHandler);
 					}
 				}
 			}
 		}
 
-		auto *normalModule = dynamic_cast<unirender::ShaderModuleNormal*>(resShader.get());
+		auto *normalModule = dynamic_cast<pragma::scenekit::ShaderModuleNormal*>(resShader.get());
 		if(normalModule)
 			normalModule->SetNormalMapSpace(normalMapSpace);
 	}

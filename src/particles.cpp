@@ -6,9 +6,6 @@
 */
 
 #include "pr_cycles/scene.hpp"
-#include "util_raytracing/mesh.hpp"
-#include "util_raytracing/object.hpp"
-#include "util_raytracing/shader.hpp"
 namespace pragma::asset {
 	class WorldData;
 	class EntityData;
@@ -20,6 +17,11 @@ namespace pragma::asset {
 #include <pragma/rendering/shaders/particles/c_shader_particle.hpp>
 #include <pragma/game/c_game.h>
 #include <datasystem_vector.h>
+#include <future>
+#include <deque>
+#include <queue>
+
+import pragma.scenekit;
 
 extern DLLCLIENT CEngine *c_engine;
 extern DLLCLIENT CGame *c_game;
@@ -114,7 +116,7 @@ void cycles::Cache::AddParticleSystem(pragma::CParticleSystemComponent &ptc, con
 		auto ptMeshName = meshName + "_" + std::to_string(i);
 		constexpr uint32_t numVerts = pragma::ShaderParticle2DBase::VERTEX_COUNT;
 		uint32_t numTris = pragma::ShaderParticle2DBase::TRIANGLE_COUNT * 2;
-		auto mesh = unirender::Mesh::Create(ptMeshName, numVerts, numTris);
+		auto mesh = pragma::scenekit::Mesh::Create(ptMeshName, numVerts, numTris);
 		auto pos = ptc.GetParticlePosition(ptIdx);
 		for(auto vertIdx = decltype(numVerts) {0u}; vertIdx < numVerts; ++vertIdx) {
 			auto vertPos = pShader->CalcVertexPosition(ptc, ptc.TranslateBufferIndex(i), vertIdx, camPos, camUpWs, camRightWs, nearZ, farZ);
@@ -135,11 +137,11 @@ void cycles::Cache::AddParticleSystem(pragma::CParticleSystemComponent &ptc, con
 		if(shader == nullptr)
 			continue;
 #if 0
-		shader->SetFlags(unirender::Shader::Flags::AdditiveByColor,alphaMode == ParticleAlphaMode::AdditiveByColor);
+		shader->SetFlags(pragma::scenekit::Shader::Flags::AdditiveByColor,alphaMode == ParticleAlphaMode::AdditiveByColor);
 		shader->SetAlphaMode(AlphaMode::Blend);
-		auto *shaderModAlbedo = dynamic_cast<unirender::ShaderModuleAlbedo*>(shader.get());
-		auto *shaderModEmission = dynamic_cast<unirender::ShaderModuleEmission*>(shader.get());
-		auto *shaderModSpriteSheet = dynamic_cast<unirender::ShaderModuleSpriteSheet*>(shader.get());
+		auto *shaderModAlbedo = dynamic_cast<pragma::scenekit::ShaderModuleAlbedo*>(shader.get());
+		auto *shaderModEmission = dynamic_cast<pragma::scenekit::ShaderModuleEmission*>(shader.get());
+		auto *shaderModSpriteSheet = dynamic_cast<pragma::scenekit::ShaderModuleSpriteSheet*>(shader.get());
 		if(shaderModAlbedo)
 		{
 			if(shaderModSpriteSheet)
@@ -194,7 +196,7 @@ void cycles::Cache::AddParticleSystem(pragma::CParticleSystemComponent &ptc, con
 		}
 		mesh->AddSubMeshShader(*shader);
 
-		unirender::Object::Create(*m_rtScene,*mesh);
+		pragma::scenekit::Object::Create(*m_rtScene,*mesh);
 #endif
 	}
 }

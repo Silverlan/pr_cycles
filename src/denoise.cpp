@@ -5,10 +5,11 @@
 * Copyright (c) 2023 Silverlan
 */
 
-#include <util_raytracing/denoise.hpp>
+#include "pr_cycles/scene.hpp"
 #include <util_image_buffer.hpp>
 #include <sharedutils/util_parallel_job.hpp>
-#include "pr_cycles/scene.hpp"
+
+import pragma.scenekit;
 
 class DenoiseWorker : public util::ParallelWorker<std::shared_ptr<uimg::ImageBuffer>> {
   public:
@@ -24,8 +25,8 @@ class DenoiseWorker : public util::ParallelWorker<std::shared_ptr<uimg::ImageBuf
 DenoiseWorker::DenoiseWorker(uimg::ImageBuffer &imgBuffer) : m_imgBuffer {imgBuffer.shared_from_this()}
 {
 	AddThread([this]() {
-		unirender::denoise::Info denoiseInfo {};
-		auto success = unirender::denoise::denoise(denoiseInfo, *m_imgBuffer, nullptr, nullptr, [this](float progress) -> bool {
+		pragma::scenekit::denoise::Info denoiseInfo {};
+		auto success = pragma::scenekit::denoise::denoise(denoiseInfo, *m_imgBuffer, nullptr, nullptr, [this](float progress) -> bool {
 			UpdateProgress(progress);
 			return !IsCancelled();
 		});
