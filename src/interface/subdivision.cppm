@@ -5,6 +5,8 @@
 * Copyright (c) 2023 Silverlan
 */
 
+module;
+
 #ifdef RT_ENABLE_SUBDIVISION
 #include <iostream>
 #include <mathutil/vertex.hpp>
@@ -15,7 +17,9 @@
 #include <opensubdiv/far/topologyDescriptor.h>
 #include <opensubdiv/far/primvarRefiner.h>
 
-namespace pragma::modules::cycles {
+export module pragma.modules.scenekit:subdivision;
+
+export namespace pragma::modules::scenekit {
 	using FaceVertexIndex = uint32_t;
 	struct BaseChannelData {
 		BaseChannelData(const std::function<void(BaseChannelData &, FaceVertexIndex, umath::Vertex &, int)> &fApply, const std::function<void(uint32_t)> &prepareResultData = nullptr) : m_apply {fApply}, m_prepareResultData {prepareResultData} {}

@@ -5,26 +5,18 @@
 * Copyright (c) 2023 Silverlan
 */
 
-#ifndef __PR_CYCLES_PROGRESSIVE_REFINEMENT_HPP__
-#define __PR_CYCLES_PROGRESSIVE_REFINEMENT_HPP__
+module;
 
-#include <cinttypes>
-#include <memory>
-#include <sharedutils/functioncallback.h>
-#include <mathutil/uvec.h>
+#include "definitions.hpp"
+#include <pragma/entities/baseentity_handle.h>
+#include <pragma/entities/baseentity.h>
+#include <material.h>
+
+export module pragma.modules.scenekit:progressive_refinement;
 
 import pragma.scenekit;
 
-namespace raytracing {
-	class Scene;
-};
-namespace prosper {
-	class Texture;
-	class IImage;
-	class IPrimaryCommandBuffer;
-	class IFence;
-};
-namespace pragma::modules::cycles {
+export namespace pragma::modules::scenekit {
 	class DenoiseTexture {
 	  public:
 		enum class DenoisingState : uint8_t { Initial = 0, Denoising, Complete };
@@ -70,5 +62,3 @@ namespace pragma::modules::cycles {
 		CallbackHandle m_cbThink {};
 	};
 };
-
-#endif

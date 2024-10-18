@@ -5,7 +5,8 @@
 * Copyright (c) 2023 Silverlan
 */
 
-#include "pr_cycles/progressive_refinement.hpp"
+module;
+
 #include <pragma/c_engine.h>
 #include <util_image_buffer.hpp>
 #include <image/prosper_texture.hpp>
@@ -15,9 +16,12 @@
 #include <deque>
 #include <queue>
 
+module pragma.modules.scenekit;
+import :progressive_refinement;
+
 extern DLLCLIENT CEngine *c_engine;
 
-using namespace pragma::modules::cycles;
+using namespace pragma::modules::scenekit;
 
 DenoiseTexture::DenoiseTexture(uint32_t w, uint32_t h)
 {

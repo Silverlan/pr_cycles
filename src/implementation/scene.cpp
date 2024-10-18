@@ -5,8 +5,8 @@
 * Copyright (c) 2023 Silverlan
 */
 
-#include "pr_cycles/scene.hpp"
-#include "pr_cycles/shader.hpp"
+module;
+
 #include <pragma/c_engine.h>
 #include <prosper_context.hpp>
 #include <buffers/prosper_uniform_resizable_buffer.hpp>
@@ -33,28 +33,31 @@
 #include <cmaterialmanager.h>
 #include <datasystem_color.h>
 #include <datasystem_vector.h>
-#include "pr_cycles/subdivision.hpp"
 
 // ccl happens to have the same include guard name as sharedutils, so we have to undef it here
 #undef __UTIL_STRING_H__
 #include <sharedutils/util_string.h>
 
+module pragma.modules.scenekit;
+
 import pragma.scenekit;
+import :scene;
+import :shader;
 
 using namespace pragma::modules;
 
 extern DLLCLIENT CEngine *c_engine;
 extern DLLCLIENT CGame *c_game;
 
-cycles::Cache::ShaderInfo::ShaderInfo() {}
+scenekit::Cache::ShaderInfo::ShaderInfo() {}
 
-cycles::Scene::Scene(pragma::scenekit::Scene &rtScene) : m_rtScene {rtScene.shared_from_this()}
+scenekit::Scene::Scene(pragma::scenekit::Scene &rtScene) : m_rtScene {rtScene.shared_from_this()}
 {
 	m_cache = std::make_shared<Cache>(rtScene.GetRenderMode());
 	m_cache->GetModelCache().SetUnique(true);
 }
 
-void cycles::Scene::AddRoughnessMapImageTextureNode(pragma::scenekit::ShaderModuleRoughness &shader, Material &mat, float defaultRoughness) const
+void scenekit::Scene::AddRoughnessMapImageTextureNode(pragma::scenekit::ShaderModuleRoughness &shader, Material &mat, float defaultRoughness) const
 {
 #if 0
 	// If no roughness map is available, just use roughness or specular factor directly
@@ -94,7 +97,7 @@ void cycles::Scene::AddRoughnessMapImageTextureNode(pragma::scenekit::ShaderModu
 #endif
 }
 
-void cycles::Scene::SetAOBakeTarget(BaseEntity &ent, uint32_t matIndex)
+void scenekit::Scene::SetAOBakeTarget(BaseEntity &ent, uint32_t matIndex)
 {
 	std::shared_ptr<pragma::scenekit::Object> oAo;
 	std::shared_ptr<pragma::scenekit::Object> oEnv;
@@ -102,7 +105,7 @@ void cycles::Scene::SetAOBakeTarget(BaseEntity &ent, uint32_t matIndex)
 	m_rtScene->SetBakeTarget(*oAo);
 }
 
-void cycles::Scene::SetAOBakeTarget(Model &mdl, uint32_t matIndex)
+void scenekit::Scene::SetAOBakeTarget(Model &mdl, uint32_t matIndex)
 {
 	std::shared_ptr<pragma::scenekit::Object> oAo;
 	std::shared_ptr<pragma::scenekit::Object> oEnv;
@@ -110,9 +113,9 @@ void cycles::Scene::SetAOBakeTarget(Model &mdl, uint32_t matIndex)
 	m_rtScene->SetBakeTarget(*oAo);
 }
 
-cycles::Cache &cycles::Scene::GetCache() { return *m_cache; }
+scenekit::Cache &scenekit::Scene::GetCache() { return *m_cache; }
 
-void cycles::Scene::Finalize()
+void scenekit::Scene::Finalize()
 {
 	if(m_finalized)
 		return;
@@ -121,7 +124,7 @@ void cycles::Scene::Finalize()
 	m_rtScene->AddModelsFromCache(m_cache->GetModelCache());
 }
 
-pragma::scenekit::Object *cycles::Scene::FindObject(const std::string &name)
+pragma::scenekit::Object *scenekit::Scene::FindObject(const std::string &name)
 {
 	auto &cache = GetCache();
 	auto &mdlCache = cache.GetModelCache();
@@ -135,9 +138,9 @@ pragma::scenekit::Object *cycles::Scene::FindObject(const std::string &name)
 	return nullptr;
 }
 
-cycles::Renderer::Renderer(Scene &scene, pragma::scenekit::Renderer &renderer) : m_scene {scene.shared_from_this()}, m_renderer {renderer.shared_from_this()} {}
+scenekit::Renderer::Renderer(Scene &scene, pragma::scenekit::Renderer &renderer) : m_scene {scene.shared_from_this()}, m_renderer {renderer.shared_from_this()} {}
 
-void cycles::Renderer::ReloadShaders()
+void scenekit::Renderer::ReloadShaders()
 {
 	// Can only reload shaders that are part of this scene's parimary cache
 	auto &shaderTranslationTable = m_scene->GetCache().GetRTShaderToShaderTable();
@@ -177,13 +180,13 @@ void cycles::Renderer::ReloadShaders()
 	}
 }
 
-void cycles::Scene::BuildLightMapObject()
+void scenekit::Scene::BuildLightMapObject()
 {
 	if(m_lightMapTargets.empty())
 		return;
 	std::vector<ModelSubMesh *> targetMeshes {};
 	std::vector<util::Uuid> targetMeshEntityUuids;
-	std::vector<std::shared_ptr<pragma::modules::cycles::Cache::MeshData>> meshDatas;
+	std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> meshDatas;
 	for(auto &hEnt : m_lightMapTargets) {
 		if(hEnt.IsValid() == false || hEnt->GetModel() == nullptr)
 			continue;
@@ -245,10 +248,10 @@ void cycles::Scene::BuildLightMapObject()
 	mesh->SetLightmapUVs(std::move(cclLightmapUvs));
 	m_rtScene->SetBakeTarget(*o);
 }
-void cycles::Scene::AddLightmapBakeTarget(BaseEntity &ent) { m_lightMapTargets.push_back(ent.GetHandle()); }
-void cycles::Scene::SetLightmapDataCache(LightmapDataCache *cache) { m_lightMapDataCache = cache ? cache->shared_from_this() : nullptr; }
+void scenekit::Scene::AddLightmapBakeTarget(BaseEntity &ent) { m_lightMapTargets.push_back(ent.GetHandle()); }
+void scenekit::Scene::SetLightmapDataCache(LightmapDataCache *cache) { m_lightMapDataCache = cache ? cache->shared_from_this() : nullptr; }
 
-pragma::scenekit::PShader cycles::Cache::CreateShader(Material &mat, const std::string &meshName, const ShaderInfo &shaderInfo) const
+pragma::scenekit::PShader scenekit::Cache::CreateShader(Material &mat, const std::string &meshName, const ShaderInfo &shaderInfo) const
 {
 	auto it = m_materialToShader.find(&mat);
 	if(it != m_materialToShader.end())

@@ -5,9 +5,13 @@
 * Copyright (c) 2023 Silverlan
 */
 
+module;
+
 #include <optional>
 #include <string>
 
-namespace pragma::modules::cycles {
+export module pragma.modules.scenekit:texture;
+
+export namespace pragma::modules::scenekit {
 	std::optional<std::string> prepare_texture(const std::string &texPath, const std::optional<std::string> &defaultTexture = {}, bool translucent = false);
 };

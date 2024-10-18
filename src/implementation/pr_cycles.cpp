@@ -5,11 +5,9 @@
 * Copyright (c) 2023 Silverlan
 */
 
+module;
+
 #include <sharedutils/util_hair.hpp>
-#include "pr_cycles/pr_cycles.hpp"
-#include "pr_cycles/shader.hpp"
-#include "pr_cycles/texture.hpp"
-#include "pr_cycles/progressive_refinement.hpp"
 
 namespace pragma::asset {
 	class WorldData;
@@ -67,7 +65,6 @@ namespace pragma::asset {
 #include <sharedutils/datastream.h>
 #include <sharedutils/util.h>
 #include <sharedutils/util_library.hpp>
-#include "pr_cycles/scene.hpp"
 #include <sharedutils/util_path.hpp>
 #include <luabind/copy_policy.hpp>
 
@@ -81,8 +78,15 @@ namespace pragma::asset {
 #include <future>
 #include <deque>
 #include <queue>
+#include "interface/definitions.hpp"
+
+module pragma.modules.scenekit;
 
 import pragma.scenekit;
+import :scene;
+import :shader;
+import :texture;
+import :progressive_refinement;
 
 extern DLLCLIENT CGame *c_game;
 
@@ -123,7 +127,7 @@ static void sync_light(BaseEntity &ent, pragma::scenekit::Light &light)
 	}
 }
 
-static void setup_light_sources(cycles::Scene &scene, const std::function<bool(BaseEntity &)> &lightFilter = nullptr)
+static void setup_light_sources(scenekit::Scene &scene, const std::function<bool(BaseEntity &)> &lightFilter = nullptr)
 {
 	EntityIterator entIt {*c_game};
 	entIt.AttachFilter<TEntityIteratorFilterComponent<pragma::CLightComponent>>();
@@ -145,20 +149,20 @@ static void setup_light_sources(cycles::Scene &scene, const std::function<bool(B
 }
 
 static std::shared_ptr<pragma::scenekit::NodeManager> g_nodeManager = nullptr;
-static std::shared_ptr<pragma::modules::cycles::ShaderManager> g_shaderManager = nullptr;
-pragma::scenekit::NodeManager &pragma::modules::cycles::get_node_manager()
+static std::shared_ptr<pragma::modules::scenekit::ShaderManager> g_shaderManager = nullptr;
+pragma::scenekit::NodeManager &pragma::modules::scenekit::get_node_manager()
 {
 	if(g_nodeManager == nullptr)
 		g_nodeManager = pragma::scenekit::NodeManager::Create();
 	return *g_nodeManager;
 }
-pragma::modules::cycles::ShaderManager &pragma::modules::cycles::get_shader_manager()
+pragma::modules::scenekit::ShaderManager &pragma::modules::scenekit::get_shader_manager()
 {
 	if(g_shaderManager == nullptr)
-		g_shaderManager = pragma::modules::cycles::ShaderManager::Create();
+		g_shaderManager = pragma::modules::scenekit::ShaderManager::Create();
 	return *g_shaderManager;
 }
-static std::shared_ptr<cycles::Scene> setup_scene(pragma::scenekit::Scene::RenderMode renderMode, uint32_t width, uint32_t height, uint32_t sampleCount, bool hdrOutput, pragma::scenekit::Scene::DenoiseMode denoiseMode, const std::optional<std::string> &renderer,
+static std::shared_ptr<scenekit::Scene> setup_scene(pragma::scenekit::Scene::RenderMode renderMode, uint32_t width, uint32_t height, uint32_t sampleCount, bool hdrOutput, pragma::scenekit::Scene::DenoiseMode denoiseMode, const std::optional<std::string> &renderer,
   pragma::scenekit::Scene::DeviceType deviceType = pragma::scenekit::Scene::DeviceType::CPU, float exposure = 1.f, const std::optional<pragma::scenekit::Scene::ColorTransformInfo> &colorTransform = {})
 {
 	pragma::scenekit::Scene::CreateInfo createInfo {};
@@ -170,7 +174,7 @@ static std::shared_ptr<cycles::Scene> setup_scene(pragma::scenekit::Scene::Rende
 	createInfo.exposure = exposure;
 	if(renderer.has_value())
 		createInfo.renderer = *renderer;
-	auto scene = pragma::scenekit::Scene::Create(pragma::modules::cycles::get_node_manager(), renderMode, createInfo);
+	auto scene = pragma::scenekit::Scene::Create(pragma::modules::scenekit::get_node_manager(), renderMode, createInfo);
 	if(scene == nullptr)
 		return nullptr;
 #ifdef ENABLE_MOTION_BLUR_TEST
@@ -178,7 +182,7 @@ static std::shared_ptr<cycles::Scene> setup_scene(pragma::scenekit::Scene::Rende
 #endif
 	auto &cam = scene->GetCamera();
 	cam.SetResolution(width, height);
-	return std::make_shared<cycles::Scene>(*scene);
+	return std::make_shared<scenekit::Scene>(*scene);
 }
 
 enum class SceneFlags : uint8_t { None = 0u, CullObjectsOutsidePvs = 1u, CullObjectsOutsideCameraFrustum = CullObjectsOutsidePvs << 1u };
@@ -193,7 +197,7 @@ struct CameraData {
 	float fov = 0.f;
 	float aspectRatio = 0.f;
 };
-static void initialize_cycles_geometry(pragma::CSceneComponent &gameScene, pragma::modules::cycles::Cache &cache, const std::optional<CameraData> &camData, SceneFlags sceneFlags, const std::function<bool(BaseEntity &)> &entFilter = nullptr,
+static void initialize_cycles_geometry(pragma::CSceneComponent &gameScene, pragma::modules::scenekit::Cache &cache, const std::optional<CameraData> &camData, SceneFlags sceneFlags, const std::function<bool(BaseEntity &)> &entFilter = nullptr,
   const std::vector<BaseEntity *> *entityList = nullptr)
 {
 	auto enableFrustumCulling = umath::is_flag_set(sceneFlags, SceneFlags::CullObjectsOutsideCameraFrustum);
@@ -347,7 +351,7 @@ static void sync_camera(BaseEntity &ent, pragma::scenekit::Camera &cam)
 	cam.SetFarZ(pragma::units_to_metres(hCam->GetFarZ()));
 	cam.SetFOV(hCam->GetFOV());
 }
-static void initialize_cycles_scene_from_game_scene(pragma::CSceneComponent &gameScene, pragma::modules::cycles::Scene &scene, const Vector3 &camPos, const Quat &camRot, bool equirect, const Mat4 &vp, float nearZ, float farZ, float fov, float aspectRatio, SceneFlags sceneFlags,
+static void initialize_cycles_scene_from_game_scene(pragma::CSceneComponent &gameScene, pragma::modules::scenekit::Scene &scene, const Vector3 &camPos, const Quat &camRot, bool equirect, const Mat4 &vp, float nearZ, float farZ, float fov, float aspectRatio, SceneFlags sceneFlags,
   const std::function<bool(BaseEntity &)> &entFilter = nullptr, const std::function<bool(BaseEntity &)> &lightFilter = nullptr, const std::vector<BaseEntity *> *entityList = nullptr)
 {
 	CameraData camData {};
@@ -414,7 +418,7 @@ inline std::function<bool(BaseEntity &)> to_entity_filter(lua_State *l, luabind:
 	};
 }
 
-static void initialize_from_game_scene(lua_State *l, pragma::CSceneComponent &gameScene, cycles::Scene &scene, const Vector3 &camPos, const Quat &camRot, const Mat4 &vp, float nearZ, float farZ, float fov, SceneFlags sceneFlags, luabind::object *optEntFilter,
+static void initialize_from_game_scene(lua_State *l, pragma::CSceneComponent &gameScene, scenekit::Scene &scene, const Vector3 &camPos, const Quat &camRot, const Mat4 &vp, float nearZ, float farZ, float fov, SceneFlags sceneFlags, luabind::object *optEntFilter,
   luabind::object *optLightFilter)
 {
 	auto entFilter = to_entity_filter(l, optEntFilter, 10);
@@ -433,8 +437,8 @@ static luabind::object get_node_lua_object(lua_State *l, pragma::scenekit::NodeD
 
 static pragma::scenekit::NodeTypeId register_node(lua_State *l, const std::string &typeName, luabind::object function)
 {
-	return pragma::modules::cycles::get_node_manager().RegisterNodeType(typeName, [l, function](pragma::scenekit::GroupNodeDesc *parent) mutable -> std::shared_ptr<pragma::scenekit::NodeDesc> {
-		auto node = pragma::scenekit::GroupNodeDesc::Create(pragma::modules::cycles::get_node_manager(), parent);
+	return pragma::modules::scenekit::get_node_manager().RegisterNodeType(typeName, [l, function](pragma::scenekit::GroupNodeDesc *parent) mutable -> std::shared_ptr<pragma::scenekit::NodeDesc> {
+		auto node = pragma::scenekit::GroupNodeDesc::Create(pragma::modules::scenekit::get_node_manager(), parent);
 		function(get_node_lua_object(l, *node));
 		return node;
 	});
@@ -442,7 +446,7 @@ static pragma::scenekit::NodeTypeId register_node(lua_State *l, const std::strin
 
 static void register_shader(lua_State *l, const std::string &name, luabind::object shaderClass)
 {
-	auto &sm = pragma::modules::cycles::get_shader_manager();
+	auto &sm = pragma::modules::scenekit::get_shader_manager();
 	sm.RegisterShader(name, shaderClass);
 }
 
@@ -485,7 +489,7 @@ static void register_socket_methods(luabind::class_<pragma::scenekit::GroupNodeD
 		defNode.def(name, register_output);
 }
 
-namespace luabind {
+namespace pragma::scenekit {
 	// These have to be in the luabind namespace for whatever reason
 	pragma::scenekit::Socket operator+(float f, const pragma::scenekit::Socket &socket) { return pragma::scenekit::Socket {f} + socket; }
 	pragma::scenekit::Socket operator-(float f, const pragma::scenekit::Socket &socket) { return pragma::scenekit::Socket {f} - socket; }
@@ -503,11 +507,10 @@ namespace luabind {
 	pragma::scenekit::Socket operator%(const Vector3 &v, const pragma::scenekit::Socket &socket) { return pragma::scenekit::Socket {v} % socket; }
 };
 
-namespace unirender {
+namespace pragma::scenekit {
 	// These have to be in the unirender namespace for whatever reason
 	pragma::scenekit::Socket operator^(float f, const pragma::scenekit::Socket &socket) { return pragma::scenekit::Socket {f} ^ socket; }
 
-	std::ostream &operator<<(std::ostream &os, const pragma::scenekit::Socket &socket) { return ::operator<<(os, socket); }
 	std::ostream &operator<<(std::ostream &os, const pragma::scenekit::NodeDesc &socket) { return ::operator<<(os, socket); }
 };
 
@@ -693,7 +696,7 @@ static luabind::object data_value_to_lua_object(lua_State *l, const pragma::scen
 	return {};
 }
 
-static std::shared_ptr<cycles::Scene> setup_scene(pragma::scenekit::Scene::RenderMode renderMode, const pragma::rendering::cycles::SceneInfo &renderImageSettings)
+static std::shared_ptr<scenekit::Scene> setup_scene(pragma::scenekit::Scene::RenderMode renderMode, const pragma::rendering::cycles::SceneInfo &renderImageSettings)
 {
 	std::optional<pragma::scenekit::Scene::ColorTransformInfo> colorTransform {};
 	if(renderImageSettings.colorTransform.has_value()) {
@@ -761,8 +764,8 @@ PRAGMA_EXPORT void pr_cycles_bake_ao(const pragma::rendering::cycles::SceneInfo 
 		return;
 #if ENABLE_BAKE_DEBUGGING_INTERFACE == 1
 	{
-		static std::shared_ptr<pragma::modules::cycles::ProgressiveTexture> prt = nullptr;
-		prt = std::make_shared<pragma::modules::cycles::ProgressiveTexture>();
+		static std::shared_ptr<pragma::modules::scenekit::ProgressiveTexture> prt = nullptr;
+		prt = std::make_shared<pragma::modules::scenekit::ProgressiveTexture>();
 		prt->Initialize(*renderer);
 		auto el = WGUI::GetInstance().Create<WITexturedRect>();
 		el->SetSize(512, 512);
@@ -823,8 +826,8 @@ PRAGMA_EXPORT void pr_cycles_bake_lightmaps(const pragma::rendering::cycles::Sce
 			return;
 #if ENABLE_BAKE_DEBUGGING_INTERFACE == 1
 		{
-			static std::shared_ptr<pragma::modules::cycles::ProgressiveTexture> prt = nullptr;
-			prt = std::make_shared<pragma::modules::cycles::ProgressiveTexture>();
+			static std::shared_ptr<pragma::modules::scenekit::ProgressiveTexture> prt = nullptr;
+			prt = std::make_shared<pragma::modules::scenekit::ProgressiveTexture>();
 			prt->Initialize(*renderer);
 			auto el = WGUI::GetInstance().Create<WITexturedRect>();
 			el->SetSize(512, 512);
@@ -884,13 +887,13 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 	  std::unordered_map<std::string, int32_t (*)(lua_State *)> {{"create_scene", static_cast<int32_t (*)(lua_State *)>([](lua_State *l) -> int32_t {
 		                                                              auto renderMode = static_cast<pragma::scenekit::Scene::RenderMode>(Lua::CheckInt(l, 1));
 		                                                              auto &createInfo = Lua::Check<pragma::scenekit::Scene::CreateInfo>(l, 2);
-		                                                              auto scene = pragma::scenekit::Scene::Create(pragma::modules::cycles::get_node_manager(), renderMode, createInfo);
+		                                                              auto scene = pragma::scenekit::Scene::Create(pragma::modules::scenekit::get_node_manager(), renderMode, createInfo);
 		                                                              if(scene == nullptr)
 			                                                              return 0;
 #ifdef ENABLE_MOTION_BLUR_TEST
 		                                                              scene->SetMotionBlurStrength(1.f);
 #endif
-		                                                              auto cyclesScene = std::make_shared<cycles::Scene>(*scene);
+		                                                              auto cyclesScene = std::make_shared<scenekit::Scene>(*scene);
 		                                                              Lua::Push(l, cyclesScene);
 		                                                              return 1;
 	                                                              })},
@@ -936,16 +939,16 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 		      return 0;
 	      }},
 	    {"create_cache", static_cast<int32_t (*)(lua_State *)>([](lua_State *l) -> int32_t {
-		     Lua::Push(l, std::make_shared<pragma::modules::cycles::Cache>(pragma::scenekit::Scene::RenderMode::RenderImage));
+		     Lua::Push(l, std::make_shared<pragma::modules::scenekit::Cache>(pragma::scenekit::Scene::RenderMode::RenderImage));
 		     return 1;
 	     })},
 	    {"denoise_image", static_cast<int32_t (*)(lua_State *)>([](lua_State *l) -> int32_t {
 		     auto &imgBuf = Lua::Check<uimg::ImageBuffer>(l, 1);
-		     Lua::Push(l, pragma::modules::cycles::denoise(imgBuf));
+		     Lua::Push(l, pragma::modules::scenekit::denoise(imgBuf));
 		     return 1;
 	     })},
 	    {"create_renderer", static_cast<int32_t (*)(lua_State *)>([](lua_State *l) -> int32_t {
-		     auto &scene = Lua::Check<cycles::Scene>(l, 1);
+		     auto &scene = Lua::Check<scenekit::Scene>(l, 1);
 		     std::string rendererIdentifier = Lua::CheckString(l, 2);
 		     auto logger = spdlog::get("unirender");
 		     if(logger)
@@ -960,7 +963,7 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 			     Lua::PushString(l, err);
 			     return 2;
 		     }
-		     Lua::Push<std::shared_ptr<pragma::modules::cycles::Renderer>>(l, std::make_shared<pragma::modules::cycles::Renderer>(scene, *renderer));
+		     Lua::Push<std::shared_ptr<pragma::modules::scenekit::Renderer>>(l, std::make_shared<pragma::modules::scenekit::Renderer>(scene, *renderer));
 		     return 1;
 	     })},
 	    {"create_render_job", static_cast<int32_t (*)(lua_State *)>([](lua_State *l) -> int32_t {
@@ -969,7 +972,7 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 		     if(Lua::file::validate_write_operation(l, path) == false)
 			     return false;
 		     filemanager::create_path(path);
-		     auto &scene = Lua::Check<cycles::Scene>(l, 1);
+		     auto &scene = Lua::Check<scenekit::Scene>(l, 1);
 
 		     auto fileName = path + "lightmap.prt";
 		     auto rootPath = util::Path::CreatePath(FileManager::GetProgramPath()).GetString() + path;
@@ -1008,7 +1011,7 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 			     else
 				     translucent = Lua::CheckBool(l, 2);
 		     }
-		     auto res = pragma::modules::cycles::prepare_texture(texturePath, defaultTexture, translucent);
+		     auto res = pragma::modules::scenekit::prepare_texture(texturePath, defaultTexture, translucent);
 		     auto o = res.has_value() ? luabind::object {l, *res} : luabind::object {};
 		     o.push(l);
 		     return 1;
@@ -1074,31 +1077,31 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 		];
 #endif
 
-	auto defRenderer = luabind::class_<pragma::modules::cycles::Renderer>("Renderer");
-	defRenderer.def("StartRender", static_cast<void (*)(lua_State *, pragma::modules::cycles::Renderer &)>([](lua_State *l, pragma::modules::cycles::Renderer &renderer) {
+	auto defRenderer = luabind::class_<pragma::modules::scenekit::Renderer>("Renderer");
+	defRenderer.def("StartRender", static_cast<void (*)(lua_State *, pragma::modules::scenekit::Renderer &)>([](lua_State *l, pragma::modules::scenekit::Renderer &renderer) {
 		auto job = renderer->StartRender();
 		if(job.IsValid() == false)
 			return;
 		Lua::Push(l, job);
 	}));
 	defRenderer.def("CreateProgressiveImageHandler",
-	  static_cast<std::shared_ptr<pragma::modules::cycles::ProgressiveTexture> (*)(lua_State *, pragma::modules::cycles::Renderer &)>([](lua_State *l, pragma::modules::cycles::Renderer &renderer) -> std::shared_ptr<pragma::modules::cycles::ProgressiveTexture> {
+	  static_cast<std::shared_ptr<pragma::modules::scenekit::ProgressiveTexture> (*)(lua_State *, pragma::modules::scenekit::Renderer &)>([](lua_State *l, pragma::modules::scenekit::Renderer &renderer) -> std::shared_ptr<pragma::modules::scenekit::ProgressiveTexture> {
 		  if(renderer->GetScene().GetResolution().x == 0 || renderer->GetScene().GetResolution().y == 0)
 			  return nullptr;
-		  auto prt = std::make_shared<pragma::modules::cycles::ProgressiveTexture>();
+		  auto prt = std::make_shared<pragma::modules::scenekit::ProgressiveTexture>();
 		  prt->Initialize(*renderer);
 		  return prt;
 	  }));
-	defRenderer.def("Restart", static_cast<void (*)(lua_State *, pragma::modules::cycles::Renderer &)>([](lua_State *l, pragma::modules::cycles::Renderer &renderer) { renderer->Restart(); }));
-	defRenderer.def("Reset", static_cast<void (*)(lua_State *, pragma::modules::cycles::Renderer &)>([](lua_State *l, pragma::modules::cycles::Renderer &renderer) { renderer->Reset(); }));
-	defRenderer.def("StopRendering", static_cast<void (*)(lua_State *, pragma::modules::cycles::Renderer &)>([](lua_State *l, pragma::modules::cycles::Renderer &renderer) { renderer->StopRendering(); }));
-	defRenderer.def("ReloadShaders", static_cast<void (*)(lua_State *, pragma::modules::cycles::Renderer &)>([](lua_State *l, pragma::modules::cycles::Renderer &renderer) { renderer.ReloadShaders(); }));
+	defRenderer.def("Restart", static_cast<void (*)(lua_State *, pragma::modules::scenekit::Renderer &)>([](lua_State *l, pragma::modules::scenekit::Renderer &renderer) { renderer->Restart(); }));
+	defRenderer.def("Reset", static_cast<void (*)(lua_State *, pragma::modules::scenekit::Renderer &)>([](lua_State *l, pragma::modules::scenekit::Renderer &renderer) { renderer->Reset(); }));
+	defRenderer.def("StopRendering", static_cast<void (*)(lua_State *, pragma::modules::scenekit::Renderer &)>([](lua_State *l, pragma::modules::scenekit::Renderer &renderer) { renderer->StopRendering(); }));
+	defRenderer.def("ReloadShaders", static_cast<void (*)(lua_State *, pragma::modules::scenekit::Renderer &)>([](lua_State *l, pragma::modules::scenekit::Renderer &renderer) { renderer.ReloadShaders(); }));
 	defRenderer.def(
-	  "GetApiData", +[](lua_State *l, pragma::modules::cycles::Renderer &renderer) { return renderer->GetApiData(); });
-	defRenderer.def("BeginSceneEdit", static_cast<bool (*)(lua_State *, pragma::modules::cycles::Renderer &)>([](lua_State *l, pragma::modules::cycles::Renderer &renderer) -> bool { return renderer->BeginSceneEdit(); }));
-	defRenderer.def("EndSceneEdit", static_cast<bool (*)(lua_State *, pragma::modules::cycles::Renderer &)>([](lua_State *l, pragma::modules::cycles::Renderer &renderer) -> bool { return renderer->EndSceneEdit(); }));
+	  "GetApiData", +[](lua_State *l, pragma::modules::scenekit::Renderer &renderer) { return renderer->GetApiData(); });
+	defRenderer.def("BeginSceneEdit", static_cast<bool (*)(lua_State *, pragma::modules::scenekit::Renderer &)>([](lua_State *l, pragma::modules::scenekit::Renderer &renderer) -> bool { return renderer->BeginSceneEdit(); }));
+	defRenderer.def("EndSceneEdit", static_cast<bool (*)(lua_State *, pragma::modules::scenekit::Renderer &)>([](lua_State *l, pragma::modules::scenekit::Renderer &renderer) -> bool { return renderer->EndSceneEdit(); }));
 	defRenderer.def(
-	  "SyncActor", +[](lua_State *l, pragma::modules::cycles::Renderer &renderer, BaseEntity &ent) -> bool {
+	  "SyncActor", +[](lua_State *l, pragma::modules::scenekit::Renderer &renderer, BaseEntity &ent) -> bool {
 		  auto uuid = ent.GetUuid();
 		  auto *o = renderer->FindActor(uuid);
 		  if(!o) {
@@ -1133,14 +1136,14 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 		  return renderer->SyncEditedActor(uuid);
 	  });
 	defRenderer.def(
-	  "FindActor", +[](lua_State *l, pragma::modules::cycles::Renderer &renderer, const Lua::util::Uuid &uuid) -> pragma::scenekit::WorldObject * { return renderer->FindActor(uuid.value); });
+	  "FindActor", +[](lua_State *l, pragma::modules::scenekit::Renderer &renderer, const Lua::util::Uuid &uuid) -> pragma::scenekit::WorldObject * { return renderer->FindActor(uuid.value); });
 	defRenderer.def("GetScene",
-	  static_cast<std::shared_ptr<cycles::Scene> (*)(lua_State *, pragma::modules::cycles::Renderer &)>([](lua_State *l, pragma::modules::cycles::Renderer &renderer) -> std::shared_ptr<cycles::Scene> { return std::make_shared<cycles::Scene>(renderer->GetScene()); }));
-	defRenderer.def("HasRenderedSamplesForAllTiles", static_cast<bool (*)(lua_State *, pragma::modules::cycles::Renderer &)>([](lua_State *l, pragma::modules::cycles::Renderer &renderer) -> bool { return renderer->GetTileManager().AllTilesHaveRenderedSamples(); }));
+	  static_cast<std::shared_ptr<scenekit::Scene> (*)(lua_State *, pragma::modules::scenekit::Renderer &)>([](lua_State *l, pragma::modules::scenekit::Renderer &renderer) -> std::shared_ptr<scenekit::Scene> { return std::make_shared<scenekit::Scene>(renderer->GetScene()); }));
+	defRenderer.def("HasRenderedSamplesForAllTiles", static_cast<bool (*)(lua_State *, pragma::modules::scenekit::Renderer &)>([](lua_State *l, pragma::modules::scenekit::Renderer &renderer) -> bool { return renderer->GetTileManager().AllTilesHaveRenderedSamples(); }));
 	defRenderer.def(
-	  "IsBuildingKernels", +[](pragma::modules::cycles::Renderer &renderer) { return renderer->IsBuildingKernels(); });
+	  "IsBuildingKernels", +[](pragma::modules::scenekit::Renderer &renderer) { return renderer->IsBuildingKernels(); });
 	defRenderer.def(
-	  "IsFeatureAvailable", +[](pragma::modules::cycles::Renderer &renderer, pragma::scenekit::Renderer::Feature feature) { return renderer->IsFeatureEnabled(feature); });
+	  "IsFeatureAvailable", +[](pragma::modules::scenekit::Renderer &renderer, pragma::scenekit::Renderer::Feature feature) { return renderer->IsFeatureEnabled(feature); });
 	defRenderer.add_static_constant("FLAG_NONE", umath::to_integral(pragma::scenekit::Renderer::Flags::None));
 	defRenderer.add_static_constant("FLAG_ENABLE_LIVE_EDITING_BIT", umath::to_integral(pragma::scenekit::Renderer::Flags::EnableLiveEditing));
 	defRenderer.add_static_constant("FEATURE_FLAG_NONE", umath::to_integral(pragma::scenekit::Renderer::Feature::None));
@@ -2101,22 +2104,22 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 	static_assert(pragma::scenekit::NODE_COUNT == 44, "Increase this number if new node types are added!");
 	Lua::RegisterLibraryValues<luabind::object>(l.GetState(), "unirender.Node", nodeTypeEnums);
 
-	auto defShader = luabind::class_<pragma::modules::cycles::LuaShader>("Shader");
+	auto defShader = luabind::class_<pragma::modules::scenekit::LuaShader>("Shader");
 	defShader.def(luabind::constructor<>());
-	defShader.def("Initialize", &pragma::modules::cycles::LuaShader::Lua_Initialize, &pragma::modules::cycles::LuaShader::Lua_default_Initialize);
-	defShader.def("InitializeCombinedPass", &pragma::modules::cycles::LuaShader::Lua_InitializeCombinedPass, &pragma::modules::cycles::LuaShader::Lua_default_InitializeCombinedPass);
-	defShader.def("InitializeAlbedoPass", &pragma::modules::cycles::LuaShader::Lua_InitializeAlbedoPass, &pragma::modules::cycles::LuaShader::Lua_default_InitializeAlbedoPass);
-	defShader.def("InitializeNormalPass", &pragma::modules::cycles::LuaShader::Lua_InitializeNormalPass, &pragma::modules::cycles::LuaShader::Lua_default_InitializeNormalPass);
-	defShader.def("InitializeDepthPass", &pragma::modules::cycles::LuaShader::Lua_InitializeDepthPass, &pragma::modules::cycles::LuaShader::Lua_default_InitializeDepthPass);
-	defShader.def("GetEntity", &pragma::modules::cycles::LuaShader::GetEntity);
-	defShader.def("GetMaterial", &pragma::modules::cycles::LuaShader::GetMaterial);
-	defShader.def("GetMesh", &pragma::modules::cycles::LuaShader::GetMesh);
-	defShader.def("ClearHairConfig", &pragma::modules::cycles::LuaShader::ClearHairConfig);
-	defShader.def("GetHairConfig", &pragma::modules::cycles::LuaShader::GetHairConfig);
-	defShader.def("SetHairConfig", &pragma::modules::cycles::LuaShader::SetHairConfig);
-	defShader.def("ClearSubdivisionSettings", &pragma::modules::cycles::LuaShader::ClearSubdivisionSettings);
-	defShader.def("GetSubdivisionSettings", &pragma::modules::cycles::LuaShader::GetSubdivisionSettings);
-	defShader.def("SetSubdivisionSettings", &pragma::modules::cycles::LuaShader::SetSubdivisionSettings);
+	defShader.def("Initialize", &pragma::modules::scenekit::LuaShader::Lua_Initialize, &pragma::modules::scenekit::LuaShader::Lua_default_Initialize);
+	defShader.def("InitializeCombinedPass", &pragma::modules::scenekit::LuaShader::Lua_InitializeCombinedPass, &pragma::modules::scenekit::LuaShader::Lua_default_InitializeCombinedPass);
+	defShader.def("InitializeAlbedoPass", &pragma::modules::scenekit::LuaShader::Lua_InitializeAlbedoPass, &pragma::modules::scenekit::LuaShader::Lua_default_InitializeAlbedoPass);
+	defShader.def("InitializeNormalPass", &pragma::modules::scenekit::LuaShader::Lua_InitializeNormalPass, &pragma::modules::scenekit::LuaShader::Lua_default_InitializeNormalPass);
+	defShader.def("InitializeDepthPass", &pragma::modules::scenekit::LuaShader::Lua_InitializeDepthPass, &pragma::modules::scenekit::LuaShader::Lua_default_InitializeDepthPass);
+	defShader.def("GetEntity", &pragma::modules::scenekit::LuaShader::GetEntity);
+	defShader.def("GetMaterial", &pragma::modules::scenekit::LuaShader::GetMaterial);
+	defShader.def("GetMesh", &pragma::modules::scenekit::LuaShader::GetMesh);
+	defShader.def("ClearHairConfig", &pragma::modules::scenekit::LuaShader::ClearHairConfig);
+	defShader.def("GetHairConfig", &pragma::modules::scenekit::LuaShader::GetHairConfig);
+	defShader.def("SetHairConfig", &pragma::modules::scenekit::LuaShader::SetHairConfig);
+	defShader.def("ClearSubdivisionSettings", &pragma::modules::scenekit::LuaShader::ClearSubdivisionSettings);
+	defShader.def("GetSubdivisionSettings", &pragma::modules::scenekit::LuaShader::GetSubdivisionSettings);
+	defShader.def("SetSubdivisionSettings", &pragma::modules::scenekit::LuaShader::SetSubdivisionSettings);
 
 	auto defHairConfig = luabind::class_<util::HairConfig>("HairConfig");
 	defHairConfig.def(luabind::constructor<>());
@@ -2386,7 +2389,7 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 
 	auto defSceneObject = luabind::class_<pragma::scenekit::SceneObject>("SceneObject");
 	defSceneObject.def("GetScene", &pragma::scenekit::SceneObject::GetScene, luabind::shared_from_this_policy<0> {});
-	defSceneObject.def("Finalize", static_cast<void (*)(lua_State *, pragma::scenekit::SceneObject &, cycles::Scene &)>([](lua_State *l, pragma::scenekit::SceneObject &sceneObject, cycles::Scene &scene) { sceneObject.Finalize(*scene, true); }));
+	defSceneObject.def("Finalize", static_cast<void (*)(lua_State *, pragma::scenekit::SceneObject &, scenekit::Scene &)>([](lua_State *l, pragma::scenekit::SceneObject &sceneObject, scenekit::Scene &scene) { sceneObject.Finalize(*scene, true); }));
 	modCycles[defSceneObject];
 
 	auto defWorldObject = luabind::class_<pragma::scenekit::WorldObject>("WorldObject");
@@ -2426,19 +2429,19 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 	defCamera.def("SetDepthOfFieldEnabled", &pragma::scenekit::Camera::SetDepthOfFieldEnabled);
 	modCycles[defCamera];
 
-	auto defProgressiveRefine = luabind::class_<pragma::modules::cycles::ProgressiveTexture>("ProgressiveTexture");
-	defProgressiveRefine.def("GetTexture", &pragma::modules::cycles::ProgressiveTexture::GetTexture);
+	auto defProgressiveRefine = luabind::class_<pragma::modules::scenekit::ProgressiveTexture>("ProgressiveTexture");
+	defProgressiveRefine.def("GetTexture", &pragma::modules::scenekit::ProgressiveTexture::GetTexture);
 	modCycles[defProgressiveRefine];
 
-	auto defCache = luabind::class_<pragma::modules::cycles::Cache>("Cache");
-	/*defCache.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,pragma::modules::cycles::Cache&,Scene&,luabind::object,luabind::object)>([](lua_State *l,pragma::modules::cycles::Cache &cache,Scene &gameScene,luabind::object entFilter,luabind::object lightFilter) {
+	auto defCache = luabind::class_<pragma::modules::scenekit::Cache>("Cache");
+	/*defCache.def("InitializeFromGameScene",static_cast<void(*)(lua_State*,pragma::modules::scenekit::Cache&,Scene&,luabind::object,luabind::object)>([](lua_State *l,pragma::modules::scenekit::Cache &cache,Scene &gameScene,luabind::object entFilter,luabind::object lightFilter) {
 			initialize_cycles_geometry(const_cast<Scene&>(gameScene),cache,{},SceneFlags::None,to_entity_filter(l,&entFilter,3),to_entity_filter(l,&entFilter,4));
 		}));*/
-	defCache.def("InitializeFromGameScene", static_cast<void (*)(lua_State *, pragma::modules::cycles::Cache &, pragma::CSceneComponent &, luabind::object)>([](lua_State *l, pragma::modules::cycles::Cache &cache, pragma::CSceneComponent &gameScene, luabind::object entFilter) {
+	defCache.def("InitializeFromGameScene", static_cast<void (*)(lua_State *, pragma::modules::scenekit::Cache &, pragma::CSceneComponent &, luabind::object)>([](lua_State *l, pragma::modules::scenekit::Cache &cache, pragma::CSceneComponent &gameScene, luabind::object entFilter) {
 		initialize_cycles_geometry(gameScene, cache, {}, SceneFlags::None, to_entity_filter(l, &entFilter, 3), nullptr);
 	}));
 	defCache.def("InitializeFromGameScene",
-	  static_cast<void (*)(lua_State *, pragma::modules::cycles::Cache &, pragma::CSceneComponent &)>([](lua_State *l, pragma::modules::cycles::Cache &cache, pragma::CSceneComponent &gameScene) { initialize_cycles_geometry(gameScene, cache, {}, SceneFlags::None, nullptr, nullptr); }));
+	  static_cast<void (*)(lua_State *, pragma::modules::scenekit::Cache &, pragma::CSceneComponent &)>([](lua_State *l, pragma::modules::scenekit::Cache &cache, pragma::CSceneComponent &gameScene) { initialize_cycles_geometry(gameScene, cache, {}, SceneFlags::None, nullptr, nullptr); }));
 	modCycles[defCache];
 
 	auto defObj = luabind::class_<pragma::scenekit::Object>("Object");
@@ -2446,7 +2449,7 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 	defObj.def("IsSubdivisionEnabled", &pragma::scenekit::Object::IsSubdivisionEnabled);
 	modCycles[defObj];
 
-	auto defScene = luabind::class_<cycles::Scene>("Scene");
+	auto defScene = luabind::class_<scenekit::Scene>("Scene");
 
 	auto defSerializationData = luabind::class_<pragma::scenekit::Scene::SerializationData>("SerializationData");
 	defSerializationData.def(luabind::constructor<>());
@@ -2501,12 +2504,12 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 	defScene.add_static_constant("DENOISE_MODE_OPTIX", umath::to_integral(pragma::scenekit::Scene::DenoiseMode::Optix));
 	defScene.add_static_constant("DENOISE_MODE_OPEN_IMAGE", umath::to_integral(pragma::scenekit::Scene::DenoiseMode::OpenImage));
 
-	defScene.def("SetAoBakeTarget", static_cast<void (cycles::Scene::*)(Model &, uint32_t)>(&cycles::Scene::SetAOBakeTarget));
-	defScene.def("SetAoBakeTarget", static_cast<void (cycles::Scene::*)(BaseEntity &, uint32_t)>(&cycles::Scene::SetAOBakeTarget));
-	defScene.def("SetLightmapDataCache", &cycles::Scene::SetLightmapDataCache);
-	defScene.def("AddLightmapBakeTarget", static_cast<void (cycles::Scene::*)(BaseEntity &)>(&cycles::Scene::AddLightmapBakeTarget));
+	defScene.def("SetAoBakeTarget", static_cast<void (scenekit::Scene::*)(Model &, uint32_t)>(&scenekit::Scene::SetAOBakeTarget));
+	defScene.def("SetAoBakeTarget", static_cast<void (scenekit::Scene::*)(BaseEntity &, uint32_t)>(&scenekit::Scene::SetAOBakeTarget));
+	defScene.def("SetLightmapDataCache", &scenekit::Scene::SetLightmapDataCache);
+	defScene.def("AddLightmapBakeTarget", static_cast<void (scenekit::Scene::*)(BaseEntity &)>(&scenekit::Scene::AddLightmapBakeTarget));
 	defScene.def(
-	  "AddLightSource", +[](lua_State *l, cycles::Scene &scene, BaseEntity &ent) {
+	  "AddLightSource", +[](lua_State *l, scenekit::Scene &scene, BaseEntity &ent) {
 		  auto light = pragma::scenekit::Light::Create();
 		  if(!light)
 			  return;
@@ -2515,44 +2518,44 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 		  scene->AddLight(*light);
 	  });
 	defScene.def(
-	  "InitializeFromGameScene", +[](lua_State *l, cycles::Scene &scene, pragma::CSceneComponent &gameScene, const Vector3 &camPos, const Quat &camRot, const Mat4 &vp, float nearZ, float farZ, float fov, uint32_t sceneFlags, luabind::object entFilter, luabind::object lightFilter) {
+	  "InitializeFromGameScene", +[](lua_State *l, scenekit::Scene &scene, pragma::CSceneComponent &gameScene, const Vector3 &camPos, const Quat &camRot, const Mat4 &vp, float nearZ, float farZ, float fov, uint32_t sceneFlags, luabind::object entFilter, luabind::object lightFilter) {
 		  initialize_from_game_scene(l, gameScene, scene, camPos, camRot, vp, nearZ, farZ, fov, static_cast<SceneFlags>(sceneFlags), &entFilter, &lightFilter);
 	  });
 	defScene.def(
-	  "InitializeFromGameScene", +[](lua_State *l, cycles::Scene &scene, pragma::CSceneComponent &gameScene, const Vector3 &camPos, const Quat &camRot, const Mat4 &vp, float nearZ, float farZ, float fov, uint32_t sceneFlags, luabind::object entFilter) {
+	  "InitializeFromGameScene", +[](lua_State *l, scenekit::Scene &scene, pragma::CSceneComponent &gameScene, const Vector3 &camPos, const Quat &camRot, const Mat4 &vp, float nearZ, float farZ, float fov, uint32_t sceneFlags, luabind::object entFilter) {
 		  initialize_from_game_scene(l, gameScene, scene, camPos, camRot, vp, nearZ, farZ, fov, static_cast<SceneFlags>(sceneFlags), &entFilter, nullptr);
 	  });
 	defScene.def(
-	  "InitializeFromGameScene", +[](lua_State *l, cycles::Scene &scene, pragma::CSceneComponent &gameScene, const Vector3 &camPos, const Quat &camRot, const Mat4 &vp, float nearZ, float farZ, float fov, uint32_t sceneFlags) {
+	  "InitializeFromGameScene", +[](lua_State *l, scenekit::Scene &scene, pragma::CSceneComponent &gameScene, const Vector3 &camPos, const Quat &camRot, const Mat4 &vp, float nearZ, float farZ, float fov, uint32_t sceneFlags) {
 		  initialize_from_game_scene(l, gameScene, scene, camPos, camRot, vp, nearZ, farZ, fov, static_cast<SceneFlags>(sceneFlags), nullptr, nullptr);
 	  });
 	defScene.def(
-	  "PopulateFromGameScene", +[](lua_State *l, cycles::Scene &scene, pragma::CSceneComponent &gameScene, uint32_t sceneFlags, luabind::object optEntFilter) {
+	  "PopulateFromGameScene", +[](lua_State *l, scenekit::Scene &scene, pragma::CSceneComponent &gameScene, uint32_t sceneFlags, luabind::object optEntFilter) {
 		  auto entFilter = to_entity_filter(l, &optEntFilter, 4);
 		  auto aspectRatio = gameScene.GetWidth() / static_cast<float>(gameScene.GetHeight());
 		  initialize_cycles_geometry(gameScene, scene.GetCache(), {}, static_cast<SceneFlags>(sceneFlags), entFilter);
 	  });
-	defScene.def("FindObjectByName", static_cast<pragma::scenekit::Object *(cycles::Scene::*)(const std::string &)>(&cycles::Scene::FindObject));
-	defScene.def("SetSky", static_cast<void (*)(lua_State *, cycles::Scene &, const std::string &)>([](lua_State *l, cycles::Scene &scene, const std::string &skyPath) { scene->SetSky(skyPath); }));
-	defScene.def("SetSkyTransparent", static_cast<void (*)(lua_State *, cycles::Scene &, bool)>([](lua_State *l, cycles::Scene &scene, bool transparent) { scene->GetSceneInfo().transparentSky = transparent; }));
-	defScene.def("SetSkyAngles", static_cast<void (*)(lua_State *, cycles::Scene &, const EulerAngles &)>([](lua_State *l, cycles::Scene &scene, const EulerAngles &skyAngles) { scene->SetSkyAngles(skyAngles); }));
-	defScene.def("SetSkyStrength", static_cast<void (*)(lua_State *, cycles::Scene &, float)>([](lua_State *l, cycles::Scene &scene, float skyStrength) { scene->SetSkyStrength(skyStrength); }));
-	defScene.def("SetEmissionStrength", static_cast<void (*)(lua_State *, cycles::Scene &, float)>([](lua_State *l, cycles::Scene &scene, float emissionStrength) { scene->SetEmissionStrength(emissionStrength); }));
-	defScene.def("SetMaxTransparencyBounces", static_cast<void (*)(lua_State *, cycles::Scene &, uint32_t)>([](lua_State *l, cycles::Scene &scene, uint32_t bounces) { scene->SetMaxTransparencyBounces(bounces); }));
-	defScene.def("SetMaxBounces", static_cast<void (*)(lua_State *, cycles::Scene &, uint32_t)>([](lua_State *l, cycles::Scene &scene, uint32_t bounces) { scene->SetMaxBounces(bounces); }));
-	defScene.def("SetMaxDiffuseBounces", static_cast<void (*)(lua_State *, cycles::Scene &, uint32_t)>([](lua_State *l, cycles::Scene &scene, uint32_t bounces) { scene->SetMaxDiffuseBounces(bounces); }));
-	defScene.def("SetMaxGlossyBounces", static_cast<void (*)(lua_State *, cycles::Scene &, uint32_t)>([](lua_State *l, cycles::Scene &scene, uint32_t bounces) { scene->SetMaxGlossyBounces(bounces); }));
-	defScene.def("SetMaxTransmissionBounces", static_cast<void (*)(lua_State *, cycles::Scene &, uint32_t)>([](lua_State *l, cycles::Scene &scene, uint32_t bounces) { scene->SetMaxTransmissionBounces(bounces); }));
-	defScene.def("SetLightIntensityFactor", static_cast<void (*)(lua_State *, cycles::Scene &, float)>([](lua_State *l, cycles::Scene &scene, float factor) { scene->SetLightIntensityFactor(factor); }));
+	defScene.def("FindObjectByName", static_cast<pragma::scenekit::Object *(scenekit::Scene::*)(const std::string &)>(&scenekit::Scene::FindObject));
+	defScene.def("SetSky", static_cast<void (*)(lua_State *, scenekit::Scene &, const std::string &)>([](lua_State *l, scenekit::Scene &scene, const std::string &skyPath) { scene->SetSky(skyPath); }));
+	defScene.def("SetSkyTransparent", static_cast<void (*)(lua_State *, scenekit::Scene &, bool)>([](lua_State *l, scenekit::Scene &scene, bool transparent) { scene->GetSceneInfo().transparentSky = transparent; }));
+	defScene.def("SetSkyAngles", static_cast<void (*)(lua_State *, scenekit::Scene &, const EulerAngles &)>([](lua_State *l, scenekit::Scene &scene, const EulerAngles &skyAngles) { scene->SetSkyAngles(skyAngles); }));
+	defScene.def("SetSkyStrength", static_cast<void (*)(lua_State *, scenekit::Scene &, float)>([](lua_State *l, scenekit::Scene &scene, float skyStrength) { scene->SetSkyStrength(skyStrength); }));
+	defScene.def("SetEmissionStrength", static_cast<void (*)(lua_State *, scenekit::Scene &, float)>([](lua_State *l, scenekit::Scene &scene, float emissionStrength) { scene->SetEmissionStrength(emissionStrength); }));
+	defScene.def("SetMaxTransparencyBounces", static_cast<void (*)(lua_State *, scenekit::Scene &, uint32_t)>([](lua_State *l, scenekit::Scene &scene, uint32_t bounces) { scene->SetMaxTransparencyBounces(bounces); }));
+	defScene.def("SetMaxBounces", static_cast<void (*)(lua_State *, scenekit::Scene &, uint32_t)>([](lua_State *l, scenekit::Scene &scene, uint32_t bounces) { scene->SetMaxBounces(bounces); }));
+	defScene.def("SetMaxDiffuseBounces", static_cast<void (*)(lua_State *, scenekit::Scene &, uint32_t)>([](lua_State *l, scenekit::Scene &scene, uint32_t bounces) { scene->SetMaxDiffuseBounces(bounces); }));
+	defScene.def("SetMaxGlossyBounces", static_cast<void (*)(lua_State *, scenekit::Scene &, uint32_t)>([](lua_State *l, scenekit::Scene &scene, uint32_t bounces) { scene->SetMaxGlossyBounces(bounces); }));
+	defScene.def("SetMaxTransmissionBounces", static_cast<void (*)(lua_State *, scenekit::Scene &, uint32_t)>([](lua_State *l, scenekit::Scene &scene, uint32_t bounces) { scene->SetMaxTransmissionBounces(bounces); }));
+	defScene.def("SetLightIntensityFactor", static_cast<void (*)(lua_State *, scenekit::Scene &, float)>([](lua_State *l, scenekit::Scene &scene, float factor) { scene->SetLightIntensityFactor(factor); }));
 	defScene.def(
-	  "SetAdaptiveSampling", +[](cycles::Scene &scene, bool enabled, float adaptiveSamplingThreshold, uint32_t adaptiveMinSamples) { scene->SetAdaptiveSampling(enabled, adaptiveSamplingThreshold, adaptiveMinSamples); });
-	defScene.def("Finalize", static_cast<void (*)(lua_State *, cycles::Scene &)>([](lua_State *l, cycles::Scene &scene) {
+	  "SetAdaptiveSampling", +[](scenekit::Scene &scene, bool enabled, float adaptiveSamplingThreshold, uint32_t adaptiveMinSamples) { scene->SetAdaptiveSampling(enabled, adaptiveSamplingThreshold, adaptiveMinSamples); });
+	defScene.def("Finalize", static_cast<void (*)(lua_State *, scenekit::Scene &)>([](lua_State *l, scenekit::Scene &scene) {
 		scene.Finalize();
 		scene->Finalize();
 	}));
-	defScene.def("SetResolution", static_cast<void (*)(lua_State *, cycles::Scene &, uint32_t, uint32_t)>([](lua_State *l, cycles::Scene &scene, uint32_t width, uint32_t height) { scene->GetCamera().SetResolution(width, height); }));
-	defScene.def("GetCamera", static_cast<pragma::scenekit::Camera &(*)(lua_State *, cycles::Scene &)>([](lua_State *l, cycles::Scene &scene) -> pragma::scenekit::Camera & { return scene->GetCamera(); }));
-	defScene.def("GetLightSources", static_cast<void (*)(lua_State *, cycles::Scene &)>([](lua_State *l, cycles::Scene &scene) {
+	defScene.def("SetResolution", static_cast<void (*)(lua_State *, scenekit::Scene &, uint32_t, uint32_t)>([](lua_State *l, scenekit::Scene &scene, uint32_t width, uint32_t height) { scene->GetCamera().SetResolution(width, height); }));
+	defScene.def("GetCamera", static_cast<pragma::scenekit::Camera &(*)(lua_State *, scenekit::Scene &)>([](lua_State *l, scenekit::Scene &scene) -> pragma::scenekit::Camera & { return scene->GetCamera(); }));
+	defScene.def("GetLightSources", static_cast<void (*)(lua_State *, scenekit::Scene &)>([](lua_State *l, scenekit::Scene &scene) {
 		auto t = Lua::CreateTable(l);
 		auto &lights = scene->GetLights();
 		uint32_t idx = 1;
@@ -2562,7 +2565,7 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 			Lua::SetTableValue(l, t);
 		}
 	}));
-	defScene.def("AddLightSource", static_cast<void (*)(lua_State *, cycles::Scene &, uint32_t, const Vector3 &)>([](lua_State *l, cycles::Scene &scene, uint32_t type, const Vector3 &pos) {
+	defScene.def("AddLightSource", static_cast<void (*)(lua_State *, scenekit::Scene &, uint32_t, const Vector3 &)>([](lua_State *l, scenekit::Scene &scene, uint32_t type, const Vector3 &pos) {
 		auto light = pragma::scenekit::Light::Create();
 		if(light == nullptr)
 			return;
@@ -2572,20 +2575,20 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 		Lua::Push(l, light.get());
 	}));
 	defScene.def("Save",
-	  static_cast<void (*)(lua_State *, cycles::Scene &, DataStream &, const std::string &, const pragma::scenekit::Scene::SerializationData &)>(
-	    [](lua_State *l, cycles::Scene &scene, DataStream &ds, const std::string &rootDir, const pragma::scenekit::Scene::SerializationData &serializationData) {
+	  static_cast<void (*)(lua_State *, scenekit::Scene &, DataStream &, const std::string &, const pragma::scenekit::Scene::SerializationData &)>(
+	    [](lua_State *l, scenekit::Scene &scene, DataStream &ds, const std::string &rootDir, const pragma::scenekit::Scene::SerializationData &serializationData) {
 		    auto path = rootDir;
 		    if(Lua::file::validate_write_operation(l, path) == false)
 			    return;
 		    scene->Save(ds, path, serializationData);
 	    }));
-	defScene.def("Load", static_cast<void (*)(lua_State *, cycles::Scene &, DataStream &, const std::string &)>([](lua_State *l, cycles::Scene &scene, DataStream &ds, const std::string &rootDir) {
+	defScene.def("Load", static_cast<void (*)(lua_State *, scenekit::Scene &, DataStream &, const std::string &)>([](lua_State *l, scenekit::Scene &scene, DataStream &ds, const std::string &rootDir) {
 		auto path = rootDir;
 		if(Lua::file::validate_write_operation(l, path) == false)
 			return;
 		scene->Load(ds, path);
 	}));
-	defScene.def("AddCache", static_cast<void (*)(lua_State *, cycles::Scene &, const pragma::modules::cycles::Cache &)>([](lua_State *l, cycles::Scene &scene, const pragma::modules::cycles::Cache &cache) { scene->AddModelsFromCache(cache.GetModelCache()); }));
+	defScene.def("AddCache", static_cast<void (*)(lua_State *, scenekit::Scene &, const pragma::modules::scenekit::Cache &)>([](lua_State *l, scenekit::Scene &scene, const pragma::modules::scenekit::Cache &cache) { scene->AddModelsFromCache(cache.GetModelCache()); }));
 
 	auto defSceneCreateInfo = luabind::class_<pragma::scenekit::Scene::CreateInfo>("CreateInfo");
 	defSceneCreateInfo.def(luabind::constructor<>());
@@ -2665,83 +2668,83 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 				if(Lua::IsSet(l,argIdx))
 					denoise = Lua::CheckBool(l,argIdx);
 				// TODO
-				auto scene = cycles::Scene::Create(pragma::modules::cycles::Scene::RenderMode::BakeDiffuseLighting,[](const uint8_t *data,int width,int height,int channels) {
+				auto scene = scenekit::Scene::Create(pragma::modules::scenekit::Scene::RenderMode::BakeDiffuseLighting,[](const uint8_t *data,int width,int height,int channels) {
 					
 				},sampleCount,hdrOutput,denoise);
 				if(scene == nullptr)
 					return 0;
-				Lua::Push<cycles::PScene>(l,scene);
+				Lua::Push<scenekit::PScene>(l,scene);
 				return 1;
 			})}
 		});
 		//
 
-		auto defCamera = luabind::class_<cycles::Camera,luabind::bases<cycles::WorldObject,cycles::SceneObject>>("Camera");
-		defCamera.def("SetResolution",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Camera>&,uint32_t,uint32_t)>([](lua_State *l,util::WeakHandle<cycles::Camera> &cam,uint32_t width,uint32_t height) {
+		auto defCamera = luabind::class_<scenekit::Camera,luabind::bases<scenekit::WorldObject,scenekit::SceneObject>>("Camera");
+		defCamera.def("SetResolution",static_cast<void(*)(lua_State*,util::WeakHandle<scenekit::Camera>&,uint32_t,uint32_t)>([](lua_State *l,util::WeakHandle<scenekit::Camera> &cam,uint32_t width,uint32_t height) {
 			
 			cam.SetResolution(width,height);
 		}));
-		defCamera.def("SetFarZ",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Camera>&,float)>([](lua_State *l,util::WeakHandle<cycles::Camera> &cam,float farZ) {
+		defCamera.def("SetFarZ",static_cast<void(*)(lua_State*,util::WeakHandle<scenekit::Camera>&,float)>([](lua_State *l,util::WeakHandle<scenekit::Camera> &cam,float farZ) {
 			
 			cam.SetFarZ(farZ);
 		}));
-		defCamera.def("SetNearZ",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Camera>&,float)>([](lua_State *l,util::WeakHandle<cycles::Camera> &cam,float nearZ) {
+		defCamera.def("SetNearZ",static_cast<void(*)(lua_State*,util::WeakHandle<scenekit::Camera>&,float)>([](lua_State *l,util::WeakHandle<scenekit::Camera> &cam,float nearZ) {
 			
 			cam.SetNearZ(nearZ);
 		}));
-		defCamera.def("SetFOV",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Camera>&,float)>([](lua_State *l,util::WeakHandle<cycles::Camera> &cam,float fov) {
+		defCamera.def("SetFOV",static_cast<void(*)(lua_State*,util::WeakHandle<scenekit::Camera>&,float)>([](lua_State *l,util::WeakHandle<scenekit::Camera> &cam,float fov) {
 			
 			cam.SetFOV(umath::deg_to_rad(fov));
 		}));
 		modConvert[defCamera];
 
-		auto defMesh = luabind::class_<cycles::Mesh,cycles::SceneObject>("Mesh");
-		defMesh.def("AddVertex",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Mesh>&,const Vector3&,const Vector3&,const Vector2&)>([](lua_State *l,util::WeakHandle<cycles::Mesh> &mesh,const Vector3 &pos,const Vector3 &n,const Vector2 &uv) {
+		auto defMesh = luabind::class_<scenekit::Mesh,scenekit::SceneObject>("Mesh");
+		defMesh.def("AddVertex",static_cast<void(*)(lua_State*,util::WeakHandle<scenekit::Mesh>&,const Vector3&,const Vector3&,const Vector2&)>([](lua_State *l,util::WeakHandle<scenekit::Mesh> &mesh,const Vector3 &pos,const Vector3 &n,const Vector2 &uv) {
 			pragma::Lua::check_component(l,mesh);
 			Lua::PushBool(l,mesh->AddVertex(pos,n,Vector3{},uv));
 		}));
-		defMesh.def("AddTriangle",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Mesh>&,uint32_t,uint32_t,uint32_t,uint32_t)>([](lua_State *l,util::WeakHandle<cycles::Mesh> &mesh,uint32_t idx0,uint32_t idx1,uint32_t idx2,uint32_t shaderIndex) {
+		defMesh.def("AddTriangle",static_cast<void(*)(lua_State*,util::WeakHandle<scenekit::Mesh>&,uint32_t,uint32_t,uint32_t,uint32_t)>([](lua_State *l,util::WeakHandle<scenekit::Mesh> &mesh,uint32_t idx0,uint32_t idx1,uint32_t idx2,uint32_t shaderIndex) {
 			pragma::Lua::check_component(l,mesh);
 			Lua::PushBool(l,mesh->AddTriangle(idx0,idx1,idx2,shaderIndex));
 		}));
-		defMesh.def("AddShader",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Mesh>&,util::WeakHandle<cycles::Shader>&)>([](lua_State *l,util::WeakHandle<cycles::Mesh> &mesh,util::WeakHandle<cycles::Shader> &shader) {
+		defMesh.def("AddShader",static_cast<void(*)(lua_State*,util::WeakHandle<scenekit::Mesh>&,util::WeakHandle<scenekit::Shader>&)>([](lua_State *l,util::WeakHandle<scenekit::Mesh> &mesh,util::WeakHandle<scenekit::Shader> &shader) {
 			pragma::Lua::check_component(l,mesh);
 			pragma::Lua::check_component(l,shader);
 			Lua::PushInt(l,mesh->AddShader(*shader));
 		}));
 		modConvert[defMesh];
 
-		auto defObject = luabind::class_<cycles::Object,luabind::bases<cycles::WorldObject,cycles::SceneObject>>("Object");
+		auto defObject = luabind::class_<scenekit::Object,luabind::bases<scenekit::WorldObject,scenekit::SceneObject>>("Object");
 		modConvert[defObject];
 
-		auto defScene = luabind::class_<cycles::Scene>("Scene");
-		defMesh.def("AddEntity",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Scene>&,EntityHandle&)>([](lua_State *l,util::WeakHandle<cycles::Scene> &scene,EntityHandle &hEnt) {
+		auto defScene = luabind::class_<scenekit::Scene>("Scene");
+		defMesh.def("AddEntity",static_cast<void(*)(lua_State*,util::WeakHandle<scenekit::Scene>&,EntityHandle&)>([](lua_State *l,util::WeakHandle<scenekit::Scene> &scene,EntityHandle &hEnt) {
 			LUA_CHECK_ENTITY(l,hEnt);
 			pragma::Lua::check_component(l,scene);
 			scene->AddEntity(*hEnt.get());
 		}));
-		defMesh.def("AddLight",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Scene>&)>([](lua_State *l,util::WeakHandle<cycles::Scene> &scene) {
+		defMesh.def("AddLight",static_cast<void(*)(lua_State*,util::WeakHandle<scenekit::Scene>&)>([](lua_State *l,util::WeakHandle<scenekit::Scene> &scene) {
 			pragma::Lua::check_component(l,scene);
-			auto light = cycles::Light::Create(*scene);
+			auto light = scenekit::Light::Create(*scene);
 			Lua::Push(l,light->GetHandle());
 		}));
-		defMesh.def("AddMesh",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Scene>&,const std::string&,uint32_t,uint32_t)>([](lua_State *l,util::WeakHandle<cycles::Scene> &scene,const std::string &name,uint32_t numVerts,uint32_t numTris) {
+		defMesh.def("AddMesh",static_cast<void(*)(lua_State*,util::WeakHandle<scenekit::Scene>&,const std::string&,uint32_t,uint32_t)>([](lua_State *l,util::WeakHandle<scenekit::Scene> &scene,const std::string &name,uint32_t numVerts,uint32_t numTris) {
 			pragma::Lua::check_component(l,scene);
-			auto mesh = cycles::Mesh::Create(*scene,name,numVerts,numTris);
+			auto mesh = scenekit::Mesh::Create(*scene,name,numVerts,numTris);
 			Lua::Push(l,mesh->GetHandle());
 		}));
-		defMesh.def("AddObject",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Scene>&,util::WeakHandle<cycles::Mesh>&)>([](lua_State *l,util::WeakHandle<cycles::Scene> &scene,util::WeakHandle<cycles::Mesh> &mesh) {
+		defMesh.def("AddObject",static_cast<void(*)(lua_State*,util::WeakHandle<scenekit::Scene>&,util::WeakHandle<scenekit::Mesh>&)>([](lua_State *l,util::WeakHandle<scenekit::Scene> &scene,util::WeakHandle<scenekit::Mesh> &mesh) {
 			pragma::Lua::check_component(l,scene);
 			pragma::Lua::check_component(l,mesh);
-			auto object = cycles::Object::Create(*scene,*mesh);
+			auto object = scenekit::Object::Create(*scene,*mesh);
 			Lua::Push(l,mesh->GetHandle());
 		}));
-		defMesh.def("AddShader",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Scene>&,const std::string&)>([](lua_State *l,util::WeakHandle<cycles::Scene> &scene,const std::string &name) {
+		defMesh.def("AddShader",static_cast<void(*)(lua_State*,util::WeakHandle<scenekit::Scene>&,const std::string&)>([](lua_State *l,util::WeakHandle<scenekit::Scene> &scene,const std::string &name) {
 			pragma::Lua::check_component(l,scene);
-			auto shader = cycles::Shader::Create(*scene,name);
+			auto shader = scenekit::Shader::Create(*scene,name);
 			Lua::Push(l,shader->GetHandle());
 		}));
-		defMesh.def("GetShaders",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Scene>&)>([](lua_State *l,util::WeakHandle<cycles::Scene> &scene) {
+		defMesh.def("GetShaders",static_cast<void(*)(lua_State*,util::WeakHandle<scenekit::Scene>&)>([](lua_State *l,util::WeakHandle<scenekit::Scene> &scene) {
 			pragma::Lua::check_component(l,scene);
 			auto &shaders = scene->GetShaders();
 			auto t = Lua::CreateTable(l);
@@ -2753,7 +2756,7 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 				Lua::SetTableValue(l,t);
 			}
 		}));
-		defMesh.def("GetObjects",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Scene>&)>([](lua_State *l,util::WeakHandle<cycles::Scene> &scene) {
+		defMesh.def("GetObjects",static_cast<void(*)(lua_State*,util::WeakHandle<scenekit::Scene>&)>([](lua_State *l,util::WeakHandle<scenekit::Scene> &scene) {
 			pragma::Lua::check_component(l,scene);
 			auto &objects = scene->GetObjects();
 			auto t = Lua::CreateTable(l);
@@ -2765,7 +2768,7 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 				Lua::SetTableValue(l,t);
 			}
 		}));
-		defMesh.def("GetLights",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Scene>&)>([](lua_State *l,util::WeakHandle<cycles::Scene> &scene) {
+		defMesh.def("GetLights",static_cast<void(*)(lua_State*,util::WeakHandle<scenekit::Scene>&)>([](lua_State *l,util::WeakHandle<scenekit::Scene> &scene) {
 			pragma::Lua::check_component(l,scene);
 			auto &lights = scene->GetLights();
 			auto t = Lua::CreateTable(l);
@@ -2777,62 +2780,62 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 				Lua::SetTableValue(l,t);
 			}
 		}));
-		defMesh.def("GetProgress",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Scene>&)>([](lua_State *l,util::WeakHandle<cycles::Scene> &scene) {
+		defMesh.def("GetProgress",static_cast<void(*)(lua_State*,util::WeakHandle<scenekit::Scene>&)>([](lua_State *l,util::WeakHandle<scenekit::Scene> &scene) {
 			pragma::Lua::check_component(l,scene);
 			Lua::PushNumber(l,scene->GetProgress());
 		}));
-		defMesh.def("IsComplete",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Scene>&)>([](lua_State *l,util::WeakHandle<cycles::Scene> &scene) {
+		defMesh.def("IsComplete",static_cast<void(*)(lua_State*,util::WeakHandle<scenekit::Scene>&)>([](lua_State *l,util::WeakHandle<scenekit::Scene> &scene) {
 			pragma::Lua::check_component(l,scene);
 			Lua::PushBool(l,scene->IsComplete());
 		}));
-		defMesh.def("IsCancelled",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Scene>&)>([](lua_State *l,util::WeakHandle<cycles::Scene> &scene) {
+		defMesh.def("IsCancelled",static_cast<void(*)(lua_State*,util::WeakHandle<scenekit::Scene>&)>([](lua_State *l,util::WeakHandle<scenekit::Scene> &scene) {
 			pragma::Lua::check_component(l,scene);
 			Lua::PushBool(l,scene->IsCancelled());
 		}));
-		defMesh.def("Start",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Scene>&)>([](lua_State *l,util::WeakHandle<cycles::Scene> &scene) {
+		defMesh.def("Start",static_cast<void(*)(lua_State*,util::WeakHandle<scenekit::Scene>&)>([](lua_State *l,util::WeakHandle<scenekit::Scene> &scene) {
 			pragma::Lua::check_component(l,scene);
 			scene->Start();
 		}));
-		defMesh.def("Cancel",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Scene>&)>([](lua_State *l,util::WeakHandle<cycles::Scene> &scene) {
+		defMesh.def("Cancel",static_cast<void(*)(lua_State*,util::WeakHandle<scenekit::Scene>&)>([](lua_State *l,util::WeakHandle<scenekit::Scene> &scene) {
 			pragma::Lua::check_component(l,scene);
 			scene->Cancel();
 		}));
-		defMesh.def("Wait",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Scene>&)>([](lua_State *l,util::WeakHandle<cycles::Scene> &scene) {
+		defMesh.def("Wait",static_cast<void(*)(lua_State*,util::WeakHandle<scenekit::Scene>&)>([](lua_State *l,util::WeakHandle<scenekit::Scene> &scene) {
 			pragma::Lua::check_component(l,scene);
 			scene->Wait();
 		}));
-		defMesh.def("GetCamera",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Scene>&)>([](lua_State *l,util::WeakHandle<cycles::Scene> &scene) {
+		defMesh.def("GetCamera",static_cast<void(*)(lua_State*,util::WeakHandle<scenekit::Scene>&)>([](lua_State *l,util::WeakHandle<scenekit::Scene> &scene) {
 			pragma::Lua::check_component(l,scene);
 			Lua::Push(l,scene->GetCamera().GetHandle());
 		}));
-		//defMesh.def("SetProgressCallback",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Scene&)>([](lua_State *l,util::WeakHandle<cycles::Scene> &scene) {
+		//defMesh.def("SetProgressCallback",static_cast<void(*)(lua_State*,util::WeakHandle<scenekit::Scene&)>([](lua_State *l,util::WeakHandle<scenekit::Scene> &scene) {
 			// pragma::Lua::check_component(l,scene);
 			//	scene.SetProgressCallback(); // TODO
 		//}));
 		modConvert[defScene];
 
-		auto defDenoiseInfo = luabind::class_<cycles::Scene::DenoiseInfo>("DenoiseInfo");
-		defDenoiseInfo.def_readwrite("numThreads",&cycles::Scene::DenoiseInfo::numThreads);
-		defDenoiseInfo.def_readwrite("width",&cycles::Scene::DenoiseInfo::width);
-		defDenoiseInfo.def_readwrite("height",&cycles::Scene::DenoiseInfo::height);
-		defDenoiseInfo.def_readwrite("hdr",&cycles::Scene::DenoiseInfo::hdr);
+		auto defDenoiseInfo = luabind::class_<scenekit::Scene::DenoiseInfo>("DenoiseInfo");
+		defDenoiseInfo.def_readwrite("numThreads",&scenekit::Scene::DenoiseInfo::numThreads);
+		defDenoiseInfo.def_readwrite("width",&scenekit::Scene::DenoiseInfo::width);
+		defDenoiseInfo.def_readwrite("height",&scenekit::Scene::DenoiseInfo::height);
+		defDenoiseInfo.def_readwrite("hdr",&scenekit::Scene::DenoiseInfo::hdr);
 		defScene.scope[defDenoiseInfo];
 
-		auto defShaderNode = luabind::class_<cycles::ShaderNode>("ShaderNode");
+		auto defShaderNode = luabind::class_<scenekit::ShaderNode>("ShaderNode");
 		modConvert[defShaderNode];
 
-		auto defShader = luabind::class_<cycles::Shader,cycles::SceneObject>("Shader");
-		defShader.def("AddNode",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Shader>&,const std::string&,const std::string&)>([](lua_State *l,util::WeakHandle<cycles::Shader> &shader,const std::string &type,const std::string &name) {
+		auto defShader = luabind::class_<scenekit::Shader,scenekit::SceneObject>("Shader");
+		defShader.def("AddNode",static_cast<void(*)(lua_State*,util::WeakHandle<scenekit::Shader>&,const std::string&,const std::string&)>([](lua_State *l,util::WeakHandle<scenekit::Shader> &shader,const std::string &type,const std::string &name) {
 			pragma::Lua::check_component(l,shader);
 			auto node = shader->AddNode(type,name);
 			Lua::Push(l,node->GetHandle());
 		}));
-		defShader.def("FindNode",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Shader>&,const std::string&)>([](lua_State *l,util::WeakHandle<cycles::Shader> &shader,const std::string &name) {
+		defShader.def("FindNode",static_cast<void(*)(lua_State*,util::WeakHandle<scenekit::Shader>&,const std::string&)>([](lua_State *l,util::WeakHandle<scenekit::Shader> &shader,const std::string &name) {
 			pragma::Lua::check_component(l,shader);
 			auto node = shader->FindNode(name);
 			Lua::Push(l,node->GetHandle());
 		}));
-		defShader.def("Link",static_cast<void(*)(lua_State*,util::WeakHandle<cycles::Shader>&,const std::string&,const std::string&,const std::string&,const std::string&)>([](lua_State *l,util::WeakHandle<cycles::Shader> &shader,const std::string &fromNodeName,const std::string &fromSocketName,const std::string &toNodeName,const std::string &toSocketName) {
+		defShader.def("Link",static_cast<void(*)(lua_State*,util::WeakHandle<scenekit::Shader>&,const std::string&,const std::string&,const std::string&,const std::string&)>([](lua_State *l,util::WeakHandle<scenekit::Shader> &shader,const std::string &fromNodeName,const std::string &fromSocketName,const std::string &toNodeName,const std::string &toSocketName) {
 			pragma::Lua::check_component(l,shader);
 			Lua::PushBool(l,shader->Link(fromNodeName,fromSocketName,toNodeName,toSocketName));
 		}));

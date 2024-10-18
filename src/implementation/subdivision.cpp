@@ -5,9 +5,17 @@
 * Copyright (c) 2023 Silverlan
 */
 
+module;
+
 #ifdef RT_ENABLE_SUBDIVISION
-#include "pr_cycles/subdivision.hpp"
 #include <mathutil/umath.h>
+#include <mathutil/vertex.hpp>
+#include <opensubdiv/far/topologyDescriptor.h>
+#include <opensubdiv/far/primvarRefiner.h>
+
+module pragma.modules.scenekit;
+
+import :subdivision;
 
 struct OsdVertexWeight {
 	OsdVertexWeight() { Clear(); }
@@ -23,7 +31,7 @@ struct OsdVertexWeight {
 	umath::VertexWeight vw {};
 };
 
-void pragma::modules::cycles::subdivide_mesh(const std::vector<umath::Vertex> &verts, const std::vector<int32_t> &tris, std::vector<umath::Vertex> &outVerts, std::vector<int32_t> &outTris, uint32_t subDivLevel, const std::vector<std::shared_ptr<BaseChannelData>> &miscAttributes)
+void pragma::modules::scenekit::subdivide_mesh(const std::vector<umath::Vertex> &verts, const std::vector<int32_t> &tris, std::vector<umath::Vertex> &outVerts, std::vector<int32_t> &outTris, uint32_t subDivLevel, const std::vector<std::shared_ptr<BaseChannelData>> &miscAttributes)
 {
 	std::vector<std::shared_ptr<BaseChannelData>> vertexAttributes {};
 	vertexAttributes.reserve(miscAttributes.size() + 3);

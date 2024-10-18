@@ -5,8 +5,8 @@
 * Copyright (c) 2023 Silverlan
 */
 
-#include "pr_cycles/scene.hpp"
-#include "pr_cycles/texture.hpp"
+module;
+
 #include <pragma/c_engine.h>
 #include <prosper_context.hpp>
 #include <buffers/prosper_uniform_resizable_buffer.hpp>
@@ -21,6 +21,10 @@
 #include <util_texture_info.hpp>
 #include <util_image.hpp>
 #include <fsys/ifile.hpp>
+
+module pragma.modules.scenekit;
+
+import :texture;
 
 extern DLLCLIENT CEngine *c_engine;
 extern DLLCLIENT ClientState *client;
@@ -253,7 +257,7 @@ static std::optional<std::string> prepare_texture(std::shared_ptr<Texture> &texI
 	return result;
 }
 
-std::optional<std::string> pragma::modules::cycles::prepare_texture(const std::string &texPath, const std::optional<std::string> &defaultTexture, bool translucent)
+std::optional<std::string> pragma::modules::scenekit::prepare_texture(const std::string &texPath, const std::optional<std::string> &defaultTexture, bool translucent)
 {
 	auto &texManager = static_cast<msys::CMaterialManager &>(client->GetMaterialManager()).GetTextureManager();
 	auto ptex = texManager.LoadAsset(texPath);

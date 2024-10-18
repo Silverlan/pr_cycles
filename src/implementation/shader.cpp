@@ -5,13 +5,19 @@
 * Copyright (c) 2023 Silverlan
 */
 
-#include "pr_cycles/shader.hpp"
-#include "pr_cycles/scene.hpp"
-#include <pragma/model/modelmesh.h>
+module;
+
 #include <pragma/console/conout.h>
 #include <pragma/lua/ldefinitions.h>
+#include <pragma/entities/baseentity_handle.h>
+#include <pragma/entities/baseentity.h>
+#include <sharedutils/util_shared_handle.hpp>
+#include <pragma/model/modelmesh.h>
 
-using namespace pragma::modules::cycles;
+module pragma.modules.scenekit;
+import :shader;
+
+using namespace pragma::modules::scenekit;
 
 #ifdef _WIN32
 // For some reason client.dll exports these, even though it shouldn't, which causes a multiple defined symbol issue. The code below is a work-around.

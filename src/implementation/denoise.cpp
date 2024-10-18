@@ -5,11 +5,17 @@
 * Copyright (c) 2023 Silverlan
 */
 
-#include "pr_cycles/scene.hpp"
+module;
+
+#include <pragma/entities/baseentity_handle.h>
+#include <pragma/entities/baseentity.h>
 #include <util_image_buffer.hpp>
 #include <sharedutils/util_parallel_job.hpp>
 
+module pragma.modules.scenekit;
+
 import pragma.scenekit;
+import :scene;
 
 class DenoiseWorker : public util::ParallelWorker<std::shared_ptr<uimg::ImageBuffer>> {
   public:
@@ -37,4 +43,4 @@ DenoiseWorker::DenoiseWorker(uimg::ImageBuffer &imgBuffer) : m_imgBuffer {imgBuf
 }
 std::shared_ptr<uimg::ImageBuffer> DenoiseWorker::GetResult() { return m_imgBuffer; }
 
-util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> pragma::modules::cycles::denoise(uimg::ImageBuffer &imgBuffer) { return util::create_parallel_job<DenoiseWorker>(imgBuffer); }
+util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> pragma::modules::scenekit::denoise(uimg::ImageBuffer &imgBuffer) { return util::create_parallel_job<DenoiseWorker>(imgBuffer); }

@@ -5,60 +5,21 @@
 * Copyright (c) 2023 Silverlan
 */
 
-#ifndef __PR_CYCLES_SCENE_HPP__
-#define __PR_CYCLES_SCENE_HPP__
+module;
 
-#include <sharedutils/util_weak_handle.hpp>
-#include <sharedutils/util_parallel_job.hpp>
-#include <sharedutils/util_hair.hpp>
-#include <mathutil/transform.hpp>
-#include <memory>
-#include <mathutil/uvec.h>
-#include <functional>
-#include <optional>
-#include <atomic>
-#include <thread>
+#include "definitions.hpp"
 #include <pragma/entities/baseentity_handle.h>
-#include <mathutil/vertex.hpp>
+#include <pragma/entities/baseentity.h>
+#include <pragma/lua/luaobjectbase.h>
+#include <sharedutils/util_hair.hpp>
+#include <sharedutils/util_parallel_job.hpp>
+#include <material.h>
+
+export module pragma.modules.scenekit:scene;
 
 import pragma.scenekit;
 
-#define ENABLE_TEST_AMBIENT_OCCLUSION
-
-class BaseEntity;
-
-namespace pragma {
-	class CAnimatedComponent;
-	class CLightMapComponent;
-	class CParticleSystemComponent;
-	class CSkyCameraComponent;
-	class CModelComponent;
-	class CSceneComponent;
-	struct LightmapDataCache;
-};
-namespace umath {
-	class Transform;
-	class ScaledTransform;
-};
-namespace unirender {
-	class Scene;
-};
-namespace util::bsp {
-	struct LightMapInfo;
-};
-namespace uimg {
-	class ImageBuffer;
-};
-class Model;
-class ModelMesh;
-class ModelSubMesh;
-class Material;
-class CParticle;
-class DataStream;
-namespace util {
-	struct HairStrandData;
-};
-namespace pragma::modules::cycles {
+export namespace pragma::modules::scenekit {
 	class Shader;
 	util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> denoise(uimg::ImageBuffer &imgBuffer);
 	class Cache {
@@ -174,5 +135,3 @@ namespace pragma::modules::cycles {
 	};
 	pragma::scenekit::NodeManager &get_node_manager();
 };
-
-#endif

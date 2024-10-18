@@ -5,11 +5,10 @@
 * Copyright (c) 2023 Silverlan
 */
 
-#include "pr_cycles/scene.hpp"
-namespace pragma::asset {
-	class WorldData;
-	class EntityData;
-};
+module;
+
+#include <pragma/entities/baseentity_handle.h>
+#include <pragma/entities/baseentity.h>
 #include <pragma/c_engine.h>
 #include <pragma/rendering/c_rendermode.h>
 #include <pragma/entities/environment/effects/c_env_particle_system.h>
@@ -21,7 +20,10 @@ namespace pragma::asset {
 #include <deque>
 #include <queue>
 
+module pragma.modules.scenekit;
+
 import pragma.scenekit;
+import :scene;
 
 extern DLLCLIENT CEngine *c_engine;
 extern DLLCLIENT CGame *c_game;
@@ -81,7 +83,7 @@ static Vector3 get_corner_particle_vertex_position(const pragma::CParticleSystem
 	return right * squareVert.x * vsize.x + up * squareVert.y * vsize.y;
 }
 
-void cycles::Cache::AddParticleSystem(pragma::CParticleSystemComponent &ptc, const Vector3 &camPos, const Mat4 &vp, float nearZ, float farZ)
+void scenekit::Cache::AddParticleSystem(pragma::CParticleSystemComponent &ptc, const Vector3 &camPos, const Mat4 &vp, float nearZ, float farZ)
 {
 	auto *mat = ptc.GetMaterial();
 	if(mat == nullptr)

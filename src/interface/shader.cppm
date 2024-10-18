@@ -5,17 +5,20 @@
 * Copyright (c) 2023 Silverlan
 */
 
+module;
+
+#include "definitions.hpp"
 #include <pragma/entities/baseentity_handle.h>
 #include <pragma/entities/baseentity.h>
 #include <pragma/lua/luaobjectbase.h>
+#include <sharedutils/util_hair.hpp>
 #include <material.h>
+
+export module pragma.modules.scenekit:shader;
 
 import pragma.scenekit;
 
-class BaseEntity;
-class Material;
-class ModelSubMesh;
-namespace pragma::modules::cycles {
+export namespace pragma::modules::scenekit {
 	class Scene;
 	class ShaderManager;
 	class Shader {
@@ -64,7 +67,7 @@ namespace pragma::modules::cycles {
 		ShaderManager() = default;
 		std::unordered_map<std::string, luabind::object> m_shaders;
 	};
-	pragma::modules::cycles::ShaderManager &get_shader_manager();
+	pragma::modules::scenekit::ShaderManager &get_shader_manager();
 
 	class LuaShader : public LuaObjectBase, public Shader {
 	  public:
