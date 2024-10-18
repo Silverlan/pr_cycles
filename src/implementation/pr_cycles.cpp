@@ -489,8 +489,12 @@ static void register_socket_methods(luabind::class_<pragma::scenekit::GroupNodeD
 		defNode.def(name, register_output);
 }
 
+// Not sure why these have to be in these namespaces, but it won't build otherwise.
+#ifdef _WIN32
 namespace pragma::scenekit {
-	// These have to be in the luabind namespace for whatever reason
+#else
+namespace luabind {
+#endif
 	pragma::scenekit::Socket operator+(float f, const pragma::scenekit::Socket &socket) { return pragma::scenekit::Socket {f} + socket; }
 	pragma::scenekit::Socket operator-(float f, const pragma::scenekit::Socket &socket) { return pragma::scenekit::Socket {f} - socket; }
 	pragma::scenekit::Socket operator*(float f, const pragma::scenekit::Socket &socket) { return pragma::scenekit::Socket {f} * socket; }
@@ -718,18 +722,18 @@ static std::shared_ptr<scenekit::Scene> setup_scene(pragma::scenekit::Scene::Ren
 }
 
 #ifdef __linux__
-namespace unirender {
+namespace pragma::scenekit {
 	static pragma::scenekit::Socket operator+(const Vector3 &v, const pragma::scenekit::Socket &socket) { return luabind::operator+(v, socket); }
 	static pragma::scenekit::Socket operator-(const Vector3 &v, const pragma::scenekit::Socket &socket) { return luabind::operator-(v, socket); }
 	static pragma::scenekit::Socket operator*(const Vector3 &v, const pragma::scenekit::Socket &socket) { return luabind::operator*(v, socket); }
 	static pragma::scenekit::Socket operator/(const Vector3 &v, const pragma::scenekit::Socket &socket) { return luabind::operator/(v, socket); }
 	static pragma::scenekit::Socket operator%(const Vector3 &v, const pragma::scenekit::Socket &socket) { return luabind::operator%(v, socket); }
 
-	static pragma::scenekit::Socket operator+(float &v, const pragma::scenekit::Socket &socket) { return luabind::operator+(v, socket); }
-	static pragma::scenekit::Socket operator-(float &v, const pragma::scenekit::Socket &socket) { return luabind::operator-(v, socket); }
-	static pragma::scenekit::Socket operator*(float &v, const pragma::scenekit::Socket &socket) { return luabind::operator*(v, socket); }
-	static pragma::scenekit::Socket operator/(float &v, const pragma::scenekit::Socket &socket) { return luabind::operator/(v, socket); }
-	static pragma::scenekit::Socket operator%(float &v, const pragma::scenekit::Socket &socket) { return luabind::operator%(v, socket); }
+	static pragma::scenekit::Socket operator+(float v, const pragma::scenekit::Socket &socket) { return luabind::operator+(v, socket); }
+	static pragma::scenekit::Socket operator-(float v, const pragma::scenekit::Socket &socket) { return luabind::operator-(v, socket); }
+	static pragma::scenekit::Socket operator*(float v, const pragma::scenekit::Socket &socket) { return luabind::operator*(v, socket); }
+	static pragma::scenekit::Socket operator/(float v, const pragma::scenekit::Socket &socket) { return luabind::operator/(v, socket); }
+	static pragma::scenekit::Socket operator%(float v, const pragma::scenekit::Socket &socket) { return luabind::operator%(v, socket); }
 };
 #endif
 

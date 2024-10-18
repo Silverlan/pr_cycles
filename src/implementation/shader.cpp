@@ -13,6 +13,7 @@ module;
 #include <pragma/entities/baseentity.h>
 #include <sharedutils/util_shared_handle.hpp>
 #include <pragma/model/modelmesh.h>
+#include <material.h>
 
 module pragma.modules.scenekit;
 import :shader;
