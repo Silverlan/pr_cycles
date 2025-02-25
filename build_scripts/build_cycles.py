@@ -7,19 +7,23 @@ import subprocess
 # To update Cycles to a newer version, follow these steps:
 # - Find the latest stable release on Cycles on https://github.com/blender/cycles/tags
 # - Update the fork https://github.com/Silverlan/cycles to that commit
+# git remote add upstream https://github.com/blender/cycles.git
+# git fetch upstream
+# git rebase --onto  <commitId> upstream/main main
+# resolve conflicts
 # - Copy the commit id to "cycles_commit_sha" below
 # - Update preprocessor definitions for cycles in CMakeLists.txt of external_libs/cycles/CMakeLists.txt
 # - Update the versions of tbb, oidn, ocio, oiio, opensubdiv libraries in setup.py to match cycles versions
 # - Go to https://github.com/blender/cycles/tree/main/lib for the commit of the cycles version
 #   - Grab the commit ids for linux_x64 and windows_x64 and apply them to cycles_lib_*_x64_commit_sha in setup.py
-cycles_commit_sha = "f0d593ed7d0574fe113557612b78dfdaf4ee4203" # Version 4.1.1
+cycles_commit_sha = "e3cbc24" # Version 4.3
 
 ########## cycles ##########
 os.chdir(deps_dir)
 cyclesRoot = deps_dir +"/cycles"
 if not Path(cyclesRoot).is_dir():
 	print_msg("cycles not found. Downloading...")
-	git_clone("https://github.com/Silverlan/cycles.git",branch="rollback/4.1.1")
+	git_clone("https://github.com/Silverlan/cycles.git")
 
 os.chdir(cyclesRoot)
 
