@@ -805,18 +805,15 @@ PRAGMA_EXPORT void pr_cycles_bake_lightmaps(const pragma::rendering::cycles::Sce
 
 	if(renderImageSettings.renderJob) {
 		std::string path = "render/lightmaps/";
-		auto fileName = path + "lightmap.prt";
+		auto fileName = path + "lightmap." +std::string {pragma::scenekit::Scene::PRT_EXTENSION_BINARY};
 		auto rootPath = util::Path::CreatePath(filemanager::get_program_write_path()).GetString() + path;
 		pragma::scenekit::Scene::SerializationData serializationData {};
 		serializationData.outputFileName = fileName;
-		DataStream ds {};
-		(*scene)->Save(ds, rootPath, serializationData);
+		auto udmData = udm::Data::Create(pragma::scenekit::Scene::PRT_IDENTIFIER, pragma::scenekit::Scene::PRT_VERSION);
+		(*scene)->Save(udmData->GetAssetData(), rootPath, serializationData);
 		FileManager::CreatePath(path.c_str());
-		auto f = FileManager::OpenFile<VFilePtrReal>(fileName.c_str(), "wb");
-		if(f) {
-			f->Write(ds->GetData(), ds->GetInternalSize());
-			f = nullptr;
-		}
+		if (!udmData->Save(fileName))
+			Con::cwar<<"Failed to save '"<<fileName<<"'!"<<Con::endl;
 	}
 	else {
 		std::string err;
@@ -973,22 +970,19 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 		     filemanager::create_path(path);
 		     auto &scene = Lua::Check<scenekit::Scene>(l, 1);
 
-		     auto fileName = path + "lightmap.prt";
+		     auto fileName = path + "lightmap." +std::string {pragma::scenekit::Scene::PRT_EXTENSION_BINARY};
 		     auto rootPath = util::Path::CreatePath(filemanager::get_program_write_path()).GetString() + path;
 		     pragma::scenekit::Scene::SerializationData serializationData {};
 		     serializationData.outputFileName = fileName;
-		     DataStream ds {};
-		     scene->Save(ds, rootPath, serializationData);
+	    	 auto udmData = udm::Data::Create(pragma::scenekit::Scene::PRT_IDENTIFIER, pragma::scenekit::Scene::PRT_VERSION);
+		     scene->Save(udmData->GetAssetData(), rootPath, serializationData);
 		     FileManager::CreatePath(path.c_str());
-		     auto f = FileManager::OpenFile<VFilePtrReal>(fileName.c_str(), "wb");
-		     if(!f) {
+		     if(!udmData->Save(fileName)) {
 			     Lua::PushBool(l, false);
 			     return 1;
 		     }
-		     f->Write(ds->GetData(), ds->GetInternalSize());
-		     f = nullptr;
 		     Lua::PushBool(l, true);
-		     Lua::PushString(l, relPath + "lightmap.prt");
+		     Lua::PushString(l, relPath + "lightmap." +std::string {pragma::scenekit::Scene::PRT_EXTENSION_BINARY});
 		     return 2;
 	     })},
 	    {"unload_renderer_library", static_cast<int32_t (*)(lua_State *)>([](lua_State *l) -> int32_t {
@@ -1460,6 +1454,26 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 	Lua::RegisterLibraryValues<uint32_t>(l.GetState(), "unirender",
 	  {{"SUBSURFACE_SCATTERING_METHOD_BURLEY", 32 /* ccl::ClosureType::CLOSURE_BSSRDF_BURLEY_ID */}, {"SUBSURFACE_SCATTERING_METHOD_RANDOM_WALK_FIXED_RADIUS", 34 /* ccl::ClosureType::CLOSURE_BSSRDF_RANDOM_WALK_FIXED_RADIUS_ID */},
 	    {"SUBSURFACE_SCATTERING_METHOD_RANDOM_WALK", 33 /* ccl::ClosureType::CLOSURE_BSSRDF_RANDOM_WALK_ID */}});
+
+	Lua::RegisterLibraryValues<uint32_t>(l.GetState(), "unirender",
+  {{"SUBSURFACE_SCATTERING_METHOD_BURLEY", 32 /* ccl::ClosureType::CLOSURE_BSSRDF_BURLEY_ID */}, {"SUBSURFACE_SCATTERING_METHOD_RANDOM_WALK_FIXED_RADIUS", 34 /* ccl::ClosureType::CLOSURE_BSSRDF_RANDOM_WALK_FIXED_RADIUS_ID */},
+	{"SUBSURFACE_SCATTERING_METHOD_RANDOM_WALK", 33 /* ccl::ClosureType::CLOSURE_BSSRDF_RANDOM_WALK_ID */}});
+
+	Lua::RegisterLibraryValues<uint32_t>(l.GetState(), "unirender",
+  {
+  	{"PRT_VERSION", pragma::scenekit::Scene::PRT_VERSION},
+  	{"PRTMC_VERSION", pragma::scenekit::Scene::PRTMC_VERSION},
+  });
+	Lua::RegisterLibraryValues<std::string>(l.GetState(), "unirender",
+  {
+	  {"PRT_IDENTIFIER", pragma::scenekit::Scene::PRT_IDENTIFIER},
+	  {"PRT_EXTENSION_BINARY", pragma::scenekit::Scene::PRT_EXTENSION_BINARY},
+	  {"PRT_EXTENSION_ASCII", pragma::scenekit::Scene::PRT_EXTENSION_ASCII},
+
+	  {"PRTMC_IDENTIFIER", pragma::scenekit::Scene::PRTMC_IDENTIFIER},
+	  {"PRTMC_EXTENSION_BINARY", pragma::scenekit::Scene::PRTMC_EXTENSION_BINARY},
+	  {"PRTMC_EXTENSION_ASCII", pragma::scenekit::Scene::PRTMC_EXTENSION_ASCII}
+  });
 
 	std::unordered_map<std::string, luabind::object> nodeTypeEnums;
 	luabind::object t;
@@ -2569,18 +2583,18 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 		Lua::Push(l, light.get());
 	}));
 	defScene.def("Save",
-	  static_cast<void (*)(lua_State *, scenekit::Scene &, DataStream &, const std::string &, const pragma::scenekit::Scene::SerializationData &)>(
-	    [](lua_State *l, scenekit::Scene &scene, DataStream &ds, const std::string &rootDir, const pragma::scenekit::Scene::SerializationData &serializationData) {
+	  static_cast<void (*)(lua_State *, scenekit::Scene &, udm::AssetDataArg, const std::string &, const pragma::scenekit::Scene::SerializationData &)>(
+	    [](lua_State *l, scenekit::Scene &scene, udm::AssetDataArg assetData, const std::string &rootDir, const pragma::scenekit::Scene::SerializationData &serializationData) {
 		    auto path = rootDir;
 		    if(Lua::file::validate_write_operation(l, path) == false)
 			    return;
-		    scene->Save(ds, path, serializationData);
+		    scene->Save(assetData, path, serializationData);
 	    }));
-	defScene.def("Load", static_cast<void (*)(lua_State *, scenekit::Scene &, DataStream &, const std::string &)>([](lua_State *l, scenekit::Scene &scene, DataStream &ds, const std::string &rootDir) {
+	defScene.def("Load", static_cast<void (*)(lua_State *, scenekit::Scene &, const udm::AssetData &, const std::string &)>([](lua_State *l, scenekit::Scene &scene, const udm::AssetData &data, const std::string &rootDir) {
 		auto path = rootDir;
 		if(Lua::file::validate_write_operation(l, path) == false)
 			return;
-		scene->Load(ds, path);
+		scene->Load(data, path);
 	}));
 	defScene.def("AddCache", static_cast<void (*)(lua_State *, scenekit::Scene &, const pragma::modules::scenekit::Cache &)>([](lua_State *l, scenekit::Scene &scene, const pragma::modules::scenekit::Cache &cache) { scene->AddModelsFromCache(cache.GetModelCache()); }));
 

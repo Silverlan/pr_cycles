@@ -26,7 +26,7 @@ static std::optional<std::string> get_abs_error_texture_path()
 {
 	std::string errTexPath = "materials\\error.dds";
 	std::string absPath;
-	if(FileManager::FindAbsolutePath(errTexPath, absPath))
+	if(filemanager::find_local_path(errTexPath, absPath))
 		return absPath;
 	return {};
 }
@@ -105,7 +105,7 @@ static std::optional<std::string> prepare_texture(std::shared_ptr<Texture> &tex,
 	std::string absPath;
 	texPath += "." + ext;
 	// Check if a version of the texture already exists, in which case we can just use it directly!
-	if(FileManager::FindAbsolutePath(texPath, absPath)) {
+	if(filemanager::find_local_path(texPath, absPath)) {
 		outSuccess = true;
 		return absPath;
 	}
@@ -123,7 +123,7 @@ static std::optional<std::string> prepare_texture(std::shared_ptr<Texture> &tex,
 		auto f = filemanager::open_file(fullPath, filemanager::FileMode::Write | filemanager::FileMode::Binary);
 		fsys::File fp {f};
 		uimg::save_image(fp, *imgBuf, uimg::ImageFormat::PNG);
-		if(FileManager::FindAbsolutePath(texPath, absPath)) {
+		if(filemanager::find_local_path(texPath, absPath)) {
 			outSuccess = true;
 			return absPath;
 		}
@@ -200,7 +200,7 @@ static std::optional<std::string> prepare_texture(std::shared_ptr<Texture> &tex,
 	}
 	absPath = "";
 	// Save the DDS image and make sure the file exists
-	if(pragma::get_client_game()->SaveImage(*img, ddsPath, imgWriteInfo) && FileManager::FindAbsolutePath(ddsPath + ".dds", absPath)) {
+	if(pragma::get_client_game()->SaveImage(*img, ddsPath, imgWriteInfo) && filemanager::find_local_path(ddsPath + ".dds", absPath)) {
 		outSuccess = true;
 		outConverted = true;
 		return absPath;

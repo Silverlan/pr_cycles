@@ -249,4 +249,4 @@ if not Path(unirender_root).is_dir():
     git_clone("https://github.com/Silverlan/UniRender.git","util_raytracing")
 
 os.chdir(unirender_root)
-reset_to_commit("117472e5705b743a8a198c058aed1ed55d11b037")
+reset_to_commit("9a4e80a8fc4262f474336578c9cb4d242eef44bf")
