@@ -82,6 +82,32 @@ import :progressive_refinement;
 
 using namespace pragma::modules;
 
+#ifdef __linux__
+#define SK_PRT_VERSION pragma::scenekit::Scene::PRT_VERSION
+#define SK_PRTMC_VERSION pragma::scenekit::Scene::PRTMC_VERSION
+
+#define SK_PRT_IDENTIFIER pragma::scenekit::Scene::PRT_IDENTIFIER
+#define SK_PRT_EXTENSION_BINARY pragma::scenekit::Scene::PRT_EXTENSION_BINARY
+#define SK_PRT_EXTENSION_ASCII pragma::scenekit::Scene::PRT_EXTENSION_ASCII
+
+#define SK_PRTMC_IDENTIFIER pragma::scenekit::Scene::PRTMC_IDENTIFIER
+#define SK_PRTMC_EXTENSION_BINARY pragma::scenekit::Scene::PRTMC_EXTENSION_BINARY
+#define SK_PRTMC_EXTENSION_ASCII pragma::scenekit::Scene::PRTMC_EXTENSION_ASCII
+#else
+// Unfortunately msvc still has a bug where it can't handle constexpr const char* in modules, so
+// we have to use a dirty workaround for now
+#define SK_PRT_VERSION 7
+#define SK_PRTMC_VERSION 2
+
+#define SK_PRT_IDENTIFIER "RTD"
+#define SK_PRT_EXTENSION_BINARY "prt_b"
+#define SK_PRT_EXTENSION_ASCII "prt"
+
+#define SK_PRTMC_IDENTIFIER "RTMC"
+#define SK_PRTMC_EXTENSION_BINARY "prtmc_b"
+#define SK_PRTMC_EXTENSION_ASCII "prtmc"
+#endif
+
 static void sync_light(BaseEntity &ent, pragma::scenekit::Light &light)
 {
 	auto lightC = ent.GetComponent<pragma::CLightComponent>();
@@ -805,11 +831,11 @@ PRAGMA_EXPORT void pr_cycles_bake_lightmaps(const pragma::rendering::cycles::Sce
 
 	if(renderImageSettings.renderJob) {
 		std::string path = "render/lightmaps/";
-		auto fileName = path + "lightmap." +std::string {pragma::scenekit::Scene::PRT_EXTENSION_BINARY};
+		auto fileName = path + "lightmap." +std::string {SK_PRT_EXTENSION_BINARY};
 		auto rootPath = util::Path::CreatePath(filemanager::get_program_write_path()).GetString() + path;
 		pragma::scenekit::Scene::SerializationData serializationData {};
 		serializationData.outputFileName = fileName;
-		auto udmData = udm::Data::Create(pragma::scenekit::Scene::PRT_IDENTIFIER, pragma::scenekit::Scene::PRT_VERSION);
+		auto udmData = udm::Data::Create(SK_PRT_IDENTIFIER, SK_PRT_VERSION);
 		(*scene)->Save(udmData->GetAssetData(), rootPath, serializationData);
 		FileManager::CreatePath(path.c_str());
 		if (!udmData->Save(fileName))
@@ -970,11 +996,11 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 		     filemanager::create_path(path);
 		     auto &scene = Lua::Check<scenekit::Scene>(l, 1);
 
-		     auto fileName = path + "lightmap." +std::string {pragma::scenekit::Scene::PRT_EXTENSION_BINARY};
+		     auto fileName = path + "lightmap." +std::string {SK_PRT_EXTENSION_BINARY};
 		     auto rootPath = util::Path::CreatePath(filemanager::get_program_write_path()).GetString() + path;
 		     pragma::scenekit::Scene::SerializationData serializationData {};
 		     serializationData.outputFileName = fileName;
-	    	 auto udmData = udm::Data::Create(pragma::scenekit::Scene::PRT_IDENTIFIER, pragma::scenekit::Scene::PRT_VERSION);
+	    	 auto udmData = udm::Data::Create(SK_PRT_IDENTIFIER, SK_PRT_VERSION);
 		     scene->Save(udmData->GetAssetData(), rootPath, serializationData);
 		     FileManager::CreatePath(path.c_str());
 		     if(!udmData->Save(fileName)) {
@@ -982,7 +1008,7 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 			     return 1;
 		     }
 		     Lua::PushBool(l, true);
-		     Lua::PushString(l, relPath + "lightmap." +std::string {pragma::scenekit::Scene::PRT_EXTENSION_BINARY});
+		     Lua::PushString(l, relPath + "lightmap." +std::string {SK_PRT_EXTENSION_BINARY});
 		     return 2;
 	     })},
 	    {"unload_renderer_library", static_cast<int32_t (*)(lua_State *)>([](lua_State *l) -> int32_t {
@@ -1461,18 +1487,18 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 
 	Lua::RegisterLibraryValues<uint32_t>(l.GetState(), "unirender",
   {
-  	{"PRT_VERSION", pragma::scenekit::Scene::PRT_VERSION},
-  	{"PRTMC_VERSION", pragma::scenekit::Scene::PRTMC_VERSION},
+  	{"PRT_VERSION", SK_PRT_VERSION},
+  	{"PRTMC_VERSION", SK_PRTMC_VERSION},
   });
 	Lua::RegisterLibraryValues<std::string>(l.GetState(), "unirender",
   {
-	  {"PRT_IDENTIFIER", pragma::scenekit::Scene::PRT_IDENTIFIER},
-	  {"PRT_EXTENSION_BINARY", pragma::scenekit::Scene::PRT_EXTENSION_BINARY},
-	  {"PRT_EXTENSION_ASCII", pragma::scenekit::Scene::PRT_EXTENSION_ASCII},
+	  {"PRT_IDENTIFIER", SK_PRT_IDENTIFIER},
+	  {"PRT_EXTENSION_BINARY", SK_PRT_EXTENSION_BINARY},
+	  {"PRT_EXTENSION_ASCII", SK_PRT_EXTENSION_ASCII},
 
-	  {"PRTMC_IDENTIFIER", pragma::scenekit::Scene::PRTMC_IDENTIFIER},
-	  {"PRTMC_EXTENSION_BINARY", pragma::scenekit::Scene::PRTMC_EXTENSION_BINARY},
-	  {"PRTMC_EXTENSION_ASCII", pragma::scenekit::Scene::PRTMC_EXTENSION_ASCII}
+	  {"PRTMC_IDENTIFIER", SK_PRTMC_IDENTIFIER},
+	  {"PRTMC_EXTENSION_BINARY", SK_PRTMC_EXTENSION_BINARY},
+	  {"PRTMC_EXTENSION_ASCII", SK_PRTMC_EXTENSION_ASCII}
   });
 
 	std::unordered_map<std::string, luabind::object> nodeTypeEnums;
