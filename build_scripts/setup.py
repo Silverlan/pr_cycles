@@ -239,7 +239,7 @@ if not Path(rr_tool_root).is_dir():
 	git_clone("https://github.com/Silverlan/render_raytracing.git")
 
 os.chdir(rr_tool_root)
-reset_to_commit("167f02f51c9acc5b15a9ca1b1c56742092e12308")
+reset_to_commit("1762ad7804509f795dd1829edf941cc11a9c803e")
 
 ########## Unirender ##########
 unirender_root = root +"/external_libs/util_raytracing"
