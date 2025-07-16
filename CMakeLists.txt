@@ -13,13 +13,26 @@ pr_init_module(${PROJ_NAME})
 
 pr_add_compile_definitions(${PROJ_NAME} -DOIIO_STATIC_BUILD -DRT_ENABLE_SUBDIVISION)
 
+if(UNIX)
+	# HACK / FIX: The cycles library uses OpenImageDenoise with CUDA for denoising.
+	# For some unknown reason, this causes a segfault when OpenImageDenoise calls cuInit().
+	# If we call any OpenImageDenoise function that initializes the CUDA context
+	# *before* loading the cycles module, this crash does not happen.
+	# To do so, we create a dependency to OpenImageDenoise and call oidnIsCUDADeviceSupported.
+	# (but any other oidn CUDA function would do as well.)
+	# This problem only occurs on Linux.
+	list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/external_libs/cycles/cmake/modules")
+	pr_add_third_party_dependency(${PROJ_NAME} openimagedenoise)
+endif()
+
 if(${PR_UNIRENDER_ENABLE_DEPENDENCIES})
 	pr_add_dependency(${PROJ_NAME} util_raytracing TARGET PUBLIC)
 	if(PR_UNIRENDER_WITH_CYCLES)
 		set(ROLLBACK_CYCLES_4_1_1 ON CACHE BOOL "Enable Rollback to Cycles 4.1.1")
 		add_subdirectory(external_libs/cycles)
 		set_target_properties(UniRender_cycles PROPERTIES FOLDER modules/offline_render/unirender)
-		pr_add_dependency(${PROJ_NAME} UniRender_cycles TARGET PUBLIC)
+		#pr_add_dependency(${PROJ_NAME} UniRender_cycles TARGET PUBLIC)
+		add_dependencies(${PROJ_NAME} UniRender_cycles)
 		add_dependencies(${PROJ_NAME} render_raytracing)
 	endif()
 	if(PR_UNIRENDER_WITH_LUXCORERENDER)

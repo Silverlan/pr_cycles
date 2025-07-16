@@ -862,8 +862,22 @@ PRAGMA_EXPORT void pr_cycles_bake_lightmaps(const pragma::rendering::cycles::Sce
 	}
 }
 
+#ifdef __linux__
+#include <OpenImageDenoise/oidn.h>
+void fix_oidn_segfault() {
+	// We need to force-initialize the oidn CUDA context by calling any oidn CUDA function to avoid a segfault later on
+	// when cycles tries to use oidn.
+	// The reason for this is unknown. For more information, see CMakeLists.txt.
+	int n;
+	oidnIsCUDADeviceSupported(n);
+}
+#endif
+
 bool PRAGMA_EXPORT pragma_attach(std::string &errMsg)
 {
+#ifdef __linux__
+	fix_oidn_segfault();
+#endif
 	pragma::scenekit::set_module_lookup_location("modules/unirender/");
 	return true;
 }
