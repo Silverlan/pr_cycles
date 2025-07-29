@@ -10,6 +10,8 @@ namespace pragma::asset {
 	class EntityData;
 };
 #include <pragma/lua/luaapi.h>
+#include <pragma/lua/converters/optional_converter_t.hpp>
+#include <pragma/lua/converters/pair_converter_t.hpp>
 #include <prosper_context.hpp>
 #include <pragma/c_engine.h>
 #include <pragma/clientstate/clientstate.h>
@@ -893,6 +895,72 @@ void PRAGMA_EXPORT pragma_terminate_lua(Lua::Interface &l)
 	pragma::scenekit::set_kernel_compile_callback(nullptr);
 	g_compileCallback = Lua::nil;
 }
+static bool write_render_job_script(const std::string &jobListPath, const std::string &baseShellFilePath, std::string &outShellFilePath, std::string &outErr)
+{
+	auto shellFilePath = baseShellFilePath;
+	std::string refShellFilePath;
+#ifdef _WIN32
+	shellFilePath += ".bat";
+	refShellFilePath = "bin/render_raytracing.bat";
+#else
+	shellFilePath += ".sh";
+	refShellFilePath = "lib/render_raytracing.sh";
+#endif
+
+	util::Path pragmaRoot;
+	auto *en = pragma::get_engine();
+	if (!en->IsSandboxed())
+		pragmaRoot = util::DirPath(util::get_program_path());
+	else {
+		pragmaRoot = util::DirPath(filemanager::get_program_write_path());
+		// This will copy the script from the sandbox location to the user data location,
+		// making it possible to execute it outside of the sandbox.
+		filemanager::clone_to_program_write_path(refShellFilePath);
+	}
+
+	std::string pragmaRootNoSlash = pragmaRoot.GetString();
+	if (!pragmaRootNoSlash.empty() && (pragmaRootNoSlash.back() == '/' || pragmaRootNoSlash.back() == '\\'))
+		pragmaRootNoSlash.pop_back();
+	std::stringstream contents;
+#ifdef _WIN32
+	contents<<"@echo off\n\n";
+	contents<<"set PRAGMA_ROOT=\""<<pragmaRootNoSlash<<"\"\n";
+	contents<<"bash \"${PRAGMA_ROOT}\\"<<refShellFilePath<<"\"";
+#else
+	contents<<"#!/usr/bin/env bash\n\n";
+	contents<<"export PRAGMA_ROOT=\""<<pragmaRootNoSlash<<"\"\n";
+	contents<<"cd \"${PRAGMA_ROOT}\"\n";
+	contents<<"\"${PRAGMA_ROOT}/"<<refShellFilePath<<"\"";
+#endif
+
+	std::string argPlaceholder;
+#ifdef _WIN32
+	argPlaceholder = "%*";
+#else
+	argPlaceholder = "\"$@\"";
+#endif
+
+	auto userDataDir = util::get_user_data_dir();
+
+	std::stringstream args;
+	args<<" -job=\""<<jobListPath<<"\"";
+	args<<" -user_data_dir=\""<<userDataDir.GetString()<<"\"";
+	for (auto &resDir : util::get_resource_dirs())
+		args<<" -resource_dir=\""<<resDir.GetString()<<"\"";
+
+	contents << args.str() << " " <<argPlaceholder;
+
+	auto res = filemanager::write_file(shellFilePath, contents.str());
+	if (!res) {
+		outErr = "Failed to write shell script '" +shellFilePath +"'!";
+		return false;
+	}
+	filemanager::make_executable(shellFilePath);
+	std::string localShellFilePath;
+	if (filemanager::find_local_path(shellFilePath, localShellFilePath))
+		outShellFilePath = localShellFilePath;
+	return true;
+}
 
 void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 {
@@ -1087,6 +1155,13 @@ void PRAGMA_EXPORT pragma_initialize_lua(Lua::Interface &l)
 		  Lua::CheckUserData(l, 2);
 		  register_shader(l, className, shaderClass);
 	  }))];
+
+	modCycles[luabind::def("write_render_job_script", +[](const std::string &jobListPath, const std::string &baseShellFilePath) -> std::pair<bool, std::optional<std::string>> {
+		std::string err;
+		std::string localShellFilePath;
+		auto res = write_render_job_script(jobListPath, baseShellFilePath, localShellFilePath, err);
+		return std::pair<bool, std::optional<std::string>>{res, res ? localShellFilePath : err};
+	})];
 #if 0
 		modCycles[
 			luabind::def("subdivision",static_cast<luabind::object(*)(lua_State*,luabind::table<>,luabind::table<>,uint32_t)>([](lua_State *l,luabind::table<> tVerts,luabind::table<> tTris,uint32_t subDivLevel) -> luabind::object {
