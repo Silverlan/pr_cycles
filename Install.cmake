@@ -27,6 +27,7 @@ if(PR_UNIRENDER_WITH_CYCLES)
         pr_install_directory("${cycles_deps_install_dir}/lib/" INSTALL_DIR "${INSTALL_PATH_CYCLES}" PATTERN "*" PATTERN "*.a" EXCLUDE)
     else()
         pr_install_directory("${cycles_deps_install_dir}/bin/" INSTALL_DIR "${INSTALL_PATH_CYCLES}" PATTERN "*")
+        pr_install_directory("${cycles_deps_install_dir}/lib/" INSTALL_DIR "${INSTALL_PATH_CYCLES}" PATTERN "*.zst")
 
         list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/external_libs/cycles/cmake/modules")
         pr_install_binaries(glog INSTALL_DIR "${INSTALL_PATH_CYCLES}")
