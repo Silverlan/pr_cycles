@@ -924,8 +924,8 @@ static bool write_render_job_script(const std::string &jobListPath, const std::s
 	std::stringstream contents;
 #ifdef _WIN32
 	contents<<"@echo off\n\n";
-	contents<<"set PRAGMA_ROOT=\""<<pragmaRootNoSlash<<"\"\n";
-	contents<<"bash \"${PRAGMA_ROOT}\\"<<refShellFilePath<<"\"";
+	contents<<"set PRAGMA_ROOT="<<pragmaRootNoSlash<<"\n";
+	contents<<"\"%PRAGMA_ROOT%\\"<<refShellFilePath<<"\"";
 #else
 	contents<<"#!/usr/bin/env bash\n\n";
 	contents<<"export PRAGMA_ROOT=\""<<pragmaRootNoSlash<<"\"\n";
