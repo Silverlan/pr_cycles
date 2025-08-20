@@ -2,6 +2,7 @@ import os
 import sys
 from pathlib import Path
 from sys import platform
+import argparse
 import shutil
 import subprocess
 import config
@@ -15,6 +16,13 @@ import config
 # - Go to https://github.com/blender/cycles/tree/main/lib for the commit of the cycles version
 #   - Grab the commit ids for linux_x64 and windows_x64 and apply them to cycles_lib_*_x64_commit_sha in setup.py
 cycles_commit_sha = "f81bf6e48c22ac4184c15f99d9a045716abdc215" # Version 4.4.0
+
+parser = argparse.ArgumentParser(description='cycles build script', allow_abbrev=False, formatter_class=argparse.ArgumentDefaultsHelpFormatter, epilog="")
+parser.add_argument('--cycles-arch', help='Kernels will be built for the specified architecture(s). Possible options are sm_30 sm_35 sm_37 sm_50 sm_52 sm_60 sm_61 sm_70 sm_75 sm_86 sm_89 sm_120 compute_75 and "all". If set to "all", all possible kernels will be built.', default='all')
+args,unknown = parser.parse_known_args()
+args = vars(args)
+
+cycles_arch = args["cycles_arch"]
 
 ########## cycles ##########
 os.chdir(deps_dir)
@@ -126,6 +134,9 @@ if lastBuildCommit != curCommitId:
 	# Hydra delegate is disabled because we don't need it and it causes build errors on the (Windows) GitHub runner.
 	args.append("-DWITH_CYCLES_HYDRA_RENDER_DELEGATE=OFF")
 	args.append("-DWITH_CYCLES_USD=OFF")
+
+	if cycles_arch != "all":
+		args.append("-DCYCLES_CUDA_BINARIES_ARCH=" +cycles_arch)
 	
 	args.append("-DOPENIMAGEIO_ROOT_DIR:PATH=" +oiio_root_dir)
 	#if platform == "linux":
