@@ -12,7 +12,7 @@ os.chdir(deps_dir)
 # These need to match the cycles version that is being used (see build_cycles.py for more information)
 cycles_lib_windows_x64_commit_sha = "cdef408"
 cycles_lib_linux_x64_commit_sha = "eacf548"
-unirender_cycles_release_tag = "2025-08-20"
+unirender_cycles_release_tag = "2025-08-21"
 use_prebuilt_binaries = True
 
 if use_prebuilt_binaries:
