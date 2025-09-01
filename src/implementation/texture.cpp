@@ -12,7 +12,6 @@ module;
 #include <cmaterialmanager.h>
 #include <cmaterial_manager2.hpp>
 #include <sharedutils/util_file.h>
-#include <pragma/rendering/shaders/c_shader_cubemap_to_equirectangular.hpp>
 #include <pragma/rendering/shaders/particles/c_shader_particle.hpp>
 #include <util_texture_info.hpp>
 #include <util_image.hpp>
@@ -20,6 +19,7 @@ module;
 
 module pragma.modules.scenekit;
 
+import pragma.client.rendering.shaders;
 import :texture;
 
 static std::optional<std::string> get_abs_error_texture_path()

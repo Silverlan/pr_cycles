@@ -25,10 +25,8 @@ namespace pragma::asset {
 #include <pragma/entities/components/c_model_component.hpp>
 #include <pragma/entities/components/c_render_component.hpp>
 #include <pragma/entities/components/c_toggle_component.hpp>
-#include <pragma/entities/c_skybox.h>
 #include <pragma/entities/components/c_light_map_receiver_component.hpp>
 #include <pragma/entities/environment/effects/c_env_particle_system.h>
-#include <pragma/entities/environment/c_sky_camera.hpp>
 #include <pragma/entities/environment/c_env_camera.h>
 #include <pragma/entities/entity_iterator.hpp>
 #include <pragma/entities/environment/lights/c_env_light.h>
@@ -76,6 +74,7 @@ namespace pragma::asset {
 
 module pragma.modules.scenekit;
 
+import pragma.client.entities.components;
 import pragma.scenekit;
 import :scene;
 import :shader;

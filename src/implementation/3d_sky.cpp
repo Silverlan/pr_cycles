@@ -10,7 +10,6 @@ module;
 #include <pragma/rendering/c_rendermode.h>
 #include <pragma/rendering/render_queue.hpp>
 #include <pragma/game/c_game.h>
-#include <pragma/entities/environment/c_sky_camera.hpp>
 #include <pragma/entities/components/c_render_component.hpp>
 #include <future>
 #include <deque>
@@ -18,6 +17,7 @@ module;
 
 module pragma.modules.scenekit;
 
+import pragma.client.entities.components;
 import pragma.scenekit;
 import :scene;
 

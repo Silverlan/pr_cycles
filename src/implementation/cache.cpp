@@ -18,8 +18,6 @@ module;
 #include <pragma/entities/components/c_animated_component.hpp>
 #include <pragma/entities/components/c_model_component.hpp>
 #include <pragma/entities/components/c_render_component.hpp>
-#include <pragma/entities/c_skybox.h>
-#include <pragma/rendering/shaders/c_shader_cubemap_to_equirectangular.hpp>
 #include <cmaterialmanager.h>
 #include <cmaterial_manager2.hpp>
 #include <sharedutils/util_file.h>
@@ -35,6 +33,8 @@ module;
 
 module pragma.modules.scenekit;
 
+import pragma.client.entities.components;
+import pragma.client.rendering.shaders;
 import pragma.scenekit;
 
 import :scene;

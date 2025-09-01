@@ -14,14 +14,11 @@ module;
 #include <pragma/entities/baseentity.h>
 #include <pragma/entities/entity_component_system_t.hpp>
 #include <pragma/entities/components/c_animated_component.hpp>
-#include <pragma/entities/components/c_eye_component.hpp>
 #include <pragma/entities/components/c_vertex_animated_component.hpp>
 #include <pragma/entities/components/c_light_map_component.hpp>
 #include <pragma/entities/components/c_render_component.hpp>
 #include <pragma/entities/components/c_model_component.hpp>
 #include <pragma/entities/components/lightmap_data_cache.hpp>
-#include <pragma/entities/c_skybox.h>
-#include <pragma/rendering/shaders/c_shader_cubemap_to_equirectangular.hpp>
 #include <pragma/rendering/shaders/particles/c_shader_particle.hpp>
 #include <sharedutils/util_file.h>
 #include <util_texture_info.hpp>
@@ -36,6 +33,7 @@ module;
 
 module pragma.modules.scenekit;
 
+import pragma.client.entities.components;
 import pragma.scenekit;
 import :scene;
 import :shader;
