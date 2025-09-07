@@ -24,7 +24,6 @@ namespace pragma::asset {
 #include <pragma/entities/components/c_color_component.hpp>
 #include <pragma/entities/components/c_model_component.hpp>
 #include <pragma/entities/components/c_render_component.hpp>
-#include <pragma/entities/components/c_toggle_component.hpp>
 #include <pragma/entities/components/c_light_map_receiver_component.hpp>
 #include <pragma/entities/environment/effects/c_env_particle_system.h>
 #include <pragma/entities/environment/c_env_camera.h>
