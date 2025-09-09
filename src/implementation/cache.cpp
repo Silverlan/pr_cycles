@@ -9,7 +9,6 @@ module;
 #include <cmaterialmanager.h>
 #include <cmaterial.h>
 #include <pragma/c_engine.h>
-#include <pragma/clientstate/clientstate.h>
 #include <pragma/game/game_resources.hpp>
 #include <pragma/model/model.h>
 #include <pragma/model/modelmesh.h>
@@ -33,6 +32,7 @@ module;
 
 module pragma.modules.scenekit;
 
+import pragma.client.client_state;
 import pragma.client.entities.components;
 import pragma.client.rendering.shaders;
 import pragma.scenekit;

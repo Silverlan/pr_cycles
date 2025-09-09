@@ -4,15 +4,14 @@
 module;
 
 #include "definitions.hpp"
-#include <pragma/entities/baseentity_handle.h>
 #include <pragma/entities/baseentity.h>
-#include <pragma/lua/luaobjectbase.h>
 #include <sharedutils/util_hair.hpp>
 #include <sharedutils/util_parallel_job.hpp>
 #include <material.h>
 
 export module pragma.modules.scenekit:scene;
 
+import pragma.entities;
 import pragma.scenekit;
 
 export namespace pragma::modules::scenekit {
@@ -106,7 +105,7 @@ export namespace pragma::modules::scenekit {
 		void AddRoughnessMapImageTextureNode(pragma::scenekit::ShaderModuleRoughness &shader, Material &mat, float defaultRoughness) const;
 		void BuildLightMapObject();
 
-		std::vector<EntityHandle> m_lightMapTargets {};
+		std::vector<pragma::EntityHandleWrapper> m_lightMapTargets {};
 		std::shared_ptr<LightmapDataCache> m_lightMapDataCache {};
 		std::shared_ptr<Cache> m_cache = nullptr;
 		std::shared_ptr<pragma::scenekit::Scene> m_rtScene = nullptr;

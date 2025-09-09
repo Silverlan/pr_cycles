@@ -12,9 +12,12 @@ namespace pragma::asset {
 #include <pragma/lua/luaapi.h>
 #include <pragma/lua/converters/optional_converter_t.hpp>
 #include <pragma/lua/converters/pair_converter_t.hpp>
+#include "pragma/entities/environment/lights/c_env_light_spot.h"
+#include "pragma/entities/environment/lights/c_env_light_point.h"
+#include "pragma/entities/environment/lights/c_env_light_directional.h"
+#include "pragma/networkstate/networkstate.h"
 #include <prosper_context.hpp>
 #include <pragma/c_engine.h>
-#include <pragma/clientstate/clientstate.h>
 #include <pragma/game/c_game.h>
 #include <pragma/entities/baseentity.h>
 #include <pragma/model/model.h>
@@ -29,9 +32,6 @@ namespace pragma::asset {
 #include <pragma/entities/environment/c_env_camera.h>
 #include <pragma/entities/entity_iterator.hpp>
 #include <pragma/entities/environment/lights/c_env_light.h>
-#include <pragma/entities/environment/lights/c_env_light_spot.h>
-#include <pragma/entities/environment/lights/c_env_light_point.h>
-#include <pragma/entities/environment/lights/c_env_light_directional.h>
 #include <pragma/entities/components/lightmap_data_cache.hpp>
 #include <pragma/entities/entity_component_system_t.hpp>
 #include <pragma/util/util_game.hpp>
@@ -73,6 +73,7 @@ namespace pragma::asset {
 
 module pragma.modules.scenekit;
 
+import pragma.client.client_state;
 import pragma.client.entities.components;
 import pragma.scenekit;
 import :scene;

@@ -7,7 +7,6 @@ module;
 #include <prosper_context.hpp>
 #include <buffers/prosper_uniform_resizable_buffer.hpp>
 #include <buffers/prosper_dynamic_resizable_buffer.hpp>
-#include <pragma/clientstate/clientstate.h>
 #include <pragma/game/game_resources.hpp>
 #include <pragma/model/model.h>
 #include <pragma/model/modelmesh.h>
@@ -32,6 +31,7 @@ module;
 
 module pragma.modules.scenekit;
 
+import pragma.client.client_state;
 import pragma.client.entities.components;
 import pragma.scenekit;
 import :scene;
@@ -132,7 +132,7 @@ scenekit::Renderer::Renderer(Scene &scene, pragma::scenekit::Renderer &renderer)
 
 void scenekit::Renderer::ReloadShaders()
 {
-	// Can only reload shaders that are part of this scene's parimary cache
+	// Can only reload shaders that are part of this scene's primary cache
 	auto &shaderTranslationTable = m_scene->GetCache().GetRTShaderToShaderTable();
 	for(auto &mdlCache : (*m_scene)->GetModelCaches()) {
 		for(auto &chunk : mdlCache->GetChunks()) {
@@ -177,7 +177,8 @@ void scenekit::Scene::BuildLightMapObject()
 	std::vector<ModelSubMesh *> targetMeshes {};
 	std::vector<util::Uuid> targetMeshEntityUuids;
 	std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> meshDatas;
-	for(auto &hEnt : m_lightMapTargets) {
+	for(auto &hEntWrapper : m_lightMapTargets) {
+		auto &hEnt = static_cast<EntityHandle&>(hEntWrapper);
 		if(hEnt.IsValid() == false || hEnt->GetModel() == nullptr)
 			continue;
 		auto &t = hEnt->GetPose();
@@ -238,7 +239,9 @@ void scenekit::Scene::BuildLightMapObject()
 	mesh->SetLightmapUVs(std::move(cclLightmapUvs));
 	m_rtScene->SetBakeTarget(*o);
 }
-void scenekit::Scene::AddLightmapBakeTarget(BaseEntity &ent) { m_lightMapTargets.push_back(ent.GetHandle()); }
+void scenekit::Scene::AddLightmapBakeTarget(BaseEntity &ent) {
+	m_lightMapTargets.push_back({&ent});
+}
 void scenekit::Scene::SetLightmapDataCache(LightmapDataCache *cache) { m_lightMapDataCache = cache ? cache->shared_from_this() : nullptr; }
 
 pragma::scenekit::PShader scenekit::Cache::CreateShader(Material &mat, const std::string &meshName, const ShaderInfo &shaderInfo) const

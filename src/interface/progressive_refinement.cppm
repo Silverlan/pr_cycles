@@ -4,7 +4,6 @@
 module;
 
 #include "definitions.hpp"
-#include <pragma/entities/baseentity_handle.h>
 #include <pragma/entities/baseentity.h>
 #include <material.h>
 

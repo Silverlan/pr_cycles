@@ -4,7 +4,6 @@
 module;
 
 #include "definitions.hpp"
-#include <pragma/entities/baseentity_handle.h>
 #include <pragma/entities/baseentity.h>
 #include <pragma/lua/luaobjectbase.h>
 #include <sharedutils/util_hair.hpp>

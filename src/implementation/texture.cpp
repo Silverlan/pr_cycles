@@ -7,7 +7,6 @@ module;
 #include <prosper_context.hpp>
 #include <buffers/prosper_uniform_resizable_buffer.hpp>
 #include <buffers/prosper_dynamic_resizable_buffer.hpp>
-#include <pragma/clientstate/clientstate.h>
 #include <texturemanager/texture.h>
 #include <cmaterialmanager.h>
 #include <cmaterial_manager2.hpp>
@@ -19,6 +18,7 @@ module;
 
 module pragma.modules.scenekit;
 
+import pragma.client.client_state;
 import pragma.client.rendering.shaders;
 import :texture;
 
