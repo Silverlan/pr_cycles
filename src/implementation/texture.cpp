@@ -3,23 +3,21 @@
 
 module;
 
-#include <pragma/c_engine.h>
 #include <prosper_context.hpp>
 #include <buffers/prosper_uniform_resizable_buffer.hpp>
 #include <buffers/prosper_dynamic_resizable_buffer.hpp>
+#include "pragma/console/conout.h"
 #include <texturemanager/texture.h>
 #include <cmaterialmanager.h>
 #include <cmaterial_manager2.hpp>
 #include <sharedutils/util_file.h>
-#include <pragma/rendering/shaders/particles/c_shader_particle.hpp>
 #include <util_texture_info.hpp>
 #include <util_image.hpp>
 #include <fsys/ifile.hpp>
 
 module pragma.modules.scenekit;
 
-import pragma.client.client_state;
-import pragma.client.rendering.shaders;
+import pragma.client;
 import :texture;
 
 static std::optional<std::string> get_abs_error_texture_path()
@@ -200,7 +198,7 @@ static std::optional<std::string> prepare_texture(std::shared_ptr<Texture> &tex,
 	}
 	absPath = "";
 	// Save the DDS image and make sure the file exists
-	if(pragma::get_client_game()->SaveImage(*img, ddsPath, imgWriteInfo) && filemanager::find_local_path(ddsPath + ".dds", absPath)) {
+	if(static_cast<CGame*>(pragma::get_client_game())->SaveImage(*img, ddsPath, imgWriteInfo) && filemanager::find_local_path(ddsPath + ".dds", absPath)) {
 		outSuccess = true;
 		outConverted = true;
 		return absPath;

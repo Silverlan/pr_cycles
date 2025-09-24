@@ -5,12 +5,6 @@ module;
 
 #include <pragma/entities/baseentity_handle.h>
 #include <pragma/entities/baseentity.h>
-#include <pragma/c_engine.h>
-#include <pragma/rendering/c_rendermode.h>
-#include <pragma/entities/environment/effects/c_env_particle_system.h>
-#include <pragma/entities/environment/c_env_camera.h>
-#include <pragma/rendering/shaders/particles/c_shader_particle.hpp>
-#include <pragma/game/c_game.h>
 #include <datasystem_vector.h>
 #include <future>
 #include <deque>
@@ -18,6 +12,7 @@ module;
 
 module pragma.modules.scenekit;
 
+import pragma.client;
 import pragma.scenekit;
 import :scene;
 
@@ -40,7 +35,7 @@ static Mat3 get_rotation_matrix(Vector4 q)
 	  2.0 * q.x * q.z + 2.0 * q.y * q.w, 2.0 * q.y * q.z - 2.0 * q.x * q.w, 1.0 - 2.0 * umath::pow2(q.x) - 2.0 * umath::pow2(q.y));
 }
 
-static Vector3 get_corner_particle_vertex_position(const pragma::CParticleSystemComponent::ParticleData &pt, const Vector3 &camPos, pragma::CParticleSystemComponent::OrientationType orientation, const Vector2 &vertPos, const Vector3 &camUpWs, const Vector3 &camRightWs, float nearZ,
+static Vector3 get_corner_particle_vertex_position(const pragma::ecs::CParticleSystemComponent::ParticleData &pt, const Vector3 &camPos, pragma::ecs::ParticleOrientationType orientation, const Vector2 &vertPos, const Vector3 &camUpWs, const Vector3 &camRightWs, float nearZ,
   float farZ)
 {
 	Vector3 particleCenterWs {pt.position.x, pt.position.y, pt.position.z};
@@ -50,18 +45,18 @@ static Vector3 get_corner_particle_vertex_position(const pragma::CParticleSystem
 	Vector3 right {};
 	Vector3 up {};
 	switch(orientation) {
-	case pragma::CParticleSystemComponent::OrientationType::Upright:
+	case pragma::ecs::ParticleOrientationType::Upright:
 		{
 			auto dir = camUpWs; // 'camUp_ws' is the particle world-rotation if this orientation type is selected
 			right = uvec::cross(normalize(particleCenterWs - camPos), dir);
 			up = -dir;
 			break;
 		}
-	case pragma::CParticleSystemComponent::OrientationType::Static:
+	case pragma::ecs::ParticleOrientationType::Static:
 		right = uvec::UP;
 		up = camUpWs;
 		break;
-	case pragma::CParticleSystemComponent::OrientationType::World:
+	case pragma::ecs::ParticleOrientationType::World:
 		up = -uvec::get_normal(camUpWs);
 		right = -uvec::get_normal(camRightWs);
 		vsize = Vector2 {nearZ, farZ};
@@ -76,7 +71,7 @@ static Vector3 get_corner_particle_vertex_position(const pragma::CParticleSystem
 	return right * squareVert.x * vsize.x + up * squareVert.y * vsize.y;
 }
 
-void scenekit::Cache::AddParticleSystem(pragma::CParticleSystemComponent &ptc, const Vector3 &camPos, const Mat4 &vp, float nearZ, float farZ)
+void scenekit::Cache::AddParticleSystem(pragma::ecs::CParticleSystemComponent &ptc, const Vector3 &camPos, const Mat4 &vp, float nearZ, float farZ)
 {
 	auto *mat = ptc.GetMaterial();
 	if(mat == nullptr)
@@ -95,7 +90,7 @@ void scenekit::Cache::AddParticleSystem(pragma::CParticleSystemComponent &ptc, c
 	float ptNearZ, ptFarZ;
 	auto orientationType = ptc.GetOrientationType();
 	pShader->GetParticleSystemOrientationInfo(vp, ptc, orientationType, camUpWs, camRightWs, ptNearZ, ptFarZ, mat, nearZ, farZ);
-	auto renderFlags = pShader->GetRenderFlags(ptc, pragma::ParticleRenderFlags::None);
+	auto renderFlags = pShader->GetRenderFlags(ptc, pragma::ecs::ParticleRenderFlags::None);
 
 	ShaderInfo shaderInfo {};
 	shaderInfo.particleSystem = &ptc;

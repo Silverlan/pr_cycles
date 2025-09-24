@@ -12,37 +12,21 @@ namespace pragma::asset {
 #include <pragma/lua/luaapi.h>
 #include <pragma/lua/converters/optional_converter_t.hpp>
 #include <pragma/lua/converters/pair_converter_t.hpp>
-#include "pragma/entities/environment/lights/c_env_light_spot.h"
-#include "pragma/entities/environment/lights/c_env_light_point.h"
-#include "pragma/entities/environment/lights/c_env_light_directional.h"
 #include "pragma/networkstate/networkstate.h"
+#include "pragma/entities/environment/env_camera.h"
+#include "pragma/engine.h"
 #include <prosper_context.hpp>
-#include <pragma/c_engine.h>
-#include <pragma/game/c_game.h>
 #include <pragma/entities/baseentity.h>
 #include <pragma/model/model.h>
-#include <pragma/model/c_modelmesh.h>
 #include <pragma/logging.hpp>
-#include <pragma/entities/components/c_player_component.hpp>
-#include <pragma/entities/components/c_color_component.hpp>
-#include <pragma/entities/components/c_model_component.hpp>
-#include <pragma/entities/components/c_render_component.hpp>
-#include <pragma/entities/components/c_light_map_receiver_component.hpp>
-#include <pragma/entities/environment/effects/c_env_particle_system.h>
-#include <pragma/entities/environment/c_env_camera.h>
 #include <pragma/entities/entity_iterator.hpp>
-#include <pragma/entities/environment/lights/c_env_light.h>
-#include <pragma/entities/components/lightmap_data_cache.hpp>
 #include <pragma/entities/entity_component_system_t.hpp>
 #include <pragma/util/util_game.hpp>
-#include <pragma/rendering/occlusion_culling/occlusion_culling_handler_bsp.hpp>
 #include <pragma/lua/classes/ldef_entity.h>
 #include <pragma/lua/libraries/lfile.h>
 #include <pragma/lua/policies/shared_from_this_policy.hpp>
 #include <pragma/lua/libraries/lfile.h>
-#include <pragma/rendering/raytracing/cycles.hpp>
 #include <util_image_buffer.hpp>
-#include <pragma/entities/components/c_scene_component.hpp>
 #include <pragma/lua/converters/game_type_converters_t.hpp>
 #include <pragma/lua/converters/optional_converter_t.hpp>
 
@@ -73,8 +57,7 @@ namespace pragma::asset {
 
 module pragma.modules.scenekit;
 
-import pragma.client.client_state;
-import pragma.client.entities.components;
+import pragma.client;
 import pragma.scenekit;
 import :scene;
 import :shader;
@@ -108,6 +91,9 @@ using namespace pragma::modules;
 #define SK_PRTMC_EXTENSION_BINARY "prtmc_b"
 #define SK_PRTMC_EXTENSION_ASCII "prtmc"
 #endif
+
+template<typename TCPPM>
+TCPPM *CGame::GetScene() { return static_cast<pragma::CSceneComponent*>(m_scene.get()); }
 
 static void sync_light(BaseEntity &ent, pragma::scenekit::Light &light)
 {
@@ -767,7 +753,7 @@ PRAGMA_EXPORT void pr_cycles_render_image(const pragma::rendering::cycles::Scene
 	if(scene == nullptr)
 		return;
 	auto aspectRatio = renderImageSettings.width / static_cast<float>(renderImageSettings.height);
-	initialize_cycles_scene_from_game_scene(*pragma::get_client_game()->GetScene(), *scene, renderImageInfo.camPose.GetOrigin(), renderImageInfo.camPose.GetRotation(), renderImageInfo.equirectPanorama, renderImageInfo.viewProjectionMatrix, renderImageInfo.nearZ, renderImageInfo.farZ,
+	initialize_cycles_scene_from_game_scene(*static_cast<pragma::CSceneComponent*>(static_cast<CGame*>(pragma::get_client_game())->GetScene<pragma::CSceneComponent>()), *scene, renderImageInfo.camPose.GetOrigin(), renderImageInfo.camPose.GetRotation(), renderImageInfo.equirectPanorama, renderImageInfo.viewProjectionMatrix, renderImageInfo.nearZ, renderImageInfo.farZ,
 	  renderImageInfo.fov, aspectRatio, static_cast<SceneFlags>(renderImageSettings.sceneFlags), entFilter, nullptr, renderImageInfo.entityList);
 	scene->Finalize();
 	std::string err;
@@ -822,7 +808,7 @@ PRAGMA_EXPORT void pr_cycles_bake_lightmaps(const pragma::rendering::cycles::Sce
 	auto scene = setup_scene(pragma::scenekit::Scene::RenderMode::BakeDiffuseLighting, renderImageSettings);
 	if(scene == nullptr)
 		return;
-	auto &gameScene = *pragma::get_client_game()->GetScene();
+	auto &gameScene = *static_cast<pragma::CSceneComponent*>(static_cast<CGame*>(pragma::get_client_game())->GetScene<pragma::CSceneComponent>());
 	setup_light_sources(*scene, [&gameScene](BaseEntity &ent) -> bool { return static_cast<CBaseEntity &>(ent).IsInScene(gameScene); });
 	EntityIterator entIt {*pragma::get_client_game()};
 	entIt.AttachFilter<TEntityIteratorFilterComponent<pragma::CLightMapReceiverComponent>>();

@@ -23,15 +23,6 @@ namespace prosper {
 };
 class BaseEntity;
 
-namespace pragma {
-	class CAnimatedComponent;
-	class CLightMapComponent;
-	class CParticleSystemComponent;
-	class CSkyCameraComponent;
-	class CModelComponent;
-	class CSceneComponent;
-	struct LightmapDataCache;
-};
 namespace umath {
 	class Transform;
 	class ScaledTransform;
@@ -49,7 +40,6 @@ class Model;
 class ModelMesh;
 class ModelSubMesh;
 class Material;
-class CParticle;
 class DataStream;
 namespace util {
 	struct HairStrandData;

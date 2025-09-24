@@ -3,7 +3,6 @@
 
 module;
 
-#include <pragma/c_engine.h>
 #include <prosper_context.hpp>
 #include <buffers/prosper_uniform_resizable_buffer.hpp>
 #include <buffers/prosper_dynamic_resizable_buffer.hpp>
@@ -12,12 +11,6 @@ module;
 #include <pragma/model/modelmesh.h>
 #include <pragma/entities/baseentity.h>
 #include <pragma/entities/entity_component_system_t.hpp>
-#include <pragma/entities/components/c_animated_component.hpp>
-#include <pragma/entities/components/c_vertex_animated_component.hpp>
-#include <pragma/entities/components/c_render_component.hpp>
-#include <pragma/entities/components/c_model_component.hpp>
-#include "pragma/entities/components/lightmap_data_cache.hpp"
-#include <pragma/rendering/shaders/particles/c_shader_particle.hpp>
 #include <sharedutils/util_file.h>
 #include <util_texture_info.hpp>
 #include <texturemanager/texture.h>
@@ -31,8 +24,7 @@ module;
 
 module pragma.modules.scenekit;
 
-import pragma.client.client_state;
-import pragma.client.entities.components;
+import pragma.client;
 import pragma.scenekit;
 import :scene;
 import :shader;
@@ -498,7 +490,7 @@ pragma::scenekit::PShader scenekit::Cache::CreateShader(Material &mat, const std
 				if(pShader)
 				{
 					auto renderFlags = ShaderParticle::RenderFlags::None;
-					auto ptcFlags = pShader->GetRenderFlags(**shaderInfo.particleSystem,pragma::ParticleRenderFlags::None);
+					auto ptcFlags = pShader->GetRenderFlags(**shaderInfo.particleSystem,pragma::ecs::ParticleRenderFlags::None);
 					if((*shaderInfo.particleSystem)->GetEffectiveAlphaMode() == pragma::ParticleAlphaMode::AdditiveByColor)
 						renderFlags |= ShaderParticle::RenderFlags::AdditiveBlendByColor;
 				}

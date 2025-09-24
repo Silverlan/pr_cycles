@@ -8,15 +8,12 @@ module;
 #include <prosper_util.hpp>
 #include <cmaterialmanager.h>
 #include <cmaterial.h>
-#include <pragma/c_engine.h>
 #include <pragma/game/game_resources.hpp>
 #include <pragma/model/model.h>
 #include <pragma/model/modelmesh.h>
 #include <pragma/entities/baseentity.h>
 #include <pragma/entities/entity_component_system_t.hpp>
-#include <pragma/entities/components/c_animated_component.hpp>
-#include <pragma/entities/components/c_model_component.hpp>
-#include <pragma/entities/components/c_render_component.hpp>
+#include <pragma/entities/components/base_model_component.hpp>
 #include <cmaterialmanager.h>
 #include <cmaterial_manager2.hpp>
 #include <sharedutils/util_file.h>
@@ -32,9 +29,7 @@ module;
 
 module pragma.modules.scenekit;
 
-import pragma.client.client_state;
-import pragma.client.entities.components;
-import pragma.client.rendering.shaders;
+import pragma.client;
 import pragma.scenekit;
 
 import :scene;
@@ -196,7 +191,7 @@ static std::optional<std::string> prepare_texture(TextureInfo *texInfo, bool &ou
 	}
 	absPath = "";
 	// Save the DDS image and make sure the file exists
-	if(pragma::get_client_game()->SaveImage(*img, ddsPath, imgWriteInfo) && FileManager::FindAbsolutePath(ddsPath + ".dds", absPath)) {
+	if(static_cast<CGame*>(pragma::get_client_game())->SaveImage(*img, ddsPath, imgWriteInfo) && FileManager::FindAbsolutePath(ddsPath + ".dds", absPath)) {
 		outSuccess = true;
 		outConverted = true;
 		return absPath;

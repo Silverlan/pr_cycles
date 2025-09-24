@@ -11,6 +11,7 @@ module;
 
 export module pragma.modules.scenekit:scene;
 
+import pragma.client;
 import pragma.entities;
 import pragma.scenekit;
 
@@ -30,7 +31,7 @@ export namespace pragma::modules::scenekit {
 			pragma::scenekit::PShader shader = nullptr;
 		};
 		Cache(pragma::scenekit::Scene::RenderMode renderMode);
-		void AddParticleSystem(pragma::CParticleSystemComponent &ptc, const Vector3 &camPos, const Mat4 &vp, float nearZ, float farZ);
+		void AddParticleSystem(pragma::ecs::CParticleSystemComponent &ptc, const Vector3 &camPos, const Mat4 &vp, float nearZ, float farZ);
 		pragma::scenekit::PObject AddEntity(BaseEntity &ent, std::vector<ModelSubMesh *> *optOutTargetMeshes = nullptr, const std::function<bool(ModelMesh &, const umath::ScaledTransform &)> &meshFilter = nullptr,
 		  const std::function<bool(ModelSubMesh &, const umath::ScaledTransform &)> &subMeshFilter = nullptr, const std::string &nameSuffix = "");
 		std::vector<std::shared_ptr<MeshData>> AddEntityMesh(BaseEntity &ent, std::vector<ModelSubMesh *> *optOutTargetMeshes = nullptr, const std::function<bool(ModelMesh &, const umath::ScaledTransform &)> &meshFilter = nullptr,
@@ -58,7 +59,7 @@ export namespace pragma::modules::scenekit {
 			std::optional<BaseEntity *> entity = {};
 			std::optional<ModelSubMesh *> subMesh = {};
 
-			std::optional<pragma::CParticleSystemComponent *> particleSystem = {};
+			std::optional<pragma::ecs::CParticleSystemComponent *> particleSystem = {};
 			std::optional<const void *> particle = {};
 		};
 		Material *GetMaterial(Model &mdl, ModelSubMesh &subMesh, uint32_t skinId) const;
