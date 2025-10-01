@@ -8,12 +8,6 @@ module;
 #include <prosper_util.hpp>
 #include <cmaterialmanager.h>
 #include <cmaterial.h>
-#include <pragma/game/game_resources.hpp>
-#include <pragma/model/model.h>
-#include <pragma/model/modelmesh.h>
-#include <pragma/entities/baseentity.h>
-#include <pragma/entities/entity_component_system_t.hpp>
-#include <pragma/entities/components/base_model_component.hpp>
 #include <cmaterialmanager.h>
 #include <cmaterial_manager2.hpp>
 #include <sharedutils/util_file.h>

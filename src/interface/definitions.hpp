@@ -21,7 +21,6 @@ namespace prosper {
 	class IPrimaryCommandBuffer;
 	class IFence;
 };
-class BaseEntity;
 
 namespace umath {
 	class Transform;
@@ -36,9 +35,6 @@ namespace util::bsp {
 namespace uimg {
 	class ImageBuffer;
 };
-class Model;
-class ModelMesh;
-class ModelSubMesh;
 class Material;
 class DataStream;
 namespace util {

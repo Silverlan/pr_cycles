@@ -4,7 +4,6 @@
 module;
 
 #include "definitions.hpp"
-#include <pragma/entities/baseentity.h>
 #include <material.h>
 
 export module pragma.modules.scenekit:progressive_refinement;

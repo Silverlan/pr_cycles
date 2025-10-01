@@ -3,8 +3,6 @@
 
 module;
 
-#include <pragma/entities/baseentity_handle.h>
-#include <pragma/entities/baseentity.h>
 #include <util_image_buffer.hpp>
 #include <sharedutils/util_parallel_job.hpp>
 

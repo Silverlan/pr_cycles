@@ -6,11 +6,6 @@ module;
 #include <prosper_context.hpp>
 #include <buffers/prosper_uniform_resizable_buffer.hpp>
 #include <buffers/prosper_dynamic_resizable_buffer.hpp>
-#include <pragma/game/game_resources.hpp>
-#include <pragma/model/model.h>
-#include <pragma/model/modelmesh.h>
-#include <pragma/entities/baseentity.h>
-#include <pragma/entities/entity_component_system_t.hpp>
 #include <sharedutils/util_file.h>
 #include <util_texture_info.hpp>
 #include <texturemanager/texture.h>

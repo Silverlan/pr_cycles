@@ -3,12 +3,7 @@
 
 module;
 
-#include <pragma/console/conout.h>
-#include <pragma/lua/ldefinitions.h>
-#include <pragma/entities/baseentity_handle.h>
-#include <pragma/entities/baseentity.h>
 #include <sharedutils/util_shared_handle.hpp>
-#include <pragma/model/modelmesh.h>
 #include <material.h>
 
 module pragma.modules.scenekit;

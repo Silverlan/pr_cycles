@@ -6,7 +6,6 @@ module;
 #include <prosper_context.hpp>
 #include <buffers/prosper_uniform_resizable_buffer.hpp>
 #include <buffers/prosper_dynamic_resizable_buffer.hpp>
-#include "pragma/console/conout.h"
 #include <texturemanager/texture.h>
 #include <cmaterialmanager.h>
 #include <cmaterial_manager2.hpp>

@@ -4,7 +4,6 @@
 module;
 
 #include "definitions.hpp"
-#include <pragma/entities/baseentity.h>
 #include <sharedutils/util_hair.hpp>
 #include <sharedutils/util_parallel_job.hpp>
 #include <material.h>

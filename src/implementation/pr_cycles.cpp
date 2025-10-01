@@ -9,30 +9,10 @@ namespace pragma::asset {
 	class WorldData;
 	class EntityData;
 };
-#include <pragma/lua/luaapi.h>
-#include <pragma/lua/converters/optional_converter_t.hpp>
-#include <pragma/lua/converters/pair_converter_t.hpp>
-#include "pragma/networkstate/networkstate.h"
-#include "pragma/entities/environment/env_camera.h"
-#include "pragma/engine.h"
 #include <prosper_context.hpp>
-#include <pragma/entities/baseentity.h>
-#include <pragma/model/model.h>
-#include <pragma/logging.hpp>
-#include <pragma/entities/entity_iterator.hpp>
-#include <pragma/entities/entity_component_system_t.hpp>
-#include <pragma/util/util_game.hpp>
-#include <pragma/lua/classes/ldef_entity.h>
-#include <pragma/lua/libraries/lfile.h>
-#include <pragma/lua/policies/shared_from_this_policy.hpp>
-#include <pragma/lua/libraries/lfile.h>
 #include <util_image_buffer.hpp>
-#include <pragma/lua/converters/game_type_converters_t.hpp>
-#include <pragma/lua/converters/optional_converter_t.hpp>
 
 #include <luainterface.hpp>
-#include <pragma/lua/libraries/lutil.hpp>
-#include <pragma/lua/lua_call.hpp>
 
 #undef __UTIL_STRING_H__
 #include <sharedutils/util_string.h>
