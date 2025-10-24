@@ -80,7 +80,7 @@ static void sync_light(BaseEntity &ent, pragma::scenekit::Light &light)
 	auto lightC = ent.GetComponent<pragma::CLightComponent>();
 	auto toggleC = ent.GetComponent<pragma::CToggleComponent>();
 	auto colorC = ent.GetComponent<pragma::CColorComponent>();
-	auto color = Color::White;
+	auto color = colors::White;
 	if(colorC.valid())
 		color = colorC->GetColor();
 
