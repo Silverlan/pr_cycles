@@ -64,7 +64,7 @@ static std::optional<std::string> prepare_texture(std::shared_ptr<Texture> &tex,
 	{
 	TextureManager::LoadInfo loadInfo {};
 	loadInfo.flags = TextureLoadFlags::LoadInstantly;
-	static_cast<CMaterialManager&>(pragma::get_client_state()->GetMaterialManager()).GetTextureManager().Load(*pragma::get_cengine(),texInfo->name,loadInfo);
+	static_cast<msys::CMaterialManager&>(pragma::get_client_state()->GetMaterialManager()).GetTextureManager().Load(*pragma::get_cengine(),texInfo->name,loadInfo);
 	if(tex->IsLoaded() == false)
 	return get_abs_error_texture_path();
 	}

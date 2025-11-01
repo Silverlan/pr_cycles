@@ -15,30 +15,5 @@
 // #define ENABLE_MOTION_BLUR_TEST
 
 #define ENABLE_TEST_AMBIENT_OCCLUSION
-namespace prosper {
-	class Texture;
-	class IImage;
-	class IPrimaryCommandBuffer;
-	class IFence;
-};
-
-namespace umath {
-	class Transform;
-	class ScaledTransform;
-};
-namespace unirender {
-	class Scene;
-};
-namespace util::bsp {
-	struct LightMapInfo;
-};
-namespace uimg {
-	class ImageBuffer;
-};
-class Material;
-class DataStream;
-namespace util {
-	struct HairStrandData;
-};
 
 #endif
