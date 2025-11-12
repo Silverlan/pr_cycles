@@ -1,11 +1,6 @@
 // SPDX-FileCopyrightText: (c) 2024 Silverlan <opensource@pragma-engine.com>
 // SPDX-License-Identifier: MIT
 
-module;
-
-#include <util_image_buffer.hpp>
-#include <sharedutils/util_parallel_job.hpp>
-
 module pragma.modules.scenekit;
 
 import pragma.scenekit;

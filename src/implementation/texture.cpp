@@ -1,19 +1,6 @@
 // SPDX-FileCopyrightText: (c) 2024 Silverlan <opensource@pragma-engine.com>
 // SPDX-License-Identifier: MIT
 
-module;
-
-#include <prosper_context.hpp>
-#include <buffers/prosper_uniform_resizable_buffer.hpp>
-#include <buffers/prosper_dynamic_resizable_buffer.hpp>
-#include <texturemanager/texture.h>
-#include <cmaterialmanager.h>
-#include <cmaterial_manager2.hpp>
-#include <sharedutils/util_file.h>
-#include <util_texture_info.hpp>
-#include <util_image.hpp>
-#include <fsys/ifile.hpp>
-
 module pragma.modules.scenekit;
 
 import pragma.client;
@@ -29,11 +16,17 @@ static std::optional<std::string> get_abs_error_texture_path()
 }
 
 enum class PreparedTextureInputFlags : uint8_t { None = 0u, CanBeEnvMap = 1u };
-REGISTER_BASIC_BITWISE_OPERATORS(PreparedTextureInputFlags)
 enum class PreparedTextureOutputFlags : uint8_t { None = 0u, Envmap = 1u };
-REGISTER_BASIC_BITWISE_OPERATORS(PreparedTextureOutputFlags)
+namespace umath::scoped_enum::bitwise {
+	template<>
+	struct enable_bitwise_operators<PreparedTextureInputFlags> : std::true_type {};
+}
+namespace umath::scoped_enum::bitwise {
+	template<>
+	struct enable_bitwise_operators<PreparedTextureOutputFlags> : std::true_type {};
+}
 
-static std::optional<std::string> prepare_texture(std::shared_ptr<Texture> &tex, bool &outSuccess, bool &outConverted, PreparedTextureInputFlags inFlags, PreparedTextureOutputFlags *optOutFlags, const std::optional<std::string> &defaultTexture, bool translucent)
+static std::optional<std::string> prepare_texture(std::shared_ptr<msys::Texture> &tex, bool &outSuccess, bool &outConverted, PreparedTextureInputFlags inFlags, PreparedTextureOutputFlags *optOutFlags, const std::optional<std::string> &defaultTexture, bool translucent)
 {
 	if(optOutFlags)
 		*optOutFlags = PreparedTextureOutputFlags::None;
@@ -131,11 +124,11 @@ static std::optional<std::string> prepare_texture(std::shared_ptr<Texture> &tex,
 	auto ddsPath = baseOutputPath + "materials/" + texName;
 	uimg::TextureInfo imgWriteInfo {};
 	imgWriteInfo.containerFormat = uimg::TextureInfo::ContainerFormat::DDS; // Cycles doesn't support KTX
-	if(tex->HasFlag(Texture::Flags::SRGB))
+	if(tex->HasFlag(msys::Texture::Flags::SRGB))
 		imgWriteInfo.flags |= uimg::TextureInfo::Flags::SRGB;
 
 	// Try to determine appropriate formats
-	if(tex->HasFlag(Texture::Flags::NormalMap)) {
+	if(tex->HasFlag(msys::Texture::Flags::NormalMap)) {
 		imgWriteInfo.inputFormat = uimg::TextureInfo::InputFormat::R32G32B32A32_Float;
 		imgWriteInfo.SetNormalMap();
 	}
@@ -206,7 +199,7 @@ static std::optional<std::string> prepare_texture(std::shared_ptr<Texture> &tex,
 	return get_abs_error_texture_path();
 }
 
-static std::optional<std::string> prepare_texture(std::shared_ptr<Texture> &texInfo, PreparedTextureInputFlags inFlags, PreparedTextureOutputFlags *optOutFlags, const std::optional<std::string> &defaultTexture, bool translucent)
+static std::optional<std::string> prepare_texture(std::shared_ptr<msys::Texture> &texInfo, PreparedTextureInputFlags inFlags, PreparedTextureOutputFlags *optOutFlags, const std::optional<std::string> &defaultTexture, bool translucent)
 {
 	if(optOutFlags)
 		*optOutFlags = PreparedTextureOutputFlags::None;

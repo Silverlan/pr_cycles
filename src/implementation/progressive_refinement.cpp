@@ -3,18 +3,11 @@
 
 module;
 
-#include <util_image_buffer.hpp>
-#include <image/prosper_texture.hpp>
-#include <prosper_command_buffer.hpp>
-#include <prosper_fence.hpp>
-#include "sharedutils/functioncallback.h"
-#include <future>
-#include <deque>
-#include <queue>
+#include <cassert>
 
 module pragma.modules.scenekit;
-import :progressive_refinement;
 
+import :progressive_refinement;
 import pragma.client;
 
 using namespace pragma::modules::scenekit;

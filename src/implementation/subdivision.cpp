@@ -4,11 +4,8 @@
 module;
 
 #ifdef RT_ENABLE_SUBDIVISION
-#include <mathutil/umath.h>
-#include <mathutil/vertex.hpp>
 #include <opensubdiv/far/topologyDescriptor.h>
 #include <opensubdiv/far/primvarRefiner.h>
-#include <memory>
 
 module pragma.modules.scenekit;
 

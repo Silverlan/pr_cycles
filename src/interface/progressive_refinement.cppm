@@ -1,14 +1,10 @@
 // SPDX-FileCopyrightText: (c) 2024 Silverlan <opensource@pragma-engine.com>
 // SPDX-License-Identifier: MIT
 
-module;
-
-#include "definitions.hpp"
-#include <material.h>
-
 export module pragma.modules.scenekit:progressive_refinement;
 
-import pragma.scenekit;
+export import pragma.prosper;
+export import pragma.scenekit;
 
 export namespace pragma::modules::scenekit {
 	class DenoiseTexture {

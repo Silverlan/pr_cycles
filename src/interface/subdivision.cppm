@@ -4,16 +4,12 @@
 module;
 
 #ifdef RT_ENABLE_SUBDIVISION
-#include <iostream>
-#include <mathutil/vertex.hpp>
-#include <mathutil/uvec.h>
-#include <vector>
-#include <functional>
-#include <memory>
 #include <opensubdiv/far/topologyDescriptor.h>
 #include <opensubdiv/far/primvarRefiner.h>
 
 export module pragma.modules.scenekit:subdivision;
+
+export import pragma.math;
 
 export namespace pragma::modules::scenekit {
 	using FaceVertexIndex = uint32_t;

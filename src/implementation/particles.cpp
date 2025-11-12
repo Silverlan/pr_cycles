@@ -1,13 +1,6 @@
 // SPDX-FileCopyrightText: (c) 2024 Silverlan <opensource@pragma-engine.com>
 // SPDX-License-Identifier: MIT
 
-module;
-
-#include <datasystem_vector.h>
-#include <future>
-#include <deque>
-#include <queue>
-
 module pragma.modules.scenekit;
 
 import pragma.client;

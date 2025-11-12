@@ -1,22 +1,6 @@
 // SPDX-FileCopyrightText: (c) 2024 Silverlan <opensource@pragma-engine.com>
 // SPDX-License-Identifier: MIT
 
-module;
-
-#include <prosper_context.hpp>
-#include <buffers/prosper_uniform_resizable_buffer.hpp>
-#include <buffers/prosper_dynamic_resizable_buffer.hpp>
-#include <sharedutils/util_file.h>
-#include <util_texture_info.hpp>
-#include <texturemanager/texture.h>
-#include <cmaterialmanager.h>
-#include <datasystem_color.h>
-#include <datasystem_vector.h>
-
-// ccl happens to have the same include guard name as sharedutils, so we have to undef it here
-#undef __UTIL_STRING_H__
-#include <sharedutils/util_string.h>
-
 module pragma.modules.scenekit;
 
 import pragma.client;
@@ -34,7 +18,7 @@ scenekit::Scene::Scene(pragma::scenekit::Scene &rtScene) : m_rtScene {rtScene.sh
 	m_cache->GetModelCache().SetUnique(true);
 }
 
-void scenekit::Scene::AddRoughnessMapImageTextureNode(pragma::scenekit::ShaderModuleRoughness &shader, Material &mat, float defaultRoughness) const
+void scenekit::Scene::AddRoughnessMapImageTextureNode(pragma::scenekit::ShaderModuleRoughness &shader, msys::Material &mat, float defaultRoughness) const
 {
 #if 0
 	// If no roughness map is available, just use roughness or specular factor directly
@@ -74,7 +58,7 @@ void scenekit::Scene::AddRoughnessMapImageTextureNode(pragma::scenekit::ShaderMo
 #endif
 }
 
-void scenekit::Scene::SetAOBakeTarget(BaseEntity &ent, uint32_t matIndex)
+void scenekit::Scene::SetAOBakeTarget(pragma::ecs::BaseEntity &ent, uint32_t matIndex)
 {
 	std::shared_ptr<pragma::scenekit::Object> oAo;
 	std::shared_ptr<pragma::scenekit::Object> oEnv;
@@ -226,12 +210,12 @@ void scenekit::Scene::BuildLightMapObject()
 	mesh->SetLightmapUVs(std::move(cclLightmapUvs));
 	m_rtScene->SetBakeTarget(*o);
 }
-void scenekit::Scene::AddLightmapBakeTarget(BaseEntity &ent) {
+void scenekit::Scene::AddLightmapBakeTarget(pragma::ecs::BaseEntity &ent) {
 	m_lightMapTargets.push_back({&ent});
 }
 void scenekit::Scene::SetLightmapDataCache(LightmapDataCache *cache) { m_lightMapDataCache = cache ? cache->shared_from_this() : nullptr; }
 
-pragma::scenekit::PShader scenekit::Cache::CreateShader(Material &mat, const std::string &meshName, const ShaderInfo &shaderInfo) const
+pragma::scenekit::PShader scenekit::Cache::CreateShader(msys::Material &mat, const std::string &meshName, const ShaderInfo &shaderInfo) const
 {
 	auto it = m_materialToShader.find(&mat);
 	if(it != m_materialToShader.end())
