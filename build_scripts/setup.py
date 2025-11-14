@@ -250,4 +250,4 @@ if not Path(unirender_root).is_dir():
     git_clone("https://github.com/Silverlan/UniRender.git","util_raytracing","feat/cxx_module")
 
 os.chdir(unirender_root)
-reset_to_commit("9b0853f4429be9626a76c99af83a370ac43c18bc")
+reset_to_commit("73e26878208fca04cffb76906cc39e1ec473af96")
