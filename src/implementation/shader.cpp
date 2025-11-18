@@ -1,30 +1,13 @@
 // SPDX-FileCopyrightText: (c) 2024 Silverlan <opensource@pragma-engine.com>
 // SPDX-License-Identifier: MIT
 
-module;
-
-#include <pragma/console/conout.h>
-#include <pragma/lua/ldefinitions.h>
-#include <pragma/entities/baseentity_handle.h>
-#include <pragma/entities/baseentity.h>
-#include <sharedutils/util_shared_handle.hpp>
-#include <pragma/model/modelmesh.h>
-#include <material.h>
-
 module pragma.modules.scenekit;
+
 import :shader;
 
 using namespace pragma::modules::scenekit;
 
-#ifdef _WIN32
-// For some reason client.dll exports these, even though it shouldn't, which causes a multiple defined symbol issue. The code below is a work-around.
-// TODO: Find out where the symbols are exported in client.dll and remove them!
-extern template class util::TWeakSharedHandle<BaseEntity>;
-template __declspec(dllimport) util::TWeakSharedHandle<BaseEntity>::~TWeakSharedHandle();
-//
-#endif
-
-void Shader::Initialize(pragma::scenekit::NodeManager &nodeManager, BaseEntity *ent, ModelSubMesh *mesh, Material &mat)
+void Shader::Initialize(pragma::scenekit::NodeManager &nodeManager, pragma::ecs::BaseEntity *ent, ModelSubMesh *mesh, msys::Material &mat)
 {
 	m_nodeManager = &nodeManager;
 	m_hEntity = ent ? ent->GetHandle() : EntityHandle {};
@@ -36,15 +19,15 @@ std::shared_ptr<pragma::scenekit::GroupNodeDesc> Shader::InitializeCombinedPass(
 std::shared_ptr<pragma::scenekit::GroupNodeDesc> Shader::InitializeAlbedoPass() { return nullptr; }
 std::shared_ptr<pragma::scenekit::GroupNodeDesc> Shader::InitializeNormalPass() { return nullptr; }
 std::shared_ptr<pragma::scenekit::GroupNodeDesc> Shader::InitializeDepthPass() { return nullptr; }
-BaseEntity *Shader::GetEntity() const { return m_hEntity.get(); }
-Material *Shader::GetMaterial() const { return m_hMaterial.get(); }
-ModelSubMesh *Shader::GetMesh() const { return m_mesh.get(); }
+pragma::ecs::BaseEntity *Shader::GetEntity() const { return m_hEntity.get(); }
+msys::Material *Shader::GetMaterial() const { return m_hMaterial.get(); }
+pragma::ModelSubMesh *Shader::GetMesh() const { return m_mesh.get(); }
 
 //////////////
 
 std::shared_ptr<ShaderManager> ShaderManager::Create() { return std::shared_ptr<ShaderManager> {new ShaderManager {}}; }
 void ShaderManager::RegisterShader(const std::string &name, luabind::object oClass) { m_shaders[name] = oClass; }
-std::shared_ptr<Shader> ShaderManager::CreateShader(pragma::scenekit::NodeManager &nodeManager, const std::string &name, BaseEntity *ent, ModelSubMesh *mesh, Material &mat)
+std::shared_ptr<Shader> ShaderManager::CreateShader(pragma::scenekit::NodeManager &nodeManager, const std::string &name, pragma::ecs::BaseEntity *ent, ModelSubMesh *mesh, msys::Material &mat)
 {
 	auto it = m_shaders.find(name);
 	if(it == m_shaders.end())
@@ -84,7 +67,7 @@ std::shared_ptr<Shader> ShaderManager::CreateShader(pragma::scenekit::NodeManage
 //////////////
 
 void LuaShader::Initialize(const luabind::object &o) { m_baseLuaObj = std::shared_ptr<luabind::object>(new luabind::object(o)); }
-void LuaShader::Initialize(pragma::scenekit::NodeManager &nodeManager, BaseEntity *ent, ModelSubMesh *mesh, Material &mat)
+void LuaShader::Initialize(pragma::scenekit::NodeManager &nodeManager, pragma::ecs::BaseEntity *ent, ModelSubMesh *mesh, msys::Material &mat)
 {
 	Shader::Initialize(nodeManager, ent, mesh, mat);
 	CallLuaMember<void>("Initialize");

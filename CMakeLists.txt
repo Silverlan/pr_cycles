@@ -11,7 +11,7 @@ pr_add_dependency(${PROJ_NAME} client TARGET PUBLIC)
 
 pr_init_module(${PROJ_NAME})
 
-pr_add_compile_definitions(${PROJ_NAME} -DOIIO_STATIC_BUILD -DRT_ENABLE_SUBDIVISION)
+pr_add_compile_definitions(${PROJ_NAME} -DOIIO_STATIC_BUILD -DRT_ENABLE_SUBDIVISION -DENABLE_TEST_AMBIENT_OCCLUSION)
 
 if(UNIX)
 	# HACK / FIX: The cycles library uses OpenImageDenoise with CUDA for denoising.

@@ -3,47 +3,27 @@
 
 module;
 
-#undef __SCENE_H__
-#include <prosper_context.hpp>
-#include <prosper_util.hpp>
-#include <cmaterialmanager.h>
-#include <cmaterial.h>
-#include <pragma/c_engine.h>
-#include <pragma/clientstate/clientstate.h>
-#include <pragma/game/game_resources.hpp>
-#include <pragma/model/model.h>
-#include <pragma/model/modelmesh.h>
-#include <pragma/entities/baseentity.h>
-#include <pragma/entities/entity_component_system_t.hpp>
-#include <pragma/entities/components/c_animated_component.hpp>
-#include <pragma/entities/components/c_model_component.hpp>
-#include <pragma/entities/components/c_render_component.hpp>
-#include <pragma/entities/c_skybox.h>
-#include <pragma/rendering/shaders/c_shader_cubemap_to_equirectangular.hpp>
-#include <cmaterialmanager.h>
-#include <cmaterial_manager2.hpp>
-#include <sharedutils/util_file.h>
-#include <sharedutils/util_hair.hpp>
-#undef __UTIL_STRING_H__
-#include <sharedutils/util_string.h>
-#include <util_texture_info.hpp>
-#include <future>
-#include <deque>
-#include <queue>
 #include <opensubdiv/far/topologyDescriptor.h>
 #include <opensubdiv/far/primvarRefiner.h>
 
 module pragma.modules.scenekit;
 
+import pragma.client;
 import pragma.scenekit;
 
 import :scene;
 import :subdivision;
 
 enum class PreparedTextureInputFlags : uint8_t { None = 0u, CanBeEnvMap = 1u };
-REGISTER_BASIC_BITWISE_OPERATORS(PreparedTextureInputFlags)
 enum class PreparedTextureOutputFlags : uint8_t { None = 0u, Envmap = 1u };
-REGISTER_BASIC_BITWISE_OPERATORS(PreparedTextureOutputFlags)
+namespace umath::scoped_enum::bitwise {
+	template<>
+	struct enable_bitwise_operators<PreparedTextureInputFlags> : std::true_type {};
+}
+namespace umath::scoped_enum::bitwise {
+	template<>
+	struct enable_bitwise_operators<PreparedTextureOutputFlags> : std::true_type {};
+}
 
 static std::optional<std::string> get_abs_error_texture_path()
 {
@@ -63,7 +43,7 @@ static std::optional<std::string> prepare_texture(TextureInfo *texInfo, bool &ou
 	outConverted = false;
 	if(texInfo == nullptr)
 		return {};
-	auto tex = texInfo ? std::static_pointer_cast<Texture>(texInfo->texture) : nullptr;
+	auto tex = texInfo ? std::static_pointer_cast<msys::Texture>(texInfo->texture) : nullptr;
 	std::string texName {};
 	// Make sure texture has been fully loaded!
 	if(tex == nullptr || tex->IsLoaded() == false) {
@@ -130,11 +110,11 @@ static std::optional<std::string> prepare_texture(TextureInfo *texInfo, bool &ou
 	auto ddsPath = "addons/converted/materials/" + texName;
 	uimg::TextureInfo imgWriteInfo {};
 	imgWriteInfo.containerFormat = uimg::TextureInfo::ContainerFormat::DDS; // Cycles doesn't support KTX
-	if(tex->HasFlag(Texture::Flags::SRGB))
+	if(tex->HasFlag(msys::Texture::Flags::SRGB))
 		imgWriteInfo.flags |= uimg::TextureInfo::Flags::SRGB;
 
 	// Try to determine appropriate formats
-	if(tex->HasFlag(Texture::Flags::NormalMap)) {
+	if(tex->HasFlag(msys::Texture::Flags::NormalMap)) {
 		imgWriteInfo.inputFormat = uimg::TextureInfo::InputFormat::R32G32B32A32_Float;
 		imgWriteInfo.SetNormalMap();
 	}
@@ -196,7 +176,7 @@ static std::optional<std::string> prepare_texture(TextureInfo *texInfo, bool &ou
 	}
 	absPath = "";
 	// Save the DDS image and make sure the file exists
-	if(pragma::get_client_game()->SaveImage(*img, ddsPath, imgWriteInfo) && FileManager::FindAbsolutePath(ddsPath + ".dds", absPath)) {
+	if(static_cast<CGame*>(pragma::get_client_game())->SaveImage(*img, ddsPath, imgWriteInfo) && FileManager::FindAbsolutePath(ddsPath + ".dds", absPath)) {
 		outSuccess = true;
 		outConverted = true;
 		return absPath;
@@ -250,7 +230,7 @@ pragma::modules::scenekit::Cache::Cache(pragma::scenekit::Scene::RenderMode rend
 	m_mdlCache->AddChunk(*m_shaderCache);
 }
 
-std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma::modules::scenekit::Cache::AddMeshList(Model &mdl, const std::vector<std::shared_ptr<ModelMesh>> &meshList, const std::string &meshName, BaseEntity *optEnt, const std::optional<umath::ScaledTransform> &opose,
+std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma::modules::scenekit::Cache::AddMeshList(Model &mdl, const std::vector<std::shared_ptr<ModelMesh>> &meshList, const std::string &meshName, pragma::ecs::BaseEntity *optEnt, const std::optional<umath::ScaledTransform> &opose,
   uint32_t skinId, pragma::CModelComponent *optMdlC, pragma::CAnimatedComponent *optAnimC, const std::function<bool(ModelMesh &, const umath::ScaledTransform &)> &optMeshFilter, const std::function<bool(ModelSubMesh &, const umath::ScaledTransform &)> &optSubMeshFilter,
   const std::function<void(ModelSubMesh &)> &optOnMeshAdded)
 {
@@ -285,7 +265,7 @@ std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma:
 	return meshDatas;
 }
 
-std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma::modules::scenekit::Cache::AddModel(Model &mdl, const std::string &meshName, BaseEntity *optEnt, const std::optional<umath::ScaledTransform> &pose, uint32_t skinId, pragma::CModelComponent *optMdlC,
+std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma::modules::scenekit::Cache::AddModel(Model &mdl, const std::string &meshName, pragma::ecs::BaseEntity *optEnt, const std::optional<umath::ScaledTransform> &pose, uint32_t skinId, pragma::CModelComponent *optMdlC,
   pragma::CAnimatedComponent *optAnimC, const std::function<bool(ModelMesh &, const umath::ScaledTransform &)> &optMeshFilter, const std::function<bool(ModelSubMesh &, const umath::ScaledTransform &)> &optSubMeshFilter, const std::function<void(ModelSubMesh &)> &optOnMeshAdded)
 {
 	std::vector<std::shared_ptr<ModelMesh>> lodMeshes {};
@@ -295,7 +275,7 @@ std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma:
 	return AddMeshList(mdl, lodMeshes, meshName, optEnt, pose, skinId, optMdlC, optAnimC, optMeshFilter, optSubMeshFilter, optOnMeshAdded);
 }
 
-std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma::modules::scenekit::Cache::AddEntityMesh(BaseEntity &ent, std::vector<ModelSubMesh *> *optOutTargetMeshes, const std::function<bool(ModelMesh &, const umath::ScaledTransform &)> &meshFilter,
+std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma::modules::scenekit::Cache::AddEntityMesh(pragma::ecs::BaseEntity &ent, std::vector<ModelSubMesh *> *optOutTargetMeshes, const std::function<bool(ModelMesh &, const umath::ScaledTransform &)> &meshFilter,
   const std::function<bool(ModelSubMesh &, const umath::ScaledTransform &)> &subMeshFilter, const std::string &nameSuffix, const std::optional<umath::ScaledTransform> &pose)
 {
 #if 0
@@ -357,7 +337,7 @@ std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma:
 					continue;
 				auto *diffuseMap = mat->GetTextureInfo("skybox");
 				auto tex = diffuseMap ? diffuseMap->texture : nullptr;
-				auto vkTex = tex ? std::static_pointer_cast<Texture>(tex)->GetVkTexture() : nullptr;
+				auto vkTex = tex ? std::static_pointer_cast<msys::Texture>(tex)->GetVkTexture() : nullptr;
 				if(vkTex == nullptr || vkTex->GetImage().IsCubemap() == false)
 					continue;
 				PreparedTextureOutputFlags flags;
@@ -400,7 +380,7 @@ std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma:
 	}
 	return meshDatas;
 }
-pragma::scenekit::PObject pragma::modules::scenekit::Cache::AddEntity(BaseEntity &ent, std::vector<ModelSubMesh *> *optOutTargetMeshes, const std::function<bool(ModelMesh &, const umath::ScaledTransform &)> &meshFilter,
+pragma::scenekit::PObject pragma::modules::scenekit::Cache::AddEntity(pragma::ecs::BaseEntity &ent, std::vector<ModelSubMesh *> *optOutTargetMeshes, const std::function<bool(ModelMesh &, const umath::ScaledTransform &)> &meshFilter,
   const std::function<bool(ModelSubMesh &, const umath::ScaledTransform &)> &subMeshFilter, const std::string &nameSuffix)
 {
 	auto meshDatas = AddEntityMesh(ent, optOutTargetMeshes, meshFilter, subMeshFilter, nameSuffix);
@@ -585,19 +565,19 @@ std::shared_ptr<pragma::modules::scenekit::Cache::MeshData> pragma::modules::sce
 	return meshData;
 }
 
-Material *pragma::modules::scenekit::Cache::GetMaterial(BaseEntity &ent, ModelSubMesh &subMesh, uint32_t skinId) const
+msys::Material *pragma::modules::scenekit::Cache::GetMaterial(pragma::ecs::BaseEntity &ent, ModelSubMesh &subMesh, uint32_t skinId) const
 {
 	auto mdlC = ent.GetModelComponent();
 	return mdlC ? GetMaterial(static_cast<pragma::CModelComponent &>(*mdlC), subMesh, skinId) : nullptr;
 }
 
-Material *pragma::modules::scenekit::Cache::GetMaterial(Model &mdl, ModelSubMesh &subMesh, uint32_t skinId) const
+msys::Material *pragma::modules::scenekit::Cache::GetMaterial(Model &mdl, ModelSubMesh &subMesh, uint32_t skinId) const
 {
 	auto texIdx = mdl.GetMaterialIndex(subMesh, skinId);
 	return texIdx.has_value() ? mdl.GetMaterial(*texIdx) : nullptr;
 }
 
-Material *pragma::modules::scenekit::Cache::GetMaterial(pragma::CModelComponent &mdlC, ModelSubMesh &subMesh, uint32_t skinId) const
+msys::Material *pragma::modules::scenekit::Cache::GetMaterial(pragma::CModelComponent &mdlC, ModelSubMesh &subMesh, uint32_t skinId) const
 {
 	auto mdl = mdlC.GetModel();
 	if(mdl == nullptr)
@@ -606,7 +586,7 @@ Material *pragma::modules::scenekit::Cache::GetMaterial(pragma::CModelComponent 
 	return mdlC.GetRenderMaterial(baseTexIdx, skinId);
 }
 
-pragma::scenekit::PShader pragma::modules::scenekit::Cache::CreateShader(const std::string &meshName, Model &mdl, ModelSubMesh &subMesh, BaseEntity *optEnt, uint32_t skinId) const
+pragma::scenekit::PShader pragma::modules::scenekit::Cache::CreateShader(const std::string &meshName, Model &mdl, ModelSubMesh &subMesh, pragma::ecs::BaseEntity *optEnt, uint32_t skinId) const
 {
 	// Make sure all textures have finished loading
 	static_cast<msys::CMaterialManager &>(pragma::get_client_state()->GetMaterialManager()).GetTextureManager().WaitForAllPendingCompleted();
@@ -680,7 +660,7 @@ void pragma::modules::scenekit::Cache::AddMeshDataToMesh(pragma::scenekit::Mesh 
 		mesh.AddHairStrandData(*meshData.hairStrandData, shaderIdx);
 }
 
-void pragma::modules::scenekit::Cache::AddAOBakeTarget(BaseEntity *optEnt, Model &mdl, uint32_t matIndex, std::shared_ptr<pragma::scenekit::Object> &oAo, std::shared_ptr<pragma::scenekit::Object> &oEnv)
+void pragma::modules::scenekit::Cache::AddAOBakeTarget(pragma::ecs::BaseEntity *optEnt, Model &mdl, uint32_t matIndex, std::shared_ptr<pragma::scenekit::Object> &oAo, std::shared_ptr<pragma::scenekit::Object> &oEnv)
 {
 	std::vector<std::shared_ptr<MeshData>> materialMeshes;
 	std::vector<std::shared_ptr<MeshData>> envMeshes;
@@ -720,7 +700,7 @@ void pragma::modules::scenekit::Cache::AddAOBakeTarget(BaseEntity *optEnt, Model
 	m_mdlCache->GetChunks().front().AddObject(*oEnv);
 }
 
-void pragma::modules::scenekit::Cache::AddAOBakeTarget(BaseEntity &ent, uint32_t matIndex, std::shared_ptr<pragma::scenekit::Object> &oAo, std::shared_ptr<pragma::scenekit::Object> &oEnv)
+void pragma::modules::scenekit::Cache::AddAOBakeTarget(pragma::ecs::BaseEntity &ent, uint32_t matIndex, std::shared_ptr<pragma::scenekit::Object> &oAo, std::shared_ptr<pragma::scenekit::Object> &oEnv)
 {
 	auto mdl = ent.GetModel();
 	if(mdl == nullptr)

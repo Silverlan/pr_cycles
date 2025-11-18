@@ -1,41 +1,9 @@
 // SPDX-FileCopyrightText: (c) 2024 Silverlan <opensource@pragma-engine.com>
 // SPDX-License-Identifier: MIT
 
-module;
-
-#include <pragma/c_engine.h>
-#include <prosper_context.hpp>
-#include <buffers/prosper_uniform_resizable_buffer.hpp>
-#include <buffers/prosper_dynamic_resizable_buffer.hpp>
-#include <pragma/clientstate/clientstate.h>
-#include <pragma/game/game_resources.hpp>
-#include <pragma/model/model.h>
-#include <pragma/model/modelmesh.h>
-#include <pragma/entities/baseentity.h>
-#include <pragma/entities/entity_component_system_t.hpp>
-#include <pragma/entities/components/c_animated_component.hpp>
-#include <pragma/entities/components/c_eye_component.hpp>
-#include <pragma/entities/components/c_vertex_animated_component.hpp>
-#include <pragma/entities/components/c_light_map_component.hpp>
-#include <pragma/entities/components/c_render_component.hpp>
-#include <pragma/entities/components/c_model_component.hpp>
-#include <pragma/entities/components/lightmap_data_cache.hpp>
-#include <pragma/entities/c_skybox.h>
-#include <pragma/rendering/shaders/c_shader_cubemap_to_equirectangular.hpp>
-#include <pragma/rendering/shaders/particles/c_shader_particle.hpp>
-#include <sharedutils/util_file.h>
-#include <util_texture_info.hpp>
-#include <texturemanager/texture.h>
-#include <cmaterialmanager.h>
-#include <datasystem_color.h>
-#include <datasystem_vector.h>
-
-// ccl happens to have the same include guard name as sharedutils, so we have to undef it here
-#undef __UTIL_STRING_H__
-#include <sharedutils/util_string.h>
-
 module pragma.modules.scenekit;
 
+import pragma.client;
 import pragma.scenekit;
 import :scene;
 import :shader;
@@ -50,7 +18,7 @@ scenekit::Scene::Scene(pragma::scenekit::Scene &rtScene) : m_rtScene {rtScene.sh
 	m_cache->GetModelCache().SetUnique(true);
 }
 
-void scenekit::Scene::AddRoughnessMapImageTextureNode(pragma::scenekit::ShaderModuleRoughness &shader, Material &mat, float defaultRoughness) const
+void scenekit::Scene::AddRoughnessMapImageTextureNode(pragma::scenekit::ShaderModuleRoughness &shader, msys::Material &mat, float defaultRoughness) const
 {
 #if 0
 	// If no roughness map is available, just use roughness or specular factor directly
@@ -90,7 +58,7 @@ void scenekit::Scene::AddRoughnessMapImageTextureNode(pragma::scenekit::ShaderMo
 #endif
 }
 
-void scenekit::Scene::SetAOBakeTarget(BaseEntity &ent, uint32_t matIndex)
+void scenekit::Scene::SetAOBakeTarget(pragma::ecs::BaseEntity &ent, uint32_t matIndex)
 {
 	std::shared_ptr<pragma::scenekit::Object> oAo;
 	std::shared_ptr<pragma::scenekit::Object> oEnv;
@@ -135,7 +103,7 @@ scenekit::Renderer::Renderer(Scene &scene, pragma::scenekit::Renderer &renderer)
 
 void scenekit::Renderer::ReloadShaders()
 {
-	// Can only reload shaders that are part of this scene's parimary cache
+	// Can only reload shaders that are part of this scene's primary cache
 	auto &shaderTranslationTable = m_scene->GetCache().GetRTShaderToShaderTable();
 	for(auto &mdlCache : (*m_scene)->GetModelCaches()) {
 		for(auto &chunk : mdlCache->GetChunks()) {
@@ -180,7 +148,8 @@ void scenekit::Scene::BuildLightMapObject()
 	std::vector<ModelSubMesh *> targetMeshes {};
 	std::vector<util::Uuid> targetMeshEntityUuids;
 	std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> meshDatas;
-	for(auto &hEnt : m_lightMapTargets) {
+	for(auto &hEntWrapper : m_lightMapTargets) {
+		auto &hEnt = static_cast<EntityHandle&>(hEntWrapper);
 		if(hEnt.IsValid() == false || hEnt->GetModel() == nullptr)
 			continue;
 		auto &t = hEnt->GetPose();
@@ -241,10 +210,12 @@ void scenekit::Scene::BuildLightMapObject()
 	mesh->SetLightmapUVs(std::move(cclLightmapUvs));
 	m_rtScene->SetBakeTarget(*o);
 }
-void scenekit::Scene::AddLightmapBakeTarget(BaseEntity &ent) { m_lightMapTargets.push_back(ent.GetHandle()); }
+void scenekit::Scene::AddLightmapBakeTarget(pragma::ecs::BaseEntity &ent) {
+	m_lightMapTargets.push_back({&ent});
+}
 void scenekit::Scene::SetLightmapDataCache(LightmapDataCache *cache) { m_lightMapDataCache = cache ? cache->shared_from_this() : nullptr; }
 
-pragma::scenekit::PShader scenekit::Cache::CreateShader(Material &mat, const std::string &meshName, const ShaderInfo &shaderInfo) const
+pragma::scenekit::PShader scenekit::Cache::CreateShader(msys::Material &mat, const std::string &meshName, const ShaderInfo &shaderInfo) const
 {
 	auto it = m_materialToShader.find(&mat);
 	if(it != m_materialToShader.end())
@@ -498,7 +469,7 @@ pragma::scenekit::PShader scenekit::Cache::CreateShader(Material &mat, const std
 				if(pShader)
 				{
 					auto renderFlags = ShaderParticle::RenderFlags::None;
-					auto ptcFlags = pShader->GetRenderFlags(**shaderInfo.particleSystem,pragma::ParticleRenderFlags::None);
+					auto ptcFlags = pShader->GetRenderFlags(**shaderInfo.particleSystem,pragma::ecs::ParticleRenderFlags::None);
 					if((*shaderInfo.particleSystem)->GetEffectiveAlphaMode() == pragma::ParticleAlphaMode::AdditiveByColor)
 						renderFlags |= ShaderParticle::RenderFlags::AdditiveBlendByColor;
 				}

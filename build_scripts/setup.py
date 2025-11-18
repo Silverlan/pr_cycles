@@ -187,9 +187,9 @@ utilocio_root = root +"/external_libs/util_ocio"
 if not Path(utilocio_root).is_dir():
     print_msg("util_ocio not found. Downloading...")
     os.chdir(root +"/external_libs")
-    git_clone("https://github.com/Silverlan/util_ocio.git","util_ocio")
+    git_clone("https://github.com/Silverlan/util_ocio.git","util_ocio","feat/cxx_module")
 os.chdir(utilocio_root)
-reset_to_commit("6e068ccfda25cb99c76faf93867ecfd99556a522")
+reset_to_commit("7e1ff73ee7ea03ca7909e628fbcc45d7641e682e")
 
 if platform == "win32" and build_all:
 	########## glog ##########
@@ -237,17 +237,17 @@ os.chdir(tools)
 rr_tool_root = tools +"/render_raytracing"
 if not Path(rr_tool_root).is_dir():
 	print_msg("render_raytracing tool not found. Downloading...")
-	git_clone("https://github.com/Silverlan/render_raytracing.git")
+	git_clone("https://github.com/Silverlan/render_raytracing.git",branch="feat/cxx_module2")
 
 os.chdir(rr_tool_root)
-reset_to_commit("27965b271ae23c72f18eb6809688712b992f03f1")
+reset_to_commit("a6f35e919bf291b9e170ee78474789415ef87f12")
 
 ########## Unirender ##########
 unirender_root = root +"/external_libs/util_raytracing"
 if not Path(unirender_root).is_dir():
     print_msg("Unirender not found. Downloading...")
     os.chdir(root +"/external_libs")
-    git_clone("https://github.com/Silverlan/UniRender.git","util_raytracing")
+    git_clone("https://github.com/Silverlan/UniRender.git","util_raytracing","feat/cxx_module")
 
 os.chdir(unirender_root)
-reset_to_commit("ce1bd1c550e539348cf8763dbdd091cb3be9692e")
+reset_to_commit("73e26878208fca04cffb76906cc39e1ec473af96")

@@ -1,18 +1,10 @@
 // SPDX-FileCopyrightText: (c) 2024 Silverlan <opensource@pragma-engine.com>
 // SPDX-License-Identifier: MIT
 
-module;
-
-#include "definitions.hpp"
-#include <pragma/entities/baseentity_handle.h>
-#include <pragma/entities/baseentity.h>
-#include <pragma/lua/luaobjectbase.h>
-#include <sharedutils/util_hair.hpp>
-#include <material.h>
-
 export module pragma.modules.scenekit:shader;
 
-import pragma.scenekit;
+export import pragma.scenekit;
+export import pragma.shared;
 
 export namespace pragma::modules::scenekit {
 	class Scene;
@@ -20,7 +12,7 @@ export namespace pragma::modules::scenekit {
 	class Shader {
 	  public:
 		virtual ~Shader() = default;
-		virtual void Initialize(pragma::scenekit::NodeManager &nodeManager, BaseEntity *ent, ModelSubMesh *mesh, Material &mat);
+		virtual void Initialize(pragma::scenekit::NodeManager &nodeManager, pragma::ecs::BaseEntity *ent, ModelSubMesh *mesh, msys::Material &mat);
 		virtual std::shared_ptr<pragma::scenekit::GroupNodeDesc> InitializeCombinedPass();
 		virtual std::shared_ptr<pragma::scenekit::GroupNodeDesc> InitializeAlbedoPass();
 		virtual std::shared_ptr<pragma::scenekit::GroupNodeDesc> InitializeNormalPass();
@@ -34,8 +26,8 @@ export namespace pragma::modules::scenekit {
 		void ClearSubdivisionSettings() { m_subdivSettings = {}; }
 		const std::optional<pragma::scenekit::SubdivisionSettings> &GetSubdivisionSettings() const { return m_subdivSettings; }
 
-		BaseEntity *GetEntity() const;
-		Material *GetMaterial() const;
+		pragma::ecs::BaseEntity *GetEntity() const;
+		msys::Material *GetMaterial() const;
 		ModelSubMesh *GetMesh() const;
 	  protected:
 		Shader() = default;
@@ -58,7 +50,7 @@ export namespace pragma::modules::scenekit {
 
 		void RegisterShader(const std::string &name, luabind::object oClass);
 		bool IsShaderRegistered(const std::string &name) const { return m_shaders.find(name) != m_shaders.end(); }
-		std::shared_ptr<Shader> CreateShader(pragma::scenekit::NodeManager &nodeManager, const std::string &name, BaseEntity *ent, ModelSubMesh *mesh, Material &mat);
+		std::shared_ptr<Shader> CreateShader(pragma::scenekit::NodeManager &nodeManager, const std::string &name, pragma::ecs::BaseEntity *ent, ModelSubMesh *mesh, msys::Material &mat);
 	  private:
 		ShaderManager() = default;
 		std::unordered_map<std::string, luabind::object> m_shaders;
@@ -68,22 +60,22 @@ export namespace pragma::modules::scenekit {
 	class LuaShader : public LuaObjectBase, public Shader {
 	  public:
 		void Initialize(const luabind::object &o);
-		virtual void Initialize(pragma::scenekit::NodeManager &nodeManager, BaseEntity *ent, ModelSubMesh *mesh, Material &mat) override;
+		virtual void Initialize(pragma::scenekit::NodeManager &nodeManager, pragma::ecs::BaseEntity *ent, ModelSubMesh *mesh, msys::Material &mat) override;
 
 		void Lua_Initialize() {}
-		static void Lua_default_Initialize(lua_State *l, LuaShader &shader) {}
+		static void Lua_default_Initialize(lua::State *l, LuaShader &shader) {}
 
 		void Lua_InitializeCombinedPass(pragma::scenekit::GroupNodeDesc &desc, pragma::scenekit::NodeDesc &outputNode) {}
-		static void Lua_default_InitializeCombinedPass(lua_State *l, LuaShader &shader, pragma::scenekit::GroupNodeDesc &desc, pragma::scenekit::NodeDesc &outputNode) { (&shader)->Shader::InitializeCombinedPass(); }
+		static void Lua_default_InitializeCombinedPass(lua::State *l, LuaShader &shader, pragma::scenekit::GroupNodeDesc &desc, pragma::scenekit::NodeDesc &outputNode) { (&shader)->Shader::InitializeCombinedPass(); }
 
 		void Lua_InitializeAlbedoPass(pragma::scenekit::GroupNodeDesc &desc, pragma::scenekit::NodeDesc &outputNode) {}
-		static void Lua_default_InitializeAlbedoPass(lua_State *l, LuaShader &shader, pragma::scenekit::GroupNodeDesc &desc, pragma::scenekit::NodeDesc &outputNode) { (&shader)->Shader::InitializeAlbedoPass(); }
+		static void Lua_default_InitializeAlbedoPass(lua::State *l, LuaShader &shader, pragma::scenekit::GroupNodeDesc &desc, pragma::scenekit::NodeDesc &outputNode) { (&shader)->Shader::InitializeAlbedoPass(); }
 
 		void Lua_InitializeNormalPass(pragma::scenekit::GroupNodeDesc &desc, pragma::scenekit::NodeDesc &outputNode) {}
-		static void Lua_default_InitializeNormalPass(lua_State *l, LuaShader &shader, pragma::scenekit::GroupNodeDesc &desc, pragma::scenekit::NodeDesc &outputNode) { (&shader)->Shader::InitializeNormalPass(); }
+		static void Lua_default_InitializeNormalPass(lua::State *l, LuaShader &shader, pragma::scenekit::GroupNodeDesc &desc, pragma::scenekit::NodeDesc &outputNode) { (&shader)->Shader::InitializeNormalPass(); }
 
 		void Lua_InitializeDepthPass(pragma::scenekit::GroupNodeDesc &desc, pragma::scenekit::NodeDesc &outputNode) {}
-		static void Lua_default_InitializeDepthPass(lua_State *l, LuaShader &shader, pragma::scenekit::GroupNodeDesc &desc, pragma::scenekit::NodeDesc &outputNode) { (&shader)->Shader::InitializeDepthPass(); }
+		static void Lua_default_InitializeDepthPass(lua::State *l, LuaShader &shader, pragma::scenekit::GroupNodeDesc &desc, pragma::scenekit::NodeDesc &outputNode) { (&shader)->Shader::InitializeDepthPass(); }
 
 		virtual std::shared_ptr<pragma::scenekit::GroupNodeDesc> InitializeCombinedPass() override;
 		virtual std::shared_ptr<pragma::scenekit::GroupNodeDesc> InitializeAlbedoPass() override;

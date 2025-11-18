@@ -1,23 +1,9 @@
 // SPDX-FileCopyrightText: (c) 2024 Silverlan <opensource@pragma-engine.com>
 // SPDX-License-Identifier: MIT
 
-module;
-
-#include <sharedutils/util_event_reply.hpp>
-#include <sharedutils/ctpl_stl.h>
-#include <prosper_context.hpp>
-#include <sharedutils/functioncallback.h>
-#include <pragma/rendering/c_rendermode.h>
-#include <pragma/rendering/render_queue.hpp>
-#include <pragma/game/c_game.h>
-#include <pragma/entities/environment/c_sky_camera.hpp>
-#include <pragma/entities/components/c_render_component.hpp>
-#include <future>
-#include <deque>
-#include <queue>
-
 module pragma.modules.scenekit;
 
+import pragma.client;
 import pragma.scenekit;
 import :scene;
 
@@ -37,7 +23,7 @@ void scenekit::Scene::Add3DSkybox(pragma::CSceneComponent &gameScene, pragma::CS
 			auto &renderMeshes = renderC->GetRenderMeshes();
 			auto itEnt = entMeshes.find(ent);
 			if(itEnt == entMeshes.end())
-				itEnt = entMeshes.insert(std::make_pair(ent, std::unordered_set<ModelSubMesh *> {})).first;
+				itEnt = entMeshes.insert(std::make_pair(ent, std::unordered_set<pragma::ModelSubMesh *> {})).first;
 			for(auto &mesh : renderMeshes)
 				itEnt->second.insert(mesh.get());
 		}
@@ -47,8 +33,8 @@ void scenekit::Scene::Add3DSkybox(pragma::CSceneComponent &gameScene, pragma::CS
 	auto translucentRenderQueue = pragma::rendering::RenderQueue::Create("unirender_3d_sky_translucent");
 
 	pragma::rendering::RenderMask inclusionMask, exclusionMask;
-	pragma::get_client_game()->GetPrimaryCameraRenderMask(inclusionMask, exclusionMask);
-	auto mask = pragma::get_client_game()->GetInclusiveRenderMasks();
+	static_cast<CGame*>(pragma::get_client_game())->GetPrimaryCameraRenderMask(inclusionMask, exclusionMask);
+	auto mask = static_cast<CGame*>(pragma::get_client_game())->GetInclusiveRenderMasks();
 	mask |= inclusionMask;
 	mask &= ~exclusionMask;
 
@@ -61,7 +47,7 @@ void scenekit::Scene::Add3DSkybox(pragma::CSceneComponent &gameScene, pragma::CS
 	for(auto &pair : entMeshes) {
 		auto &subMeshes = pair.second;
 		auto entObj = m_cache->AddEntity(
-		  *pair.first, nullptr, nullptr, [&subMeshes](ModelSubMesh &subMesh, const umath::ScaledTransform &pose) -> bool { return subMeshes.find(&subMesh) != subMeshes.end(); }, "3d_sky");
+		  *pair.first, nullptr, nullptr, [&subMeshes](pragma::ModelSubMesh &subMesh, const umath::ScaledTransform &pose) -> bool { return subMeshes.find(&subMesh) != subMeshes.end(); }, "3d_sky");
 		if(!entObj)
 			continue;
 		auto entPos = entObj->GetPos();
