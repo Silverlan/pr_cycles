@@ -187,9 +187,9 @@ utilocio_root = root +"/external_libs/util_ocio"
 if not Path(utilocio_root).is_dir():
     print_msg("util_ocio not found. Downloading...")
     os.chdir(root +"/external_libs")
-    git_clone("https://github.com/Silverlan/util_ocio.git","util_ocio","feat/cxx_module")
+    git_clone("https://github.com/Silverlan/util_ocio.git","util_ocio")
 os.chdir(utilocio_root)
-reset_to_commit("7e1ff73ee7ea03ca7909e628fbcc45d7641e682e")
+reset_to_commit("15317395b2c0fd94d99c956855dcbd80c5866f20")
 
 if platform == "win32" and build_all:
 	########## glog ##########
