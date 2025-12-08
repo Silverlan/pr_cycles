@@ -190,7 +190,7 @@ static std::optional<std::string> prepare_texture(std::shared_ptr<msys::Texture>
 	}
 	absPath = "";
 	// Save the DDS image and make sure the file exists
-	if(static_cast<CGame*>(pragma::get_client_game())->SaveImage(*img, ddsPath, imgWriteInfo) && filemanager::find_local_path(ddsPath + ".dds", absPath)) {
+	if(static_cast<pragma::CGame*>(pragma::get_client_game())->SaveImage(*img, ddsPath, imgWriteInfo) && filemanager::find_local_path(ddsPath + ".dds", absPath)) {
 		outSuccess = true;
 		outConverted = true;
 		return absPath;

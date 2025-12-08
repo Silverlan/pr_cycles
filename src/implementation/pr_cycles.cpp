@@ -160,7 +160,7 @@ static void initialize_cycles_geometry(pragma::CSceneComponent &gameScene, pragm
 		pragma::BaseEnvCameraComponent::GetFrustumPlanes(planes, camData->nearZ, camData->farZ, camData->fov, camData->aspectRatio, camData->position, forward, up);
 	}
 	auto entSceneFilterEx = [&gameScene, &camData, &planes, enableFrustumCulling](pragma::ecs::BaseEntity &ent, bool useFrustumCullingIfEnabled) -> bool {
-		if(static_cast<CBaseEntity &>(ent).IsInScene(gameScene) == false)
+		if(static_cast<pragma::ecs::CBaseEntity &>(ent).IsInScene(gameScene) == false)
 			return false;
 		if(useFrustumCullingIfEnabled == false || enableFrustumCulling == false || camData.has_value() == false)
 			return true;
@@ -204,11 +204,11 @@ static void initialize_cycles_geometry(pragma::CSceneComponent &gameScene, pragm
 		auto renderC = ent->GetComponent<pragma::CRenderComponent>();
 		if(renderC.expired())
 			return;
-		std::function<bool(ModelMesh &, const umath::ScaledTransform &)> meshFilter = nullptr;
+		std::function<bool(pragma::geometry::ModelMesh &, const umath::ScaledTransform &)> meshFilter = nullptr;
 		if(renderC->IsExemptFromOcclusionCulling() == false) {
 			// We'll only do per-mesh culling for world entities
 			if(enableFrustumCulling && ent->IsWorld()) {
-				meshFilter = [&planes](ModelMesh &mesh, const umath::ScaledTransform &pose) -> bool {
+				meshFilter = [&planes](pragma::geometry::ModelMesh &mesh, const umath::ScaledTransform &pose) -> bool {
 					Vector3 min, max;
 					mesh.GetBounds(min, max);
 					auto center = (min + max) / 2.f;
@@ -224,7 +224,7 @@ static void initialize_cycles_geometry(pragma::CSceneComponent &gameScene, pragm
 				// Cull everything outside the camera's PVS
 				if(ent->IsWorld()) {
 					auto pos = ent->GetPosition();
-					meshFilter = [bspTree, node, pos, curFilter](ModelMesh &mesh, const umath::ScaledTransform &pose) -> bool {
+					meshFilter = [bspTree, node, pos, curFilter](pragma::geometry::ModelMesh &mesh, const umath::ScaledTransform &pose) -> bool {
 						if(curFilter && curFilter(mesh, pose) == false)
 							return false;
 						if(node == nullptr)
@@ -240,7 +240,7 @@ static void initialize_cycles_geometry(pragma::CSceneComponent &gameScene, pragm
 				else {
 #if 0
 					auto pos = ent->GetPosition();
-					meshFilter = [bspTree,node,pos,&renderC,curFilter](ModelMesh &mesh,const Vector3 &origin,const Quat &rot) -> bool {
+					meshFilter = [bspTree,node,pos,&renderC,curFilter](pragma::geometry::ModelMesh &mesh,const Vector3 &origin,const Quat &rot) -> bool {
 						if(curFilter && curFilter(mesh,origin,rot) == false)
 							return false;
 						if(node == nullptr)
@@ -315,7 +315,7 @@ static void initialize_cycles_scene_from_game_scene(pragma::CSceneComponent &gam
 	camData.aspectRatio = aspectRatio;
 	initialize_cycles_geometry(gameScene, scene.GetCache(), camData, sceneFlags, entFilter, entityList);
 	setup_light_sources(scene, [&gameScene, &lightFilter](pragma::ecs::BaseEntity &ent) -> bool {
-		if(static_cast<CBaseEntity &>(ent).IsInScene(gameScene) == false)
+		if(static_cast<pragma::ecs::CBaseEntity &>(ent).IsInScene(gameScene) == false)
 			return false;
 		return (lightFilter == nullptr || lightFilter(ent));
 	});
@@ -701,7 +701,7 @@ PR_EXPORT void pr_cycles_render_image(const pragma::rendering::cycles::SceneInfo
 	if(scene == nullptr)
 		return;
 	auto aspectRatio = renderImageSettings.width / static_cast<float>(renderImageSettings.height);
-	initialize_cycles_scene_from_game_scene(*static_cast<pragma::CSceneComponent*>(static_cast<CGame*>(pragma::get_client_game())->GetScene<pragma::CSceneComponent>()), *scene, renderImageInfo.camPose.GetOrigin(), renderImageInfo.camPose.GetRotation(), renderImageInfo.equirectPanorama, renderImageInfo.viewProjectionMatrix, renderImageInfo.nearZ, renderImageInfo.farZ,
+	initialize_cycles_scene_from_game_scene(*static_cast<pragma::CSceneComponent*>(static_cast<pragma::CGame*>(pragma::get_client_game())->GetScene<pragma::CSceneComponent>()), *scene, renderImageInfo.camPose.GetOrigin(), renderImageInfo.camPose.GetRotation(), renderImageInfo.equirectPanorama, renderImageInfo.viewProjectionMatrix, renderImageInfo.nearZ, renderImageInfo.farZ,
 	  renderImageInfo.fov, aspectRatio, static_cast<SceneFlags>(renderImageSettings.sceneFlags), entFilter, nullptr, renderImageInfo.entityList);
 	scene->Finalize();
 	std::string err;
@@ -710,7 +710,7 @@ PR_EXPORT void pr_cycles_render_image(const pragma::rendering::cycles::SceneInfo
 		return;
 	outJob = renderer->StartRender();
 }
-PR_EXPORT void pr_cycles_bake_ao(const pragma::rendering::cycles::SceneInfo &renderImageSettings, pragma::Model &mdl, uint32_t materialIndex, util::ParallelJob<uimg::ImageLayerSet> &outJob)
+PR_EXPORT void pr_cycles_bake_ao(const pragma::rendering::cycles::SceneInfo &renderImageSettings, pragma::asset::Model &mdl, uint32_t materialIndex, util::ParallelJob<uimg::ImageLayerSet> &outJob)
 {
 	outJob = {};
 	auto scene = setup_scene(pragma::scenekit::Scene::RenderMode::BakeAmbientOcclusion, renderImageSettings);
@@ -727,7 +727,7 @@ PR_EXPORT void pr_cycles_bake_ao(const pragma::rendering::cycles::SceneInfo &ren
 		static std::shared_ptr<pragma::modules::scenekit::ProgressiveTexture> prt = nullptr;
 		prt = std::make_shared<pragma::modules::scenekit::ProgressiveTexture>();
 		prt->Initialize(*renderer);
-		auto el = WGUI::GetInstance().Create<WITexturedRect>();
+		auto el = pragma::gui::WGUI::GetInstance().Create<WITexturedRect>();
 		el->SetSize(512, 512);
 		el->SetTexture(*prt->GetTexture());
 		el->SetZPos(10000);
@@ -756,8 +756,8 @@ PR_EXPORT void pr_cycles_bake_lightmaps(const pragma::rendering::cycles::SceneIn
 	auto scene = setup_scene(pragma::scenekit::Scene::RenderMode::BakeDiffuseLighting, renderImageSettings);
 	if(scene == nullptr)
 		return;
-	auto &gameScene = *static_cast<pragma::CSceneComponent*>(static_cast<CGame*>(pragma::get_client_game())->GetScene<pragma::CSceneComponent>());
-	setup_light_sources(*scene, [&gameScene](pragma::ecs::BaseEntity &ent) -> bool { return static_cast<CBaseEntity &>(ent).IsInScene(gameScene); });
+	auto &gameScene = *static_cast<pragma::CSceneComponent*>(static_cast<pragma::CGame*>(pragma::get_client_game())->GetScene<pragma::CSceneComponent>());
+	setup_light_sources(*scene, [&gameScene](pragma::ecs::BaseEntity &ent) -> bool { return static_cast<pragma::ecs::CBaseEntity &>(ent).IsInScene(gameScene); });
 	pragma::ecs::EntityIterator entIt {*pragma::get_client_game()};
 	entIt.AttachFilter<TEntityIteratorFilterComponent<pragma::CLightMapReceiverComponent>>();
 	for(auto *ent : entIt)
@@ -786,7 +786,7 @@ PR_EXPORT void pr_cycles_bake_lightmaps(const pragma::rendering::cycles::SceneIn
 			static std::shared_ptr<pragma::modules::scenekit::ProgressiveTexture> prt = nullptr;
 			prt = std::make_shared<pragma::modules::scenekit::ProgressiveTexture>();
 			prt->Initialize(*renderer);
-			auto el = WGUI::GetInstance().Create<WITexturedRect>();
+			auto el = pragma::gui::WGUI::GetInstance().Create<WITexturedRect>();
 			el->SetSize(512, 512);
 			el->SetTexture(*prt->GetTexture());
 			el->SetZPos(10000);
@@ -935,7 +935,7 @@ void PR_EXPORT pragma_initialize_lua(Lua::Interface &l)
 		                                                              return 1;
 	                                                              })},
 	    {"bake_ambient_occlusion", static_cast<int32_t (*)(lua::State *)>([](lua::State *l) -> int32_t {
-		     auto &mdl = Lua::Check<pragma::Model>(l, 1);
+		     auto &mdl = Lua::Check<pragma::asset::Model>(l, 1);
 		     auto materialIndex = Lua::CheckInt(l, 2);
 
 		     uint32_t width = 512;
@@ -2561,7 +2561,7 @@ void PR_EXPORT pragma_initialize_lua(Lua::Interface &l)
 	defScene.add_static_constant("DENOISE_MODE_OPTIX", umath::to_integral(pragma::scenekit::Scene::DenoiseMode::Optix));
 	defScene.add_static_constant("DENOISE_MODE_OPEN_IMAGE", umath::to_integral(pragma::scenekit::Scene::DenoiseMode::OpenImage));
 
-	defScene.def("SetAoBakeTarget", static_cast<void (scenekit::Scene::*)(pragma::Model &, uint32_t)>(&scenekit::Scene::SetAOBakeTarget));
+	defScene.def("SetAoBakeTarget", static_cast<void (scenekit::Scene::*)(pragma::asset::Model &, uint32_t)>(&scenekit::Scene::SetAOBakeTarget));
 	defScene.def("SetAoBakeTarget", static_cast<void (scenekit::Scene::*)(pragma::ecs::BaseEntity &, uint32_t)>(&scenekit::Scene::SetAOBakeTarget));
 	defScene.def("SetLightmapDataCache", &scenekit::Scene::SetLightmapDataCache);
 	defScene.def("AddLightmapBakeTarget", static_cast<void (scenekit::Scene::*)(pragma::ecs::BaseEntity &)>(&scenekit::Scene::AddLightmapBakeTarget));

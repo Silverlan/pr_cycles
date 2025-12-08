@@ -66,7 +66,7 @@ void scenekit::Scene::SetAOBakeTarget(pragma::ecs::BaseEntity &ent, uint32_t mat
 	m_rtScene->SetBakeTarget(*oAo);
 }
 
-void scenekit::Scene::SetAOBakeTarget(Model &mdl, uint32_t matIndex)
+void scenekit::Scene::SetAOBakeTarget(pragma::asset::Model &mdl, uint32_t matIndex)
 {
 	std::shared_ptr<pragma::scenekit::Object> oAo;
 	std::shared_ptr<pragma::scenekit::Object> oEnv;
@@ -145,7 +145,7 @@ void scenekit::Scene::BuildLightMapObject()
 {
 	if(m_lightMapTargets.empty())
 		return;
-	std::vector<ModelSubMesh *> targetMeshes {};
+	std::vector<pragma::geometry::ModelSubMesh *> targetMeshes {};
 	std::vector<util::Uuid> targetMeshEntityUuids;
 	std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> meshDatas;
 	for(auto &hEntWrapper : m_lightMapTargets) {
@@ -153,7 +153,7 @@ void scenekit::Scene::BuildLightMapObject()
 		if(hEnt.IsValid() == false || hEnt->GetModel() == nullptr)
 			continue;
 		auto &t = hEnt->GetPose();
-		std::vector<ModelSubMesh *> entMeshes;
+		std::vector<pragma::geometry::ModelSubMesh *> entMeshes;
 		auto meshes = m_cache->AddEntityMesh(*hEnt.get(), &entMeshes, nullptr, nullptr, "", t);
 		if(meshes.empty() == false) {
 			targetMeshes.reserve(targetMeshes.size() + entMeshes.size());
@@ -213,7 +213,7 @@ void scenekit::Scene::BuildLightMapObject()
 void scenekit::Scene::AddLightmapBakeTarget(pragma::ecs::BaseEntity &ent) {
 	m_lightMapTargets.push_back({&ent});
 }
-void scenekit::Scene::SetLightmapDataCache(LightmapDataCache *cache) { m_lightMapDataCache = cache ? cache->shared_from_this() : nullptr; }
+void scenekit::Scene::SetLightmapDataCache(pragma::rendering::LightmapDataCache *cache) { m_lightMapDataCache = cache ? cache->shared_from_this() : nullptr; }
 
 pragma::scenekit::PShader scenekit::Cache::CreateShader(msys::Material &mat, const std::string &meshName, const ShaderInfo &shaderInfo) const
 {
@@ -469,8 +469,8 @@ pragma::scenekit::PShader scenekit::Cache::CreateShader(msys::Material &mat, con
 				if(pShader)
 				{
 					auto renderFlags = ShaderParticle::RenderFlags::None;
-					auto ptcFlags = pShader->GetRenderFlags(**shaderInfo.particleSystem,pragma::ecs::ParticleRenderFlags::None);
-					if((*shaderInfo.particleSystem)->GetEffectiveAlphaMode() == pragma::ParticleAlphaMode::AdditiveByColor)
+					auto ptcFlags = pShader->GetRenderFlags(**shaderInfo.particleSystem,pragma::pts::ParticleRenderFlags::None);
+					if((*shaderInfo.particleSystem)->GetEffectiveAlphaMode() == pragma::rendering::ParticleAlphaMode::AdditiveByColor)
 						renderFlags |= ShaderParticle::RenderFlags::AdditiveBlendByColor;
 				}
 			}

@@ -176,7 +176,7 @@ static std::optional<std::string> prepare_texture(TextureInfo *texInfo, bool &ou
 	}
 	absPath = "";
 	// Save the DDS image and make sure the file exists
-	if(static_cast<CGame*>(pragma::get_client_game())->SaveImage(*img, ddsPath, imgWriteInfo) && FileManager::FindAbsolutePath(ddsPath + ".dds", absPath)) {
+	if(static_cast<pragma::CGame*>(pragma::get_client_game())->SaveImage(*img, ddsPath, imgWriteInfo) && FileManager::FindAbsolutePath(ddsPath + ".dds", absPath)) {
 		outSuccess = true;
 		outConverted = true;
 		return absPath;
@@ -230,9 +230,9 @@ pragma::modules::scenekit::Cache::Cache(pragma::scenekit::Scene::RenderMode rend
 	m_mdlCache->AddChunk(*m_shaderCache);
 }
 
-std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma::modules::scenekit::Cache::AddMeshList(Model &mdl, const std::vector<std::shared_ptr<ModelMesh>> &meshList, const std::string &meshName, pragma::ecs::BaseEntity *optEnt, const std::optional<umath::ScaledTransform> &opose,
-  uint32_t skinId, pragma::CModelComponent *optMdlC, pragma::CAnimatedComponent *optAnimC, const std::function<bool(ModelMesh &, const umath::ScaledTransform &)> &optMeshFilter, const std::function<bool(ModelSubMesh &, const umath::ScaledTransform &)> &optSubMeshFilter,
-  const std::function<void(ModelSubMesh &)> &optOnMeshAdded)
+std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma::modules::scenekit::Cache::AddMeshList(asset::Model &mdl, const std::vector<std::shared_ptr<pragma::geometry::ModelMesh>> &meshList, const std::string &meshName, pragma::ecs::BaseEntity *optEnt, const std::optional<umath::ScaledTransform> &opose,
+  uint32_t skinId, pragma::CModelComponent *optMdlC, pragma::CAnimatedComponent *optAnimC, const std::function<bool(pragma::geometry::ModelMesh &, const umath::ScaledTransform &)> &optMeshFilter, const std::function<bool(geometry::ModelSubMesh &, const umath::ScaledTransform &)> &optSubMeshFilter,
+  const std::function<void(geometry::ModelSubMesh &)> &optOnMeshAdded)
 {
 	auto pose = opose.has_value() ? *opose : umath::ScaledTransform {};
 	auto hasAlphas = false;
@@ -243,7 +243,7 @@ std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma:
 		if(optMeshFilter != nullptr && optMeshFilter(*mesh, pose) == false)
 			continue;
 		for(auto &subMesh : mesh->GetSubMeshes()) {
-			if(subMesh->GetGeometryType() != ModelSubMesh::GeometryType::Triangles || subMesh->GetTriangleCount() == 0 || (optSubMeshFilter != nullptr && optSubMeshFilter(*subMesh, pose) == false))
+			if(subMesh->GetGeometryType() != geometry::ModelSubMesh::GeometryType::Triangles || subMesh->GetTriangleCount() == 0 || (optSubMeshFilter != nullptr && optSubMeshFilter(*subMesh, pose) == false))
 				continue;
 			hasAlphas = hasAlphas || (subMesh->GetAlphaCount() > 0);
 
@@ -265,18 +265,18 @@ std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma:
 	return meshDatas;
 }
 
-std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma::modules::scenekit::Cache::AddModel(Model &mdl, const std::string &meshName, pragma::ecs::BaseEntity *optEnt, const std::optional<umath::ScaledTransform> &pose, uint32_t skinId, pragma::CModelComponent *optMdlC,
-  pragma::CAnimatedComponent *optAnimC, const std::function<bool(ModelMesh &, const umath::ScaledTransform &)> &optMeshFilter, const std::function<bool(ModelSubMesh &, const umath::ScaledTransform &)> &optSubMeshFilter, const std::function<void(ModelSubMesh &)> &optOnMeshAdded)
+std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma::modules::scenekit::Cache::AddModel(asset::Model &mdl, const std::string &meshName, pragma::ecs::BaseEntity *optEnt, const std::optional<umath::ScaledTransform> &pose, uint32_t skinId, pragma::CModelComponent *optMdlC,
+  pragma::CAnimatedComponent *optAnimC, const std::function<bool(pragma::geometry::ModelMesh &, const umath::ScaledTransform &)> &optMeshFilter, const std::function<bool(geometry::ModelSubMesh &, const umath::ScaledTransform &)> &optSubMeshFilter, const std::function<void(geometry::ModelSubMesh &)> &optOnMeshAdded)
 {
-	std::vector<std::shared_ptr<ModelMesh>> lodMeshes {};
+	std::vector<std::shared_ptr<pragma::geometry::ModelMesh>> lodMeshes {};
 	std::vector<uint32_t> bodyGroups {};
 	bodyGroups.resize(mdl.GetBodyGroupCount());
 	mdl.GetBodyGroupMeshes(bodyGroups, 0, lodMeshes);
 	return AddMeshList(mdl, lodMeshes, meshName, optEnt, pose, skinId, optMdlC, optAnimC, optMeshFilter, optSubMeshFilter, optOnMeshAdded);
 }
 
-std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma::modules::scenekit::Cache::AddEntityMesh(pragma::ecs::BaseEntity &ent, std::vector<ModelSubMesh *> *optOutTargetMeshes, const std::function<bool(ModelMesh &, const umath::ScaledTransform &)> &meshFilter,
-  const std::function<bool(ModelSubMesh &, const umath::ScaledTransform &)> &subMeshFilter, const std::string &nameSuffix, const std::optional<umath::ScaledTransform> &pose)
+std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma::modules::scenekit::Cache::AddEntityMesh(pragma::ecs::BaseEntity &ent, std::vector<geometry::ModelSubMesh *> *optOutTargetMeshes, const std::function<bool(pragma::geometry::ModelMesh &, const umath::ScaledTransform &)> &meshFilter,
+  const std::function<bool(geometry::ModelSubMesh &, const umath::ScaledTransform &)> &subMeshFilter, const std::string &nameSuffix, const std::optional<umath::ScaledTransform> &pose)
 {
 #if 0
 	if(m_renderMode == RenderMode::BakeDiffuseLighting && ent.IsWorld() == false)
@@ -315,7 +315,7 @@ std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma:
 	std::vector<std::shared_ptr<MeshData>> meshDatas;
 	if(mesh == nullptr) {
 		std::string name = "ent" + nameSuffix + "_" + std::to_string(ent.GetLocalIndex());
-		std::vector<ModelSubMesh *> tmpTargetMeshes {};
+		std::vector<geometry::ModelSubMesh *> tmpTargetMeshes {};
 		auto *targetMeshes = (optOutTargetMeshes != nullptr) ? optOutTargetMeshes : &tmpTargetMeshes;
 		targetMeshes->reserve(targetMeshes->size() + mdl->GetSubMeshCount());
 
@@ -323,7 +323,7 @@ std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma:
 		if(skyC.valid()) {
 			// Special case
 			auto &pose = ent.GetPose();
-			AddModel(*mdl, name, &ent, pose, ent.GetSkin(), mdlC, animC.get(), meshFilter, [&targetMeshes, &subMeshFilter](ModelSubMesh &mesh, const umath::ScaledTransform &pose) -> bool {
+			AddModel(*mdl, name, &ent, pose, ent.GetSkin(), mdlC, animC.get(), meshFilter, [&targetMeshes, &subMeshFilter](geometry::ModelSubMesh &mesh, const umath::ScaledTransform &pose) -> bool {
 				if(subMeshFilter && subMeshFilter(mesh, pose) == false)
 					return false;
 				targetMeshes->push_back(&mesh);
@@ -351,14 +351,14 @@ std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma:
 			return {};
 		}
 
-		auto fFilterMesh = [&subMeshFilter](ModelSubMesh &mesh, const umath::ScaledTransform &pose) -> bool { return !subMeshFilter || subMeshFilter(mesh, pose); };
-		auto fOnMeshAdded = [&targetMeshes](ModelSubMesh &mesh) { targetMeshes->push_back(&mesh); };
+		auto fFilterMesh = [&subMeshFilter](geometry::ModelSubMesh &mesh, const umath::ScaledTransform &pose) -> bool { return !subMeshFilter || subMeshFilter(mesh, pose); };
+		auto fOnMeshAdded = [&targetMeshes](geometry::ModelSubMesh &mesh) { targetMeshes->push_back(&mesh); };
 
 		auto renderC = ent.GetComponent<pragma::CRenderComponent>();
 		if(renderC.valid()) {
 			auto &lodGroup = renderC->GetLodMeshGroup(0);
 			auto &lodMeshes = renderC->GetLODMeshes();
-			std::vector<std::shared_ptr<ModelMesh>> meshes;
+			std::vector<std::shared_ptr<pragma::geometry::ModelMesh>> meshes;
 			meshes.reserve(lodGroup.second);
 			for(auto meshIdx = lodGroup.first; meshIdx < lodGroup.first + lodGroup.second; ++meshIdx)
 				meshes.push_back(lodMeshes.at(meshIdx));
@@ -380,8 +380,8 @@ std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma:
 	}
 	return meshDatas;
 }
-pragma::scenekit::PObject pragma::modules::scenekit::Cache::AddEntity(pragma::ecs::BaseEntity &ent, std::vector<ModelSubMesh *> *optOutTargetMeshes, const std::function<bool(ModelMesh &, const umath::ScaledTransform &)> &meshFilter,
-  const std::function<bool(ModelSubMesh &, const umath::ScaledTransform &)> &subMeshFilter, const std::string &nameSuffix)
+pragma::scenekit::PObject pragma::modules::scenekit::Cache::AddEntity(pragma::ecs::BaseEntity &ent, std::vector<geometry::ModelSubMesh *> *optOutTargetMeshes, const std::function<bool(pragma::geometry::ModelMesh &, const umath::ScaledTransform &)> &meshFilter,
+  const std::function<bool(geometry::ModelSubMesh &, const umath::ScaledTransform &)> &subMeshFilter, const std::string &nameSuffix)
 {
 	auto meshDatas = AddEntityMesh(ent, optOutTargetMeshes, meshFilter, subMeshFilter, nameSuffix);
 	if(meshDatas.empty())
@@ -420,7 +420,7 @@ static bool load_hair_strand_data(util::HairStrandData &strandData, const udm::L
 	return true;
 }
 
-std::shared_ptr<pragma::modules::scenekit::Cache::MeshData> pragma::modules::scenekit::Cache::CalcMeshData(Model &mdl, ModelSubMesh &mdlMesh, bool includeAlphas, bool includeWrinkles, pragma::CModelComponent *optMdlC, pragma::CAnimatedComponent *optAnimC)
+std::shared_ptr<pragma::modules::scenekit::Cache::MeshData> pragma::modules::scenekit::Cache::CalcMeshData(asset::Model &mdl, geometry::ModelSubMesh &mdlMesh, bool includeAlphas, bool includeWrinkles, pragma::CModelComponent *optMdlC, pragma::CAnimatedComponent *optAnimC)
 {
 	auto meshData = std::make_shared<MeshData>();
 	auto &meshVerts = mdlMesh.GetVertices();
@@ -565,19 +565,19 @@ std::shared_ptr<pragma::modules::scenekit::Cache::MeshData> pragma::modules::sce
 	return meshData;
 }
 
-msys::Material *pragma::modules::scenekit::Cache::GetMaterial(pragma::ecs::BaseEntity &ent, ModelSubMesh &subMesh, uint32_t skinId) const
+msys::Material *pragma::modules::scenekit::Cache::GetMaterial(pragma::ecs::BaseEntity &ent, geometry::ModelSubMesh &subMesh, uint32_t skinId) const
 {
 	auto mdlC = ent.GetModelComponent();
 	return mdlC ? GetMaterial(static_cast<pragma::CModelComponent &>(*mdlC), subMesh, skinId) : nullptr;
 }
 
-msys::Material *pragma::modules::scenekit::Cache::GetMaterial(Model &mdl, ModelSubMesh &subMesh, uint32_t skinId) const
+msys::Material *pragma::modules::scenekit::Cache::GetMaterial(asset::Model &mdl, geometry::ModelSubMesh &subMesh, uint32_t skinId) const
 {
 	auto texIdx = mdl.GetMaterialIndex(subMesh, skinId);
 	return texIdx.has_value() ? mdl.GetMaterial(*texIdx) : nullptr;
 }
 
-msys::Material *pragma::modules::scenekit::Cache::GetMaterial(pragma::CModelComponent &mdlC, ModelSubMesh &subMesh, uint32_t skinId) const
+msys::Material *pragma::modules::scenekit::Cache::GetMaterial(pragma::CModelComponent &mdlC, geometry::ModelSubMesh &subMesh, uint32_t skinId) const
 {
 	auto mdl = mdlC.GetModel();
 	if(mdl == nullptr)
@@ -586,7 +586,7 @@ msys::Material *pragma::modules::scenekit::Cache::GetMaterial(pragma::CModelComp
 	return mdlC.GetRenderMaterial(baseTexIdx, skinId);
 }
 
-pragma::scenekit::PShader pragma::modules::scenekit::Cache::CreateShader(const std::string &meshName, Model &mdl, ModelSubMesh &subMesh, pragma::ecs::BaseEntity *optEnt, uint32_t skinId) const
+pragma::scenekit::PShader pragma::modules::scenekit::Cache::CreateShader(const std::string &meshName, asset::Model &mdl, geometry::ModelSubMesh &subMesh, pragma::ecs::BaseEntity *optEnt, uint32_t skinId) const
 {
 	// Make sure all textures have finished loading
 	static_cast<msys::CMaterialManager &>(pragma::get_client_state()->GetMaterialManager()).GetTextureManager().WaitForAllPendingCompleted();
@@ -601,7 +601,7 @@ pragma::scenekit::PShader pragma::modules::scenekit::Cache::CreateShader(const s
 	return CreateShader(*mat, meshName, shaderInfo);
 }
 
-void pragma::modules::scenekit::Cache::AddMesh(Model &mdl, pragma::scenekit::Mesh &mesh, ModelSubMesh &mdlMesh, pragma::CModelComponent *optMdlC, pragma::CAnimatedComponent *optAnimC)
+void pragma::modules::scenekit::Cache::AddMesh(asset::Model &mdl, pragma::scenekit::Mesh &mesh, geometry::ModelSubMesh &mdlMesh, pragma::CModelComponent *optMdlC, pragma::CAnimatedComponent *optAnimC)
 {
 	auto meshData = CalcMeshData(mdl, mdlMesh, mesh.HasAlphas(), mesh.HasWrinkles(), optMdlC, optAnimC);
 	if(meshData == nullptr)
@@ -660,11 +660,11 @@ void pragma::modules::scenekit::Cache::AddMeshDataToMesh(pragma::scenekit::Mesh 
 		mesh.AddHairStrandData(*meshData.hairStrandData, shaderIdx);
 }
 
-void pragma::modules::scenekit::Cache::AddAOBakeTarget(pragma::ecs::BaseEntity *optEnt, Model &mdl, uint32_t matIndex, std::shared_ptr<pragma::scenekit::Object> &oAo, std::shared_ptr<pragma::scenekit::Object> &oEnv)
+void pragma::modules::scenekit::Cache::AddAOBakeTarget(pragma::ecs::BaseEntity *optEnt, asset::Model &mdl, uint32_t matIndex, std::shared_ptr<pragma::scenekit::Object> &oAo, std::shared_ptr<pragma::scenekit::Object> &oEnv)
 {
 	std::vector<std::shared_ptr<MeshData>> materialMeshes;
 	std::vector<std::shared_ptr<MeshData>> envMeshes;
-	auto fFilterMeshes = [this, matIndex, &materialMeshes, &envMeshes, &mdl](ModelSubMesh &mesh, const umath::ScaledTransform &pose) -> bool {
+	auto fFilterMeshes = [this, matIndex, &materialMeshes, &envMeshes, &mdl](geometry::ModelSubMesh &mesh, const umath::ScaledTransform &pose) -> bool {
 		auto meshData = CalcMeshData(mdl, mesh, false, false);
 		meshData->shader = CreateShader(GetUniqueName(), mdl, mesh);
 		auto texIdx = mdl.GetMaterialIndex(mesh);
@@ -708,4 +708,4 @@ void pragma::modules::scenekit::Cache::AddAOBakeTarget(pragma::ecs::BaseEntity &
 	AddAOBakeTarget(&ent, *mdl, matIndex, oAo, oEnv);
 }
 
-void pragma::modules::scenekit::Cache::AddAOBakeTarget(Model &mdl, uint32_t matIndex, std::shared_ptr<pragma::scenekit::Object> &oAo, std::shared_ptr<pragma::scenekit::Object> &oEnv) { AddAOBakeTarget(nullptr, mdl, matIndex, oAo, oEnv); }
+void pragma::modules::scenekit::Cache::AddAOBakeTarget(asset::Model &mdl, uint32_t matIndex, std::shared_ptr<pragma::scenekit::Object> &oAo, std::shared_ptr<pragma::scenekit::Object> &oEnv) { AddAOBakeTarget(nullptr, mdl, matIndex, oAo, oEnv); }

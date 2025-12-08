@@ -23,23 +23,23 @@ export namespace pragma::modules::scenekit {
 		};
 		Cache(pragma::scenekit::Scene::RenderMode renderMode);
 		void AddParticleSystem(pragma::ecs::CParticleSystemComponent &ptc, const Vector3 &camPos, const Mat4 &vp, float nearZ, float farZ);
-		pragma::scenekit::PObject AddEntity(pragma::ecs::BaseEntity &ent, std::vector<ModelSubMesh *> *optOutTargetMeshes = nullptr, const std::function<bool(ModelMesh &, const umath::ScaledTransform &)> &meshFilter = nullptr,
-		  const std::function<bool(ModelSubMesh &, const umath::ScaledTransform &)> &subMeshFilter = nullptr, const std::string &nameSuffix = "");
-		std::vector<std::shared_ptr<MeshData>> AddEntityMesh(pragma::ecs::BaseEntity &ent, std::vector<ModelSubMesh *> *optOutTargetMeshes = nullptr, const std::function<bool(ModelMesh &, const umath::ScaledTransform &)> &meshFilter = nullptr,
-		  const std::function<bool(ModelSubMesh &, const umath::ScaledTransform &)> &subMeshFilter = nullptr, const std::string &nameSuffix = "", const std::optional<umath::ScaledTransform> &pose = {});
-		std::vector<std::shared_ptr<MeshData>> AddModel(Model &mdl, const std::string &meshName, pragma::ecs::BaseEntity *optEnt = nullptr, const std::optional<umath::ScaledTransform> &pose = {}, uint32_t skinId = 0, CModelComponent *optMdlC = nullptr, CAnimatedComponent *optAnimC = nullptr,
-		  const std::function<bool(ModelMesh &, const umath::ScaledTransform &)> &optMeshFilter = nullptr, const std::function<bool(ModelSubMesh &, const umath::ScaledTransform &)> &optSubMeshFilter = nullptr, const std::function<void(ModelSubMesh &)> &optOnMeshAdded = nullptr);
-		std::vector<std::shared_ptr<MeshData>> AddMeshList(Model &mdl, const std::vector<std::shared_ptr<ModelMesh>> &meshList, const std::string &meshName, pragma::ecs::BaseEntity *optEnt = nullptr, const std::optional<umath::ScaledTransform> &pose = {}, uint32_t skinId = 0,
-		  CModelComponent *optMdlC = nullptr, CAnimatedComponent *optAnimC = nullptr, const std::function<bool(ModelMesh &, const umath::ScaledTransform &)> &optMeshFilter = nullptr, const std::function<bool(ModelSubMesh &, const umath::ScaledTransform &)> &optSubMeshFilter = nullptr,
-		  const std::function<void(ModelSubMesh &)> &optOnMeshAdded = nullptr);
+		pragma::scenekit::PObject AddEntity(pragma::ecs::BaseEntity &ent, std::vector<geometry::ModelSubMesh *> *optOutTargetMeshes = nullptr, const std::function<bool(pragma::geometry::ModelMesh &, const umath::ScaledTransform &)> &meshFilter = nullptr,
+		  const std::function<bool(geometry::ModelSubMesh &, const umath::ScaledTransform &)> &subMeshFilter = nullptr, const std::string &nameSuffix = "");
+		std::vector<std::shared_ptr<MeshData>> AddEntityMesh(pragma::ecs::BaseEntity &ent, std::vector<geometry::ModelSubMesh *> *optOutTargetMeshes = nullptr, const std::function<bool(pragma::geometry::ModelMesh &, const umath::ScaledTransform &)> &meshFilter = nullptr,
+		  const std::function<bool(geometry::ModelSubMesh &, const umath::ScaledTransform &)> &subMeshFilter = nullptr, const std::string &nameSuffix = "", const std::optional<umath::ScaledTransform> &pose = {});
+		std::vector<std::shared_ptr<MeshData>> AddModel(asset::Model &mdl, const std::string &meshName, pragma::ecs::BaseEntity *optEnt = nullptr, const std::optional<umath::ScaledTransform> &pose = {}, uint32_t skinId = 0, CModelComponent *optMdlC = nullptr, CAnimatedComponent *optAnimC = nullptr,
+		  const std::function<bool(pragma::geometry::ModelMesh &, const umath::ScaledTransform &)> &optMeshFilter = nullptr, const std::function<bool(geometry::ModelSubMesh &, const umath::ScaledTransform &)> &optSubMeshFilter = nullptr, const std::function<void(geometry::ModelSubMesh &)> &optOnMeshAdded = nullptr);
+		std::vector<std::shared_ptr<MeshData>> AddMeshList(asset::Model &mdl, const std::vector<std::shared_ptr<pragma::geometry::ModelMesh>> &meshList, const std::string &meshName, pragma::ecs::BaseEntity *optEnt = nullptr, const std::optional<umath::ScaledTransform> &pose = {}, uint32_t skinId = 0,
+		  CModelComponent *optMdlC = nullptr, CAnimatedComponent *optAnimC = nullptr, const std::function<bool(pragma::geometry::ModelMesh &, const umath::ScaledTransform &)> &optMeshFilter = nullptr, const std::function<bool(geometry::ModelSubMesh &, const umath::ScaledTransform &)> &optSubMeshFilter = nullptr,
+		  const std::function<void(geometry::ModelSubMesh &)> &optOnMeshAdded = nullptr);
 		pragma::scenekit::PMesh BuildMesh(const std::string &meshName, const std::vector<std::shared_ptr<MeshData>> &meshDatas, const std::optional<umath::ScaledTransform> &pose = {}) const;
 		void AddAOBakeTarget(pragma::ecs::BaseEntity &ent, uint32_t matIndex, std::shared_ptr<pragma::scenekit::Object> &oAo, std::shared_ptr<pragma::scenekit::Object> &oEnv);
-		void AddAOBakeTarget(Model &mdl, uint32_t matIndex, std::shared_ptr<pragma::scenekit::Object> &oAo, std::shared_ptr<pragma::scenekit::Object> &oEnv);
+		void AddAOBakeTarget(asset::Model &mdl, uint32_t matIndex, std::shared_ptr<pragma::scenekit::Object> &oAo, std::shared_ptr<pragma::scenekit::Object> &oEnv);
 		pragma::scenekit::ModelCache &GetModelCache() const { return *m_mdlCache; }
 		pragma::scenekit::ShaderCache &GetShaderCache() const { return *m_shaderCache; }
 		std::unordered_map<pragma::scenekit::Shader *, std::shared_ptr<Shader>> &GetRTShaderToShaderTable() const { return m_rtShaderToShader; }
 	  private:
-		void AddAOBakeTarget(pragma::ecs::BaseEntity *optEnt, Model &mdl, uint32_t matIndex, std::shared_ptr<pragma::scenekit::Object> &oAo, std::shared_ptr<pragma::scenekit::Object> &oEnv);
+		void AddAOBakeTarget(pragma::ecs::BaseEntity *optEnt, asset::Model &mdl, uint32_t matIndex, std::shared_ptr<pragma::scenekit::Object> &oAo, std::shared_ptr<pragma::scenekit::Object> &oEnv);
 		struct ModelCacheInstance {
 			pragma::scenekit::PMesh mesh = nullptr;
 			uint32_t skin = 0;
@@ -48,20 +48,20 @@ export namespace pragma::modules::scenekit {
 			ShaderInfo();
 			// These are only required if the shader is used for eyeballs
 			std::optional<pragma::ecs::BaseEntity *> entity = {};
-			std::optional<ModelSubMesh *> subMesh = {};
+			std::optional<geometry::ModelSubMesh *> subMesh = {};
 
 			std::optional<pragma::ecs::CParticleSystemComponent *> particleSystem = {};
 			std::optional<const void *> particle = {};
 		};
-		msys::Material *GetMaterial(Model &mdl, ModelSubMesh &subMesh, uint32_t skinId) const;
-		msys::Material *GetMaterial(pragma::CModelComponent &mdlC, ModelSubMesh &subMesh, uint32_t skinId) const;
-		msys::Material *GetMaterial(pragma::ecs::BaseEntity &ent, ModelSubMesh &subMesh, uint32_t skinId) const;
+		msys::Material *GetMaterial(asset::Model &mdl, geometry::ModelSubMesh &subMesh, uint32_t skinId) const;
+		msys::Material *GetMaterial(pragma::CModelComponent &mdlC, geometry::ModelSubMesh &subMesh, uint32_t skinId) const;
+		msys::Material *GetMaterial(pragma::ecs::BaseEntity &ent, geometry::ModelSubMesh &subMesh, uint32_t skinId) const;
 		void AddMeshDataToMesh(pragma::scenekit::Mesh &mesh, const MeshData &meshData, const std::optional<umath::ScaledTransform> &pose = {}) const;
-		void AddMesh(Model &mdl, pragma::scenekit::Mesh &mesh, ModelSubMesh &mdlMesh, pragma::CModelComponent *optMdlC = nullptr, pragma::CAnimatedComponent *optAnimC = nullptr);
+		void AddMesh(asset::Model &mdl, pragma::scenekit::Mesh &mesh, geometry::ModelSubMesh &mdlMesh, pragma::CModelComponent *optMdlC = nullptr, pragma::CAnimatedComponent *optAnimC = nullptr);
 		std::string GetUniqueName() { return "internal" + std::to_string(m_uniqueNameIndex++); };
-		std::shared_ptr<MeshData> CalcMeshData(Model &mdl, ModelSubMesh &mdlMesh, bool includeAlphas, bool includeWrinkles, pragma::CModelComponent *optMdlC = nullptr, pragma::CAnimatedComponent *optAnimC = nullptr);
+		std::shared_ptr<MeshData> CalcMeshData(asset::Model &mdl, geometry::ModelSubMesh &mdlMesh, bool includeAlphas, bool includeWrinkles, pragma::CModelComponent *optMdlC = nullptr, pragma::CAnimatedComponent *optAnimC = nullptr);
 		pragma::scenekit::PShader CreateShader(msys::Material &mat, const std::string &meshName, const ShaderInfo &shaderInfo = {}) const;
-		pragma::scenekit::PShader CreateShader(const std::string &meshName, Model &mdl, ModelSubMesh &subMesh, pragma::ecs::BaseEntity *optEnt = nullptr, uint32_t skinId = 0) const;
+		pragma::scenekit::PShader CreateShader(const std::string &meshName, asset::Model &mdl, geometry::ModelSubMesh &subMesh, pragma::ecs::BaseEntity *optEnt = nullptr, uint32_t skinId = 0) const;
 		uint32_t m_uniqueNameIndex = 0;
 		std::unordered_map<std::string, std::vector<ModelCacheInstance>> m_modelCache;
 		mutable std::unordered_map<msys::Material *, size_t> m_materialToShader;
@@ -77,10 +77,10 @@ export namespace pragma::modules::scenekit {
 		Scene(pragma::scenekit::Scene &rtScene);
 		void AddSkybox(const std::string &texture);
 		void Add3DSkybox(pragma::CSceneComponent &gameScene, pragma::CSkyCameraComponent &skyCam, const Vector3 &camPos);
-		void SetAOBakeTarget(Model &mdl, uint32_t matIndex);
+		void SetAOBakeTarget(asset::Model &mdl, uint32_t matIndex);
 		void SetAOBakeTarget(pragma::ecs::BaseEntity &ent, uint32_t matIndex);
 		void AddLightmapBakeTarget(pragma::ecs::BaseEntity &ent);
-		void SetLightmapDataCache(LightmapDataCache *cache);
+		void SetLightmapDataCache(rendering::LightmapDataCache *cache);
 		void Finalize();
 
 		pragma::scenekit::Object *FindObject(const std::string &name);
@@ -98,7 +98,7 @@ export namespace pragma::modules::scenekit {
 		void BuildLightMapObject();
 
 		std::vector<pragma::EntityHandleWrapper> m_lightMapTargets {};
-		std::shared_ptr<LightmapDataCache> m_lightMapDataCache {};
+		std::shared_ptr<rendering::LightmapDataCache> m_lightMapDataCache {};
 		std::shared_ptr<Cache> m_cache = nullptr;
 		std::shared_ptr<pragma::scenekit::Scene> m_rtScene = nullptr;
 		bool m_finalized = false;

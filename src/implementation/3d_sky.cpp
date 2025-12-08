@@ -11,10 +11,10 @@ using namespace pragma::modules;
 
 void scenekit::Scene::Add3DSkybox(pragma::CSceneComponent &gameScene, pragma::CSkyCameraComponent &skyCam, const Vector3 &camPos)
 {
-	std::unordered_map<CBaseEntity *, std::unordered_set<ModelSubMesh *>> entMeshes;
+	std::unordered_map<pragma::ecs::CBaseEntity *, std::unordered_set<pragma::geometry::ModelSubMesh *>> entMeshes;
 	auto fIterateRenderQueue = [&entMeshes](pragma::rendering::RenderQueue &renderQueue) {
 		for(auto &item : renderQueue.queue) {
-			auto *ent = static_cast<CBaseEntity *>(pragma::get_client_game()->GetEntityByLocalIndex(item.entity));
+			auto *ent = static_cast<pragma::ecs::CBaseEntity *>(pragma::get_client_game()->GetEntityByLocalIndex(item.entity));
 			if(!ent)
 				continue;
 			auto renderC = ent->GetComponent<pragma::CRenderComponent>();
@@ -23,7 +23,7 @@ void scenekit::Scene::Add3DSkybox(pragma::CSceneComponent &gameScene, pragma::CS
 			auto &renderMeshes = renderC->GetRenderMeshes();
 			auto itEnt = entMeshes.find(ent);
 			if(itEnt == entMeshes.end())
-				itEnt = entMeshes.insert(std::make_pair(ent, std::unordered_set<pragma::ModelSubMesh *> {})).first;
+				itEnt = entMeshes.insert(std::make_pair(ent, std::unordered_set<pragma::geometry::ModelSubMesh *> {})).first;
 			for(auto &mesh : renderMeshes)
 				itEnt->second.insert(mesh.get());
 		}
@@ -33,12 +33,12 @@ void scenekit::Scene::Add3DSkybox(pragma::CSceneComponent &gameScene, pragma::CS
 	auto translucentRenderQueue = pragma::rendering::RenderQueue::Create("unirender_3d_sky_translucent");
 
 	pragma::rendering::RenderMask inclusionMask, exclusionMask;
-	static_cast<CGame*>(pragma::get_client_game())->GetPrimaryCameraRenderMask(inclusionMask, exclusionMask);
-	auto mask = static_cast<CGame*>(pragma::get_client_game())->GetInclusiveRenderMasks();
+	static_cast<pragma::CGame*>(pragma::get_client_game())->GetPrimaryCameraRenderMask(inclusionMask, exclusionMask);
+	auto mask = static_cast<pragma::CGame*>(pragma::get_client_game())->GetInclusiveRenderMasks();
 	mask |= inclusionMask;
 	mask &= ~exclusionMask;
 
-	skyCam.BuildSkyMeshRenderQueues(gameScene, RenderFlags::All, mask, false /* enableClipping */, *renderQueue, *translucentRenderQueue);
+	skyCam.BuildSkyMeshRenderQueues(gameScene, rendering::RenderFlags::All, mask, false /* enableClipping */, *renderQueue, *translucentRenderQueue);
 	fIterateRenderQueue(*renderQueue);
 	fIterateRenderQueue(*translucentRenderQueue);
 
@@ -47,7 +47,7 @@ void scenekit::Scene::Add3DSkybox(pragma::CSceneComponent &gameScene, pragma::CS
 	for(auto &pair : entMeshes) {
 		auto &subMeshes = pair.second;
 		auto entObj = m_cache->AddEntity(
-		  *pair.first, nullptr, nullptr, [&subMeshes](pragma::ModelSubMesh &subMesh, const umath::ScaledTransform &pose) -> bool { return subMeshes.find(&subMesh) != subMeshes.end(); }, "3d_sky");
+		  *pair.first, nullptr, nullptr, [&subMeshes](pragma::geometry::ModelSubMesh &subMesh, const umath::ScaledTransform &pose) -> bool { return subMeshes.find(&subMesh) != subMeshes.end(); }, "3d_sky");
 		if(!entObj)
 			continue;
 		auto entPos = entObj->GetPos();

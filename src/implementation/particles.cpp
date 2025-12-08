@@ -26,7 +26,7 @@ static Mat3 get_rotation_matrix(Vector4 q)
 	  2.0 * q.x * q.z + 2.0 * q.y * q.w, 2.0 * q.y * q.z - 2.0 * q.x * q.w, 1.0 - 2.0 * umath::pow2(q.x) - 2.0 * umath::pow2(q.y));
 }
 
-static Vector3 get_corner_particle_vertex_position(const pragma::ecs::CParticleSystemComponent::ParticleData &pt, const Vector3 &camPos, pragma::ecs::ParticleOrientationType orientation, const Vector2 &vertPos, const Vector3 &camUpWs, const Vector3 &camRightWs, float nearZ,
+static Vector3 get_corner_particle_vertex_position(const pragma::ecs::CParticleSystemComponent::ParticleData &pt, const Vector3 &camPos, pragma::pts::ParticleOrientationType orientation, const Vector2 &vertPos, const Vector3 &camUpWs, const Vector3 &camRightWs, float nearZ,
   float farZ)
 {
 	Vector3 particleCenterWs {pt.position.x, pt.position.y, pt.position.z};
@@ -36,18 +36,18 @@ static Vector3 get_corner_particle_vertex_position(const pragma::ecs::CParticleS
 	Vector3 right {};
 	Vector3 up {};
 	switch(orientation) {
-	case pragma::ecs::ParticleOrientationType::Upright:
+	case pragma::pts::ParticleOrientationType::Upright:
 		{
 			auto dir = camUpWs; // 'camUp_ws' is the particle world-rotation if this orientation type is selected
 			right = uvec::cross(normalize(particleCenterWs - camPos), dir);
 			up = -dir;
 			break;
 		}
-	case pragma::ecs::ParticleOrientationType::Static:
+	case pragma::pts::ParticleOrientationType::Static:
 		right = uvec::UP;
 		up = camUpWs;
 		break;
-	case pragma::ecs::ParticleOrientationType::World:
+	case pragma::pts::ParticleOrientationType::World:
 		up = -uvec::get_normal(camUpWs);
 		right = -uvec::get_normal(camRightWs);
 		vsize = Vector2 {nearZ, farZ};
@@ -81,7 +81,7 @@ void scenekit::Cache::AddParticleSystem(pragma::ecs::CParticleSystemComponent &p
 	float ptNearZ, ptFarZ;
 	auto orientationType = ptc.GetOrientationType();
 	pShader->GetParticleSystemOrientationInfo(vp, ptc, orientationType, camUpWs, camRightWs, ptNearZ, ptFarZ, mat, nearZ, farZ);
-	auto renderFlags = pShader->GetRenderFlags(ptc, pragma::ecs::ParticleRenderFlags::None);
+	auto renderFlags = pShader->GetRenderFlags(ptc, pragma::pts::ParticleRenderFlags::None);
 
 	ShaderInfo shaderInfo {};
 	shaderInfo.particleSystem = &ptc;
@@ -118,7 +118,7 @@ void scenekit::Cache::AddParticleSystem(pragma::ecs::CParticleSystemComponent &p
 		if(shader == nullptr)
 			continue;
 #if 0
-		shader->SetFlags(pragma::scenekit::Shader::Flags::AdditiveByColor,alphaMode == ParticleAlphaMode::AdditiveByColor);
+		shader->SetFlags(pragma::scenekit::Shader::Flags::AdditiveByColor,alphaMode == pragma::rendering::ParticleAlphaMode::AdditiveByColor);
 		shader->SetAlphaMode(AlphaMode::Blend);
 		auto *shaderModAlbedo = dynamic_cast<pragma::scenekit::ShaderModuleAlbedo*>(shader.get());
 		auto *shaderModEmission = dynamic_cast<pragma::scenekit::ShaderModuleEmission*>(shader.get());
