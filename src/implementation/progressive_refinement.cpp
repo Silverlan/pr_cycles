@@ -14,9 +14,9 @@ using namespace pragma::modules::scenekit;
 
 DenoiseTexture::DenoiseTexture(uint32_t w, uint32_t h)
 {
-	m_inputImage = uimg::ImageBuffer::Create(w, h, uimg::Format::RGB_FLOAT);
-	m_denoisedImage = uimg::ImageBuffer::Create(w, h, uimg::Format::RGB_FLOAT);
-	m_outputImage = uimg::ImageBuffer::Create(w, h, uimg::Format::RGBA_HDR);
+	m_inputImage = image::ImageBuffer::Create(w, h, image::Format::RGB_FLOAT);
+	m_denoisedImage = image::ImageBuffer::Create(w, h, image::Format::RGB_FLOAT);
+	m_outputImage = image::ImageBuffer::Create(w, h, image::Format::RGBA_HDR);
 	m_running = true;
 	m_thread = std::thread {[this]() {
 		while(m_running)
@@ -51,7 +51,7 @@ void DenoiseTexture::AppendTile(pragma::scenekit::TileManager::TileData &&tileDa
 	m_pendingTiles.push(std::move(tileData));
 	m_tileMutex.unlock();
 }
-std::shared_ptr<uimg::ImageBuffer> DenoiseTexture::GetDenoisedImageData() const { return m_outputImage; }
+std::shared_ptr<pragma::image::ImageBuffer> DenoiseTexture::GetDenoisedImageData() const { return m_outputImage; }
 
 void DenoiseTexture::Denoise() { m_shouldDenoise = true; }
 bool DenoiseTexture::IsDenoising() const { return m_denoisingState == DenoisingState::Denoising; }

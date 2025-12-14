@@ -47,7 +47,7 @@ void scenekit::Scene::Add3DSkybox(pragma::CSceneComponent &gameScene, pragma::CS
 	for(auto &pair : entMeshes) {
 		auto &subMeshes = pair.second;
 		auto entObj = m_cache->AddEntity(
-		  *pair.first, nullptr, nullptr, [&subMeshes](pragma::geometry::ModelSubMesh &subMesh, const umath::ScaledTransform &pose) -> bool { return subMeshes.find(&subMesh) != subMeshes.end(); }, "3d_sky");
+		  *pair.first, nullptr, nullptr, [&subMeshes](pragma::geometry::ModelSubMesh &subMesh, const pragma::math::ScaledTransform &pose) -> bool { return subMeshes.find(&subMesh) != subMeshes.end(); }, "3d_sky");
 		if(!entObj)
 			continue;
 		auto entPos = entObj->GetPos();

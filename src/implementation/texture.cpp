@@ -10,23 +10,23 @@ static std::optional<std::string> get_abs_error_texture_path()
 {
 	std::string errTexPath = "materials\\error.dds";
 	std::string absPath;
-	if(filemanager::find_local_path(errTexPath, absPath))
+	if(pragma::fs::find_local_path(errTexPath, absPath))
 		return absPath;
 	return {};
 }
 
 enum class PreparedTextureInputFlags : uint8_t { None = 0u, CanBeEnvMap = 1u };
 enum class PreparedTextureOutputFlags : uint8_t { None = 0u, Envmap = 1u };
-namespace umath::scoped_enum::bitwise {
+namespace pragma::math::scoped_enum::bitwise {
 	template<>
 	struct enable_bitwise_operators<PreparedTextureInputFlags> : std::true_type {};
 }
-namespace umath::scoped_enum::bitwise {
+namespace pragma::math::scoped_enum::bitwise {
 	template<>
 	struct enable_bitwise_operators<PreparedTextureOutputFlags> : std::true_type {};
 }
 
-static std::optional<std::string> prepare_texture(std::shared_ptr<msys::Texture> &tex, bool &outSuccess, bool &outConverted, PreparedTextureInputFlags inFlags, PreparedTextureOutputFlags *optOutFlags, const std::optional<std::string> &defaultTexture, bool translucent)
+static std::optional<std::string> prepare_texture(std::shared_ptr<pragma::material::Texture> &tex, bool &outSuccess, bool &outConverted, PreparedTextureInputFlags inFlags, PreparedTextureOutputFlags *optOutFlags, const std::optional<std::string> &defaultTexture, bool translucent)
 {
 	if(optOutFlags)
 		*optOutFlags = PreparedTextureOutputFlags::None;
@@ -38,7 +38,7 @@ static std::optional<std::string> prepare_texture(std::shared_ptr<msys::Texture>
 	if(tex == nullptr || tex->IsLoaded() == false) {
 		tex = nullptr;
 		if(defaultTexture.has_value()) {
-			auto &texManager = static_cast<msys::CMaterialManager &>(pragma::get_client_state()->GetMaterialManager()).GetTextureManager();
+			auto &texManager = static_cast<pragma::material::CMaterialManager &>(pragma::get_client_state()->GetMaterialManager()).GetTextureManager();
 			auto ptrTex = texManager.LoadAsset(*defaultTexture);
 			if(ptrTex != nullptr) {
 				texName = *defaultTexture;
@@ -57,7 +57,7 @@ static std::optional<std::string> prepare_texture(std::shared_ptr<msys::Texture>
 	{
 	TextureManager::LoadInfo loadInfo {};
 	loadInfo.flags = TextureLoadFlags::LoadInstantly;
-	static_cast<msys::CMaterialManager&>(pragma::get_client_state()->GetMaterialManager()).GetTextureManager().Load(*pragma::get_cengine(),texInfo->name,loadInfo);
+	static_cast<material::CMaterialManager&>(pragma::get_client_state()->GetMaterialManager()).GetTextureManager().Load(*pragma::get_cengine(),texInfo->name,loadInfo);
 	if(tex->IsLoaded() == false)
 	return get_abs_error_texture_path();
 	}
@@ -68,7 +68,7 @@ static std::optional<std::string> prepare_texture(std::shared_ptr<msys::Texture>
 	auto *img = &vkTex->GetImage();
 	auto isCubemap = img->IsCubemap();
 	if(isCubemap) {
-		if(umath::is_flag_set(inFlags, PreparedTextureInputFlags::CanBeEnvMap) == false)
+		if(pragma::math::is_flag_set(inFlags, PreparedTextureInputFlags::CanBeEnvMap) == false)
 			return {};
 		// Image is a cubemap, which Cycles doesn't support! We'll have to convert it to a equirectangular image and use that instead.
 		auto &shader = static_cast<pragma::ShaderCubemapToEquirectangular &>(*pragma::get_cengine()->GetShader("cubemap_to_equirectangular"));
@@ -95,7 +95,7 @@ static std::optional<std::string> prepare_texture(std::shared_ptr<msys::Texture>
 	std::string absPath;
 	texPath += "." + ext;
 	// Check if a version of the texture already exists, in which case we can just use it directly!
-	if(filemanager::find_local_path(texPath, absPath)) {
+	if(pragma::fs::find_local_path(texPath, absPath)) {
 		outSuccess = true;
 		return absPath;
 	}
@@ -107,13 +107,13 @@ static std::optional<std::string> prepare_texture(std::shared_ptr<msys::Texture>
 
 	std::string baseOutputPath = "addons/converted/";
 	if(format == Format::PNG) {
-		auto imgBuf = img->ToHostImageBuffer(uimg::Format::RGBA8, prosper::ImageLayout::ShaderReadOnlyOptimal);
+		auto imgBuf = img->ToHostImageBuffer(pragma::image::Format::RGBA8, prosper::ImageLayout::ShaderReadOnlyOptimal);
 		auto fullPath = baseOutputPath + texPath;
-		FileManager::CreatePath(ufile::get_path_from_filename(fullPath).c_str());
-		auto f = filemanager::open_file(fullPath, filemanager::FileMode::Write | filemanager::FileMode::Binary);
-		fsys::File fp {f};
-		uimg::save_image(fp, *imgBuf, uimg::ImageFormat::PNG);
-		if(filemanager::find_local_path(texPath, absPath)) {
+		pragma::fs::create_path(ufile::get_path_from_filename(fullPath));
+		auto f = pragma::fs::open_file(fullPath, pragma::fs::FileMode::Write | pragma::fs::FileMode::Binary);
+		pragma::fs::File fp {f};
+		pragma::image::save_image(fp, *imgBuf, pragma::image::ImageFormat::PNG);
+		if(pragma::fs::find_local_path(texPath, absPath)) {
 			outSuccess = true;
 			return absPath;
 		}
@@ -122,75 +122,75 @@ static std::optional<std::string> prepare_texture(std::shared_ptr<msys::Texture>
 
 	// Output path for the DDS-file we're about to create
 	auto ddsPath = baseOutputPath + "materials/" + texName;
-	uimg::TextureInfo imgWriteInfo {};
-	imgWriteInfo.containerFormat = uimg::TextureInfo::ContainerFormat::DDS; // Cycles doesn't support KTX
-	if(tex->HasFlag(msys::Texture::Flags::SRGB))
-		imgWriteInfo.flags |= uimg::TextureInfo::Flags::SRGB;
+	pragma::image::TextureInfo imgWriteInfo {};
+	imgWriteInfo.containerFormat = pragma::image::TextureInfo::ContainerFormat::DDS; // Cycles doesn't support KTX
+	if(tex->HasFlag(pragma::material::Texture::Flags::SRGB))
+		imgWriteInfo.flags |= pragma::image::TextureInfo::Flags::SRGB;
 
 	// Try to determine appropriate formats
-	if(tex->HasFlag(msys::Texture::Flags::NormalMap)) {
-		imgWriteInfo.inputFormat = uimg::TextureInfo::InputFormat::R32G32B32A32_Float;
+	if(tex->HasFlag(pragma::material::Texture::Flags::NormalMap)) {
+		imgWriteInfo.inputFormat = pragma::image::TextureInfo::InputFormat::R32G32B32A32_Float;
 		imgWriteInfo.SetNormalMap();
 	}
 	else {
 		auto format = img->GetFormat();
 		if(prosper::util::is_16bit_format(format)) {
-			imgWriteInfo.inputFormat = uimg::TextureInfo::InputFormat::R16G16B16A16_Float;
-			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::HDRColorMap;
+			imgWriteInfo.inputFormat = pragma::image::TextureInfo::InputFormat::R16G16B16A16_Float;
+			imgWriteInfo.outputFormat = pragma::image::TextureInfo::OutputFormat::HDRColorMap;
 		}
 		else if(prosper::util::is_32bit_format(format) || prosper::util::is_64bit_format(format)) {
-			imgWriteInfo.inputFormat = uimg::TextureInfo::InputFormat::R32G32B32A32_Float;
-			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::HDRColorMap;
+			imgWriteInfo.inputFormat = pragma::image::TextureInfo::InputFormat::R32G32B32A32_Float;
+			imgWriteInfo.outputFormat = pragma::image::TextureInfo::OutputFormat::HDRColorMap;
 		}
 		else {
-			imgWriteInfo.inputFormat = uimg::TextureInfo::InputFormat::R8G8B8A8_UInt;
+			imgWriteInfo.inputFormat = pragma::image::TextureInfo::InputFormat::R8G8B8A8_UInt;
 			// TODO: Check the alpha channel values to determine whether we actually need a full alpha channel?
-			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::ColorMapSmoothAlpha;
+			imgWriteInfo.outputFormat = pragma::image::TextureInfo::OutputFormat::ColorMapSmoothAlpha;
 		}
 		switch(format) {
 		case prosper::Format::BC1_RGBA_SRGB_Block:
 		case prosper::Format::BC1_RGBA_UNorm_Block:
 		case prosper::Format::BC1_RGB_SRGB_Block:
 		case prosper::Format::BC1_RGB_UNorm_Block:
-			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::BC1;
+			imgWriteInfo.outputFormat = pragma::image::TextureInfo::OutputFormat::BC1;
 			break;
 		case prosper::Format::BC2_SRGB_Block:
 		case prosper::Format::BC2_UNorm_Block:
-			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::BC2;
+			imgWriteInfo.outputFormat = pragma::image::TextureInfo::OutputFormat::BC2;
 			break;
 		case prosper::Format::BC3_SRGB_Block:
 		case prosper::Format::BC3_UNorm_Block:
-			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::BC3;
+			imgWriteInfo.outputFormat = pragma::image::TextureInfo::OutputFormat::BC3;
 			break;
 		case prosper::Format::BC4_SNorm_Block:
 		case prosper::Format::BC4_UNorm_Block:
-			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::BC4;
+			imgWriteInfo.outputFormat = pragma::image::TextureInfo::OutputFormat::BC4;
 			break;
 		case prosper::Format::BC5_SNorm_Block:
 		case prosper::Format::BC5_UNorm_Block:
-			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::BC5;
+			imgWriteInfo.outputFormat = pragma::image::TextureInfo::OutputFormat::BC5;
 			break;
 		case prosper::Format::BC6H_SFloat_Block:
 		case prosper::Format::BC6H_UFloat_Block:
 			// TODO: As of 20-03-26, Cycles (/oiio) does not have support for BC6, so we'll
 			// fall back to a different format
-			imgWriteInfo.inputFormat = uimg::TextureInfo::InputFormat::R16G16B16A16_Float;
-			// imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::BC6;
-			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::DXT5;
+			imgWriteInfo.inputFormat = pragma::image::TextureInfo::InputFormat::R16G16B16A16_Float;
+			// imgWriteInfo.outputFormat = image::TextureInfo::OutputFormat::BC6;
+			imgWriteInfo.outputFormat = pragma::image::TextureInfo::OutputFormat::DXT5;
 			break;
 		case prosper::Format::BC7_SRGB_Block:
 		case prosper::Format::BC7_UNorm_Block:
 			// TODO: As of 20-03-26, Cycles (/oiio) does not have support for BC7, so we'll
 			// fall back to a different format
-			imgWriteInfo.inputFormat = uimg::TextureInfo::InputFormat::R16G16B16A16_Float;
-			// imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::BC7;
-			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::DXT1;
+			imgWriteInfo.inputFormat = pragma::image::TextureInfo::InputFormat::R16G16B16A16_Float;
+			// imgWriteInfo.outputFormat = image::TextureInfo::OutputFormat::BC7;
+			imgWriteInfo.outputFormat = pragma::image::TextureInfo::OutputFormat::DXT1;
 			break;
 		}
 	}
 	absPath = "";
 	// Save the DDS image and make sure the file exists
-	if(static_cast<pragma::CGame*>(pragma::get_client_game())->SaveImage(*img, ddsPath, imgWriteInfo) && filemanager::find_local_path(ddsPath + ".dds", absPath)) {
+	if(static_cast<pragma::CGame*>(pragma::get_client_game())->SaveImage(*img, ddsPath, imgWriteInfo) && pragma::fs::find_local_path(ddsPath + ".dds", absPath)) {
 		outSuccess = true;
 		outConverted = true;
 		return absPath;
@@ -199,7 +199,7 @@ static std::optional<std::string> prepare_texture(std::shared_ptr<msys::Texture>
 	return get_abs_error_texture_path();
 }
 
-static std::optional<std::string> prepare_texture(std::shared_ptr<msys::Texture> &texInfo, PreparedTextureInputFlags inFlags, PreparedTextureOutputFlags *optOutFlags, const std::optional<std::string> &defaultTexture, bool translucent)
+static std::optional<std::string> prepare_texture(std::shared_ptr<pragma::material::Texture> &texInfo, PreparedTextureInputFlags inFlags, PreparedTextureOutputFlags *optOutFlags, const std::optional<std::string> &defaultTexture, bool translucent)
 {
 	if(optOutFlags)
 		*optOutFlags = PreparedTextureOutputFlags::None;
@@ -241,7 +241,7 @@ static std::optional<std::string> prepare_texture(std::shared_ptr<msys::Texture>
 
 std::optional<std::string> pragma::modules::scenekit::prepare_texture(const std::string &texPath, const std::optional<std::string> &defaultTexture, bool translucent)
 {
-	auto &texManager = static_cast<msys::CMaterialManager &>(pragma::get_client_state()->GetMaterialManager()).GetTextureManager();
+	auto &texManager = static_cast<material::CMaterialManager &>(pragma::get_client_state()->GetMaterialManager()).GetTextureManager();
 	auto ptex = texManager.LoadAsset(texPath);
 	auto flags = PreparedTextureInputFlags::CanBeEnvMap;
 	PreparedTextureOutputFlags retFlags;

@@ -7,7 +7,7 @@ import :shader;
 
 using namespace pragma::modules::scenekit;
 
-void Shader::Initialize(pragma::scenekit::NodeManager &nodeManager, pragma::ecs::BaseEntity *ent, geometry::ModelSubMesh *mesh, msys::Material &mat)
+void Shader::Initialize(pragma::scenekit::NodeManager &nodeManager, pragma::ecs::BaseEntity *ent, geometry::ModelSubMesh *mesh, material::Material &mat)
 {
 	m_nodeManager = &nodeManager;
 	m_hEntity = ent ? ent->GetHandle() : EntityHandle {};
@@ -20,14 +20,14 @@ std::shared_ptr<pragma::scenekit::GroupNodeDesc> Shader::InitializeAlbedoPass() 
 std::shared_ptr<pragma::scenekit::GroupNodeDesc> Shader::InitializeNormalPass() { return nullptr; }
 std::shared_ptr<pragma::scenekit::GroupNodeDesc> Shader::InitializeDepthPass() { return nullptr; }
 pragma::ecs::BaseEntity *Shader::GetEntity() const { return m_hEntity.get(); }
-msys::Material *Shader::GetMaterial() const { return m_hMaterial.get(); }
+pragma::material::Material *Shader::GetMaterial() const { return m_hMaterial.get(); }
 pragma::geometry::ModelSubMesh *Shader::GetMesh() const { return m_mesh.get(); }
 
 //////////////
 
 std::shared_ptr<ShaderManager> ShaderManager::Create() { return std::shared_ptr<ShaderManager> {new ShaderManager {}}; }
 void ShaderManager::RegisterShader(const std::string &name, luabind::object oClass) { m_shaders[name] = oClass; }
-std::shared_ptr<Shader> ShaderManager::CreateShader(pragma::scenekit::NodeManager &nodeManager, const std::string &name, pragma::ecs::BaseEntity *ent, geometry::ModelSubMesh *mesh, msys::Material &mat)
+std::shared_ptr<Shader> ShaderManager::CreateShader(pragma::scenekit::NodeManager &nodeManager, const std::string &name, pragma::ecs::BaseEntity *ent, geometry::ModelSubMesh *mesh, material::Material &mat)
 {
 	auto it = m_shaders.find(name);
 	if(it == m_shaders.end())
@@ -67,7 +67,7 @@ std::shared_ptr<Shader> ShaderManager::CreateShader(pragma::scenekit::NodeManage
 //////////////
 
 void LuaShader::Initialize(const luabind::object &o) { m_baseLuaObj = std::shared_ptr<luabind::object>(new luabind::object(o)); }
-void LuaShader::Initialize(pragma::scenekit::NodeManager &nodeManager, pragma::ecs::BaseEntity *ent, geometry::ModelSubMesh *mesh, msys::Material &mat)
+void LuaShader::Initialize(pragma::scenekit::NodeManager &nodeManager, pragma::ecs::BaseEntity *ent, geometry::ModelSubMesh *mesh, material::Material &mat)
 {
 	Shader::Initialize(nodeManager, ent, mesh, mat);
 	CallLuaMember<void>("Initialize");

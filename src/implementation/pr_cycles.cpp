@@ -134,7 +134,7 @@ static std::shared_ptr<scenekit::Scene> setup_scene(pragma::scenekit::Scene::Ren
 }
 
 enum class SceneFlags : uint8_t { None = 0u, CullObjectsOutsidePvs = 1u, CullObjectsOutsideCameraFrustum = CullObjectsOutsidePvs << 1u };
-namespace umath::scoped_enum::bitwise {
+namespace pragma::math::scoped_enum::bitwise {
 	template<>
 	struct enable_bitwise_operators<SceneFlags> : std::true_type {};
 }
@@ -151,9 +151,9 @@ struct CameraData {
 static void initialize_cycles_geometry(pragma::CSceneComponent &gameScene, pragma::modules::scenekit::Cache &cache, const std::optional<CameraData> &camData, SceneFlags sceneFlags, const std::function<bool(pragma::ecs::BaseEntity &)> &entFilter = nullptr,
   const std::vector<pragma::ecs::BaseEntity *> *entityList = nullptr)
 {
-	auto enableFrustumCulling = umath::is_flag_set(sceneFlags, SceneFlags::CullObjectsOutsideCameraFrustum);
-	auto cullObjectsOutsidePvs = umath::is_flag_set(sceneFlags, SceneFlags::CullObjectsOutsidePvs);
-	std::vector<umath::Plane> planes {};
+	auto enableFrustumCulling = pragma::math::is_flag_set(sceneFlags, SceneFlags::CullObjectsOutsideCameraFrustum);
+	auto cullObjectsOutsidePvs = pragma::math::is_flag_set(sceneFlags, SceneFlags::CullObjectsOutsidePvs);
+	std::vector<pragma::math::Plane> planes {};
 	if(camData.has_value()) {
 		auto forward = uquat::forward(camData->rotation);
 		auto up = uquat::up(camData->rotation);
@@ -172,7 +172,7 @@ static void initialize_cycles_geometry(pragma::CSceneComponent &gameScene, pragm
 		if(renderC->ShouldDraw() == false)
 			return false;
 		auto sphere = renderC->GetUpdatedAbsoluteRenderSphere();
-		if(umath::intersection::sphere_in_plane_mesh(sphere.pos, sphere.radius, planes.begin(), planes.end(), true) == umath::intersection::Intersect::Outside)
+		if(pragma::math::intersection::sphere_in_plane_mesh(sphere.pos, sphere.radius, planes.begin(), planes.end(), true) == pragma::math::intersection::Intersect::Outside)
 			return false;
 		return true;
 		/* // TODO: Take rotation into account
@@ -186,8 +186,8 @@ static void initialize_cycles_geometry(pragma::CSceneComponent &gameScene, pragm
 	};
 	auto entSceneFilter = [&entSceneFilterEx](pragma::ecs::BaseEntity &ent, std::size_t index) -> bool { return entSceneFilterEx(ent, true); };
 
-	util::BSPTree *bspTree = nullptr;
-	util::BSPTree::Node *node = nullptr;
+	pragma::util::BSPTree *bspTree = nullptr;
+	pragma::util::BSPTree::Node *node = nullptr;
 	if(cullObjectsOutsidePvs && camData.has_value()) {
 		pragma::ecs::EntityIterator entItWorld {*pragma::get_client_game()};
 		entItWorld.AttachFilter<TEntityIteratorFilterComponent<pragma::CWorldComponent>>();
@@ -204,19 +204,19 @@ static void initialize_cycles_geometry(pragma::CSceneComponent &gameScene, pragm
 		auto renderC = ent->GetComponent<pragma::CRenderComponent>();
 		if(renderC.expired())
 			return;
-		std::function<bool(pragma::geometry::ModelMesh &, const umath::ScaledTransform &)> meshFilter = nullptr;
+		std::function<bool(pragma::geometry::ModelMesh &, const pragma::math::ScaledTransform &)> meshFilter = nullptr;
 		if(renderC->IsExemptFromOcclusionCulling() == false) {
 			// We'll only do per-mesh culling for world entities
 			if(enableFrustumCulling && ent->IsWorld()) {
-				meshFilter = [&planes](pragma::geometry::ModelMesh &mesh, const umath::ScaledTransform &pose) -> bool {
+				meshFilter = [&planes](pragma::geometry::ModelMesh &mesh, const pragma::math::ScaledTransform &pose) -> bool {
 					Vector3 min, max;
 					mesh.GetBounds(min, max);
 					auto center = (min + max) / 2.f;
 					min -= center;
 					max -= center;
-					auto r = umath::max(umath::abs(min.x), umath::abs(min.y), umath::abs(min.z), umath::abs(max.x), umath::abs(max.y), umath::abs(max.z));
+					auto r = pragma::math::max(pragma::math::abs(min.x), pragma::math::abs(min.y), pragma::math::abs(min.z), pragma::math::abs(max.x), pragma::math::abs(max.y), pragma::math::abs(max.z));
 					center += pose.GetOrigin();
-					return (umath::intersection::sphere_in_plane_mesh(center, r, planes.begin(), planes.end()) != umath::intersection::Intersect::Outside) ? true : false;
+					return (pragma::math::intersection::sphere_in_plane_mesh(center, r, planes.begin(), planes.end()) != pragma::math::intersection::Intersect::Outside) ? true : false;
 				};
 			}
 			if(node) {
@@ -224,7 +224,7 @@ static void initialize_cycles_geometry(pragma::CSceneComponent &gameScene, pragm
 				// Cull everything outside the camera's PVS
 				if(ent->IsWorld()) {
 					auto pos = ent->GetPosition();
-					meshFilter = [bspTree, node, pos, curFilter](pragma::geometry::ModelMesh &mesh, const umath::ScaledTransform &pose) -> bool {
+					meshFilter = [bspTree, node, pos, curFilter](pragma::geometry::ModelMesh &mesh, const pragma::math::ScaledTransform &pose) -> bool {
 						if(curFilter && curFilter(mesh, pose) == false)
 							return false;
 						if(node == nullptr)
@@ -250,7 +250,7 @@ static void initialize_cycles_geometry(pragma::CSceneComponent &gameScene, pragm
 						renderC->GetRenderBounds(&min,&max);
 						min += pos;
 						max += pos;
-						return umath::intersection::aabb_aabb(min,max,node->minVisible,node->maxVisible);
+						return pragma::math::intersection::aabb_aabb(min,max,node->minVisible,node->maxVisible);
 					};
 #endif
 				}
@@ -652,7 +652,7 @@ static luabind::object data_value_to_lua_object(lua::State *l, const pragma::sce
 	case pragma::scenekit::SocketType::ColorArray:
 		return Lua::vector_to_table<pragma::scenekit::STColor>(l, *static_cast<pragma::scenekit::STColorArray *>(dataValue.value.get()));
 	}
-	static_assert(umath::to_integral(pragma::scenekit::SocketType::Count) == 16);
+	static_assert(pragma::math::to_integral(pragma::scenekit::SocketType::Count) == 16);
 	return {};
 }
 
@@ -694,7 +694,7 @@ namespace pragma::scenekit {
 #endif
 
 extern "C" {
-PR_EXPORT void pr_cycles_render_image(const pragma::rendering::cycles::SceneInfo &renderImageSettings, const pragma::rendering::cycles::RenderImageInfo &renderImageInfo, const std::function<bool(pragma::ecs::BaseEntity &)> &entFilter, util::ParallelJob<uimg::ImageLayerSet> &outJob)
+PR_EXPORT void pr_cycles_render_image(const pragma::rendering::cycles::SceneInfo &renderImageSettings, const pragma::rendering::cycles::RenderImageInfo &renderImageInfo, const std::function<bool(pragma::ecs::BaseEntity &)> &entFilter, pragma::util::ParallelJob<pragma::image::ImageLayerSet> &outJob)
 {
 	outJob = {};
 	auto scene = setup_scene(pragma::scenekit::Scene::RenderMode::RenderImage, renderImageSettings);
@@ -710,7 +710,7 @@ PR_EXPORT void pr_cycles_render_image(const pragma::rendering::cycles::SceneInfo
 		return;
 	outJob = renderer->StartRender();
 }
-PR_EXPORT void pr_cycles_bake_ao(const pragma::rendering::cycles::SceneInfo &renderImageSettings, pragma::asset::Model &mdl, uint32_t materialIndex, util::ParallelJob<uimg::ImageLayerSet> &outJob)
+PR_EXPORT void pr_cycles_bake_ao(const pragma::rendering::cycles::SceneInfo &renderImageSettings, pragma::asset::Model &mdl, uint32_t materialIndex, pragma::util::ParallelJob<pragma::image::ImageLayerSet> &outJob)
 {
 	outJob = {};
 	auto scene = setup_scene(pragma::scenekit::Scene::RenderMode::BakeAmbientOcclusion, renderImageSettings);
@@ -736,7 +736,7 @@ PR_EXPORT void pr_cycles_bake_ao(const pragma::rendering::cycles::SceneInfo &ren
 #endif
 	outJob = renderer->StartRender();
 }
-PR_EXPORT void pr_cycles_bake_ao_ent(const pragma::rendering::cycles::SceneInfo &renderImageSettings, pragma::ecs::BaseEntity &ent, uint32_t materialIndex, util::ParallelJob<uimg::ImageLayerSet> &outJob)
+PR_EXPORT void pr_cycles_bake_ao_ent(const pragma::rendering::cycles::SceneInfo &renderImageSettings, pragma::ecs::BaseEntity &ent, uint32_t materialIndex, pragma::util::ParallelJob<pragma::image::ImageLayerSet> &outJob)
 {
 	outJob = {};
 	auto scene = setup_scene(pragma::scenekit::Scene::RenderMode::BakeAmbientOcclusion, renderImageSettings);
@@ -750,7 +750,7 @@ PR_EXPORT void pr_cycles_bake_ao_ent(const pragma::rendering::cycles::SceneInfo 
 		return;
 	outJob = renderer->StartRender();
 }
-PR_EXPORT void pr_cycles_bake_lightmaps(const pragma::rendering::cycles::SceneInfo &renderImageSettings, util::ParallelJob<uimg::ImageLayerSet> &outJob)
+PR_EXPORT void pr_cycles_bake_lightmaps(const pragma::rendering::cycles::SceneInfo &renderImageSettings, pragma::util::ParallelJob<pragma::image::ImageLayerSet> &outJob)
 {
 	outJob = {};
 	auto scene = setup_scene(pragma::scenekit::Scene::RenderMode::BakeDiffuseLighting, renderImageSettings);
@@ -767,12 +767,12 @@ PR_EXPORT void pr_cycles_bake_lightmaps(const pragma::rendering::cycles::SceneIn
 	if(renderImageSettings.renderJob) {
 		std::string path = "render/lightmaps/";
 		auto fileName = path + "lightmap." +std::string {SK_PRT_EXTENSION_BINARY};
-		auto rootPath = util::Path::CreatePath(filemanager::get_program_write_path()).GetString() + path;
+		auto rootPath = pragma::util::Path::CreatePath(pragma::fs::get_program_write_path()).GetString() + path;
 		pragma::scenekit::Scene::SerializationData serializationData {};
 		serializationData.outputFileName = fileName;
 		auto udmData = udm::Data::Create(SK_PRT_IDENTIFIER, SK_PRT_VERSION);
 		(*scene)->Save(udmData->GetAssetData(), rootPath, serializationData);
-		FileManager::CreatePath(path.c_str());
+		pragma::fs::create_path(path);
 		if (!udmData->Save(fileName))
 			Con::cwar<<"Failed to save '"<<fileName<<"'!"<<Con::endl;
 	}
@@ -840,15 +840,15 @@ static bool write_render_job_script(const std::string &jobListPath, const std::s
 	refShellFilePath = "lib/render_raytracing.sh";
 #endif
 
-	util::Path pragmaRoot;
+	pragma::util::Path pragmaRoot;
 	auto *en = pragma::get_engine();
 	if (!en->IsSandboxed())
-		pragmaRoot = util::DirPath(util::get_program_path());
+		pragmaRoot = pragma::util::DirPath(pragma::util::get_program_path());
 	else {
-		pragmaRoot = util::DirPath(filemanager::get_program_write_path());
+		pragmaRoot = pragma::util::DirPath(pragma::fs::get_program_write_path());
 		// This will copy the script from the sandbox location to the user data location,
 		// making it possible to execute it outside of the sandbox.
-		filemanager::clone_to_program_write_path(refShellFilePath);
+		pragma::fs::clone_to_program_write_path(refShellFilePath);
 	}
 
 	std::string pragmaRootNoSlash = pragmaRoot.GetString();
@@ -873,24 +873,24 @@ static bool write_render_job_script(const std::string &jobListPath, const std::s
 	argPlaceholder = "\"$@\"";
 #endif
 
-	auto userDataDir = util::get_user_data_dir();
+	auto userDataDir = pragma::util::get_user_data_dir();
 
 	std::stringstream args;
 	args<<" -job=\""<<jobListPath<<"\"";
 	args<<" -user_data_dir=\""<<userDataDir.GetString()<<"\"";
-	for (auto &resDir : util::get_resource_dirs())
+	for (auto &resDir : pragma::util::get_resource_dirs())
 		args<<" -resource_dir=\""<<resDir.GetString()<<"\"";
 
 	contents << args.str() << " " <<argPlaceholder;
 
-	auto res = filemanager::write_file(shellFilePath, contents.str());
+	auto res = pragma::fs::write_file(shellFilePath, contents.str());
 	if (!res) {
 		outErr = "Failed to write shell script '" +shellFilePath +"'!";
 		return false;
 	}
-	filemanager::make_executable(shellFilePath);
+	pragma::fs::make_executable(shellFilePath);
 	std::string localShellFilePath;
-	if (filemanager::find_local_path(shellFilePath, localShellFilePath))
+	if (pragma::fs::find_local_path(shellFilePath, localShellFilePath))
 		outShellFilePath = localShellFilePath;
 	return true;
 }
@@ -980,7 +980,7 @@ void PR_EXPORT pragma_initialize_lua(Lua::Interface &l)
 		     return 1;
 	     })},
 	    {"denoise_image", static_cast<int32_t (*)(lua::State *)>([](lua::State *l) -> int32_t {
-		     auto &imgBuf = Lua::Check<uimg::ImageBuffer>(l, 1);
+		     auto &imgBuf = Lua::Check<pragma::image::ImageBuffer>(l, 1);
 		     Lua::Push(l, pragma::modules::scenekit::denoise(imgBuf));
 		     return 1;
 	     })},
@@ -1008,16 +1008,16 @@ void PR_EXPORT pragma_initialize_lua(Lua::Interface &l)
 		     auto path = relPath;
 		     if(Lua::file::validate_write_operation(l, path) == false)
 			     return false;
-		     filemanager::create_path(path);
+		     pragma::fs::create_path(path);
 		     auto &scene = Lua::Check<scenekit::Scene>(l, 1);
 
 		     auto fileName = path + "lightmap." +std::string {SK_PRT_EXTENSION_BINARY};
-		     auto rootPath = util::Path::CreatePath(filemanager::get_program_write_path()).GetString() + path;
+		     auto rootPath = pragma::util::Path::CreatePath(pragma::fs::get_program_write_path()).GetString() + path;
 		     pragma::scenekit::Scene::SerializationData serializationData {};
 		     serializationData.outputFileName = fileName;
 	    	 auto udmData = udm::Data::Create(SK_PRT_IDENTIFIER, SK_PRT_VERSION);
 		     scene->Save(udmData->GetAssetData(), rootPath, serializationData);
-		     FileManager::CreatePath(path.c_str());
+		     pragma::fs::create_path(path);
 		     if(!udmData->Save(fileName)) {
 			     Lua::PushBool(l, false);
 			     return 1;
@@ -1059,7 +1059,7 @@ void PR_EXPORT pragma_initialize_lua(Lua::Interface &l)
 		     return 0;
 	     })},
 	    {"apply_color_transform", static_cast<int32_t (*)(lua::State *)>([](lua::State *l) -> int32_t {
-		     auto &imgBuf = Lua::Check<uimg::ImageBuffer>(l, 1);
+		     auto &imgBuf = Lua::Check<pragma::image::ImageBuffer>(l, 1);
 		     auto exposure = Lua::IsSet(l, 2) ? Lua::CheckNumber(l, 2) : 0.f;
 		     auto gamma = Lua::IsSet(l, 3) ? Lua::CheckNumber(l, 3) : pragma::scenekit::DEFAULT_GAMMA;
 
@@ -1181,10 +1181,10 @@ void PR_EXPORT pragma_initialize_lua(Lua::Interface &l)
 	defRenderer.def("HasRenderedSamplesForAllTiles", static_cast<bool (*)(lua::State *, pragma::modules::scenekit::Renderer &)>([](lua::State *l, pragma::modules::scenekit::Renderer &renderer) -> bool { return renderer->GetTileManager().AllTilesHaveRenderedSamples(); }));
 	defRenderer.def("IsBuildingKernels", +[](pragma::modules::scenekit::Renderer &renderer) { return renderer->IsBuildingKernels(); });
 	defRenderer.def("IsFeatureAvailable", +[](pragma::modules::scenekit::Renderer &renderer, pragma::scenekit::Renderer::Feature feature) { return renderer->IsFeatureEnabled(feature); });
-	defRenderer.add_static_constant("FLAG_NONE", umath::to_integral(pragma::scenekit::Renderer::Flags::None));
-	defRenderer.add_static_constant("FLAG_ENABLE_LIVE_EDITING_BIT", umath::to_integral(pragma::scenekit::Renderer::Flags::EnableLiveEditing));
-	defRenderer.add_static_constant("FEATURE_FLAG_NONE", umath::to_integral(pragma::scenekit::Renderer::Feature::None));
-	defRenderer.add_static_constant("FEATURE_FLAG_OPTIX_AVAILABLE_BIT", umath::to_integral(pragma::scenekit::Renderer::Feature::OptiXAvailable));
+	defRenderer.add_static_constant("FLAG_NONE", pragma::math::to_integral(pragma::scenekit::Renderer::Flags::None));
+	defRenderer.add_static_constant("FLAG_ENABLE_LIVE_EDITING_BIT", pragma::math::to_integral(pragma::scenekit::Renderer::Flags::EnableLiveEditing));
+	defRenderer.add_static_constant("FEATURE_FLAG_NONE", pragma::math::to_integral(pragma::scenekit::Renderer::Feature::None));
+	defRenderer.add_static_constant("FEATURE_FLAG_OPTIX_AVAILABLE_BIT", pragma::math::to_integral(pragma::scenekit::Renderer::Feature::OptiXAvailable));
 	modCycles[defRenderer];
 
 	auto defNode = luabind::class_<pragma::scenekit::NodeDesc>("Node");
@@ -1694,11 +1694,11 @@ void PR_EXPORT pragma_initialize_lua(Lua::Interface &l)
 	t["INTERPOLATION_TYPE_CUBIC"] = InterpolationType::INTERPOLATION_CUBIC;
 	t["INTERPOLATION_TYPE_SMART"] = InterpolationType::INTERPOLATION_SMART;
 
-	t["TEXTURE_TYPE_COLOR_IMAGE"] = umath::to_integral(pragma::scenekit::TextureType::ColorImage);
-	t["TEXTURE_TYPE_EQUIRECTANGULAR_IMAGE"] = umath::to_integral(pragma::scenekit::TextureType::EquirectangularImage);
-	t["TEXTURE_TYPE_NON_COLOR_IMAGE"] = umath::to_integral(pragma::scenekit::TextureType::NonColorImage);
-	t["TEXTURE_TYPE_NORMAL_MAP"] = umath::to_integral(pragma::scenekit::TextureType::NormalMap);
-	static_assert(umath::to_integral(pragma::scenekit::TextureType::Count) == 4);
+	t["TEXTURE_TYPE_COLOR_IMAGE"] = pragma::math::to_integral(pragma::scenekit::TextureType::ColorImage);
+	t["TEXTURE_TYPE_EQUIRECTANGULAR_IMAGE"] = pragma::math::to_integral(pragma::scenekit::TextureType::EquirectangularImage);
+	t["TEXTURE_TYPE_NON_COLOR_IMAGE"] = pragma::math::to_integral(pragma::scenekit::TextureType::NonColorImage);
+	t["TEXTURE_TYPE_NORMAL_MAP"] = pragma::math::to_integral(pragma::scenekit::TextureType::NormalMap);
+	static_assert(pragma::math::to_integral(pragma::scenekit::TextureType::Count) == 4);
 
 	t = nodeTypeEnums[pragma::scenekit::NODE_NORMAL_TEXTURE] = luabind::newtable(l.GetState());
 	t["IN_FILENAME"] = pragma::scenekit::nodes::normal_texture::IN_FILENAME;
@@ -2178,15 +2178,15 @@ void PR_EXPORT pragma_initialize_lua(Lua::Interface &l)
 	defShader.def("GetSubdivisionSettings", &pragma::modules::scenekit::LuaShader::GetSubdivisionSettings);
 	defShader.def("SetSubdivisionSettings", &pragma::modules::scenekit::LuaShader::SetSubdivisionSettings);
 
-	auto defHairConfig = luabind::class_<util::HairConfig>("HairConfig");
+	auto defHairConfig = luabind::class_<pragma::util::HairConfig>("HairConfig");
 	defHairConfig.def(luabind::constructor<>());
-	defHairConfig.def_readwrite("numSegments", &util::HairConfig::numSegments);
-	defHairConfig.def_readwrite("hairPerSquareMeter", &util::HairConfig::hairPerSquareMeter);
-	defHairConfig.def_readwrite("defaultThickness", &util::HairConfig::defaultThickness);
-	defHairConfig.def_readwrite("defaultLength", &util::HairConfig::defaultLength);
-	defHairConfig.def_readwrite("defaultHairStrength", &util::HairConfig::defaultHairStrength);
-	defHairConfig.def_readwrite("randomHairLengthFactor", &util::HairConfig::randomHairLengthFactor);
-	defHairConfig.def_readwrite("curvature", &util::HairConfig::curvature);
+	defHairConfig.def_readwrite("numSegments", &pragma::util::HairConfig::numSegments);
+	defHairConfig.def_readwrite("hairPerSquareMeter", &pragma::util::HairConfig::hairPerSquareMeter);
+	defHairConfig.def_readwrite("defaultThickness", &pragma::util::HairConfig::defaultThickness);
+	defHairConfig.def_readwrite("defaultLength", &pragma::util::HairConfig::defaultLength);
+	defHairConfig.def_readwrite("defaultHairStrength", &pragma::util::HairConfig::defaultHairStrength);
+	defHairConfig.def_readwrite("randomHairLengthFactor", &pragma::util::HairConfig::randomHairLengthFactor);
+	defHairConfig.def_readwrite("curvature", &pragma::util::HairConfig::curvature);
 	defShader.scope[defHairConfig];
 
 	auto defSubdivSettings = luabind::class_<pragma::scenekit::SubdivisionSettings>("SubdivisionSettings");
@@ -2248,24 +2248,24 @@ void PR_EXPORT pragma_initialize_lua(Lua::Interface &l)
 	defSocket.property("b", get_vector_socket_component<VectorChannel::Z>, set_vector_socket_component<VectorChannel::Z>);
 	// defSocket.def(luabind::const_self <pragma::scenekit::Socket{});
 	// defSocket.def(luabind::const_self <=pragma::scenekit::Socket{});
-	defSocket.add_static_constant("TYPE_BOOL", umath::to_integral(pragma::scenekit::SocketType::Bool));
-	defSocket.add_static_constant("TYPE_FLOAT", umath::to_integral(pragma::scenekit::SocketType::Float));
-	defSocket.add_static_constant("TYPE_INT", umath::to_integral(pragma::scenekit::SocketType::Int));
-	defSocket.add_static_constant("TYPE_UINT", umath::to_integral(pragma::scenekit::SocketType::UInt));
-	defSocket.add_static_constant("TYPE_COLOR", umath::to_integral(pragma::scenekit::SocketType::Color));
-	defSocket.add_static_constant("TYPE_VECTOR", umath::to_integral(pragma::scenekit::SocketType::Vector));
-	defSocket.add_static_constant("TYPE_POINT", umath::to_integral(pragma::scenekit::SocketType::Point));
-	defSocket.add_static_constant("TYPE_NORMAL", umath::to_integral(pragma::scenekit::SocketType::Normal));
-	defSocket.add_static_constant("TYPE_POINT2", umath::to_integral(pragma::scenekit::SocketType::Point2));
-	defSocket.add_static_constant("TYPE_CLOSURE", umath::to_integral(pragma::scenekit::SocketType::Closure));
-	defSocket.add_static_constant("TYPE_STRING", umath::to_integral(pragma::scenekit::SocketType::String));
-	defSocket.add_static_constant("TYPE_ENUM", umath::to_integral(pragma::scenekit::SocketType::Enum));
-	defSocket.add_static_constant("TYPE_TRANSFORM", umath::to_integral(pragma::scenekit::SocketType::Transform));
-	defSocket.add_static_constant("TYPE_NODE", umath::to_integral(pragma::scenekit::SocketType::Node));
-	defSocket.add_static_constant("TYPE_FLOAT_ARRAY", umath::to_integral(pragma::scenekit::SocketType::FloatArray));
-	defSocket.add_static_constant("TYPE_COLOR_ARRAY", umath::to_integral(pragma::scenekit::SocketType::ColorArray));
-	defSocket.add_static_constant("TYPE_COUNT", umath::to_integral(pragma::scenekit::SocketType::Count));
-	static_assert(umath::to_integral(pragma::scenekit::SocketType::Count) == 16);
+	defSocket.add_static_constant("TYPE_BOOL", pragma::math::to_integral(pragma::scenekit::SocketType::Bool));
+	defSocket.add_static_constant("TYPE_FLOAT", pragma::math::to_integral(pragma::scenekit::SocketType::Float));
+	defSocket.add_static_constant("TYPE_INT", pragma::math::to_integral(pragma::scenekit::SocketType::Int));
+	defSocket.add_static_constant("TYPE_UINT", pragma::math::to_integral(pragma::scenekit::SocketType::UInt));
+	defSocket.add_static_constant("TYPE_COLOR", pragma::math::to_integral(pragma::scenekit::SocketType::Color));
+	defSocket.add_static_constant("TYPE_VECTOR", pragma::math::to_integral(pragma::scenekit::SocketType::Vector));
+	defSocket.add_static_constant("TYPE_POINT", pragma::math::to_integral(pragma::scenekit::SocketType::Point));
+	defSocket.add_static_constant("TYPE_NORMAL", pragma::math::to_integral(pragma::scenekit::SocketType::Normal));
+	defSocket.add_static_constant("TYPE_POINT2", pragma::math::to_integral(pragma::scenekit::SocketType::Point2));
+	defSocket.add_static_constant("TYPE_CLOSURE", pragma::math::to_integral(pragma::scenekit::SocketType::Closure));
+	defSocket.add_static_constant("TYPE_STRING", pragma::math::to_integral(pragma::scenekit::SocketType::String));
+	defSocket.add_static_constant("TYPE_ENUM", pragma::math::to_integral(pragma::scenekit::SocketType::Enum));
+	defSocket.add_static_constant("TYPE_TRANSFORM", pragma::math::to_integral(pragma::scenekit::SocketType::Transform));
+	defSocket.add_static_constant("TYPE_NODE", pragma::math::to_integral(pragma::scenekit::SocketType::Node));
+	defSocket.add_static_constant("TYPE_FLOAT_ARRAY", pragma::math::to_integral(pragma::scenekit::SocketType::FloatArray));
+	defSocket.add_static_constant("TYPE_COLOR_ARRAY", pragma::math::to_integral(pragma::scenekit::SocketType::ColorArray));
+	defSocket.add_static_constant("TYPE_COUNT", pragma::math::to_integral(pragma::scenekit::SocketType::Count));
+	static_assert(pragma::math::to_integral(pragma::scenekit::SocketType::Count) == 16);
 	defSocket.def("GetNode", static_cast<pragma::scenekit::NodeDesc *(pragma::scenekit::Socket::*)() const>(&pragma::scenekit::Socket::GetNode));
 	defSocket.def("GetSocketName", static_cast<luabind::object (*)(lua::State *, pragma::scenekit::Socket &)>([](lua::State *l, pragma::scenekit::Socket &socket) -> luabind::object {
 		std::string socketName;
@@ -2454,18 +2454,18 @@ void PR_EXPORT pragma_initialize_lua(Lua::Interface &l)
 	defWorldObject.def("GetPos", &pragma::scenekit::WorldObject::GetPos);
 	defWorldObject.def("SetRotation", &pragma::scenekit::WorldObject::SetRotation);
 	defWorldObject.def("GetRotation", &pragma::scenekit::WorldObject::GetRotation);
-	defWorldObject.def("GetPose", static_cast<const umath::ScaledTransform &(pragma::scenekit::WorldObject::*)() const>(&pragma::scenekit::WorldObject::GetPose), luabind::copy_policy<0> {});
+	defWorldObject.def("GetPose", static_cast<const pragma::math::ScaledTransform &(pragma::scenekit::WorldObject::*)() const>(&pragma::scenekit::WorldObject::GetPose), luabind::copy_policy<0> {});
 	modCycles[defWorldObject];
 
 	auto defCamera = luabind::class_<pragma::scenekit::Camera, luabind::bases<pragma::scenekit::WorldObject, pragma::scenekit::SceneObject>>("Camera");
-	defCamera.add_static_constant("TYPE_PERSPECTIVE", umath::to_integral(pragma::scenekit::Camera::CameraType::Perspective));
-	defCamera.add_static_constant("TYPE_ORTHOGRAPHIC", umath::to_integral(pragma::scenekit::Camera::CameraType::Orthographic));
-	defCamera.add_static_constant("TYPE_PANORAMA", umath::to_integral(pragma::scenekit::Camera::CameraType::Panorama));
+	defCamera.add_static_constant("TYPE_PERSPECTIVE", pragma::math::to_integral(pragma::scenekit::Camera::CameraType::Perspective));
+	defCamera.add_static_constant("TYPE_ORTHOGRAPHIC", pragma::math::to_integral(pragma::scenekit::Camera::CameraType::Orthographic));
+	defCamera.add_static_constant("TYPE_PANORAMA", pragma::math::to_integral(pragma::scenekit::Camera::CameraType::Panorama));
 
-	defCamera.add_static_constant("PANORAMA_TYPE_EQUIRECTANGULAR", umath::to_integral(pragma::scenekit::Camera::PanoramaType::Equirectangular));
-	defCamera.add_static_constant("PANORAMA_TYPE_FISHEYE_EQUIDISTANT", umath::to_integral(pragma::scenekit::Camera::PanoramaType::FisheyeEquidistant));
-	defCamera.add_static_constant("PANORAMA_TYPE_FISHEYE_EQUISOLID", umath::to_integral(pragma::scenekit::Camera::PanoramaType::FisheyeEquisolid));
-	defCamera.add_static_constant("PANORAMA_TYPE_MIRRORBALL", umath::to_integral(pragma::scenekit::Camera::PanoramaType::Mirrorball));
+	defCamera.add_static_constant("PANORAMA_TYPE_EQUIRECTANGULAR", pragma::math::to_integral(pragma::scenekit::Camera::PanoramaType::Equirectangular));
+	defCamera.add_static_constant("PANORAMA_TYPE_FISHEYE_EQUIDISTANT", pragma::math::to_integral(pragma::scenekit::Camera::PanoramaType::FisheyeEquidistant));
+	defCamera.add_static_constant("PANORAMA_TYPE_FISHEYE_EQUISOLID", pragma::math::to_integral(pragma::scenekit::Camera::PanoramaType::FisheyeEquisolid));
+	defCamera.add_static_constant("PANORAMA_TYPE_MIRRORBALL", pragma::math::to_integral(pragma::scenekit::Camera::PanoramaType::Mirrorball));
 	defCamera.def("SetInterocularDistance", &pragma::scenekit::Camera::SetInterocularDistance);
 	defCamera.def("SetEquirectangularHorizontalRange", &pragma::scenekit::Camera::SetEquirectangularHorizontalRange);
 	defCamera.def("SetEquirectangularVerticalRange", &pragma::scenekit::Camera::SetEquirectangularVerticalRange);
@@ -2473,7 +2473,7 @@ void PR_EXPORT pragma_initialize_lua(Lua::Interface &l)
 	defCamera.def("SetResolution", &pragma::scenekit::Camera::SetResolution);
 	defCamera.def("SetFarZ", &pragma::scenekit::Camera::SetFarZ);
 	defCamera.def("SetNearZ", &pragma::scenekit::Camera::SetNearZ);
-	defCamera.def("SetFOV", static_cast<void (*)(lua::State *, pragma::scenekit::Camera &, float)>([](lua::State *l, pragma::scenekit::Camera &cam, float fov) { cam.SetFOV(umath::deg_to_rad(fov)); }));
+	defCamera.def("SetFOV", static_cast<void (*)(lua::State *, pragma::scenekit::Camera &, float)>([](lua::State *l, pragma::scenekit::Camera &cam, float fov) { cam.SetFOV(pragma::math::deg_to_rad(fov)); }));
 	defCamera.def("SetCameraType", &pragma::scenekit::Camera::SetCameraType);
 	defCamera.def("SetPanoramaType", &pragma::scenekit::Camera::SetPanoramaType);
 	defCamera.def("SetFocalDistance", &pragma::scenekit::Camera::SetFocalDistance);
@@ -2513,53 +2513,53 @@ void PR_EXPORT pragma_initialize_lua(Lua::Interface &l)
 	defSerializationData.def_readwrite("outputFileName", &pragma::scenekit::Scene::SerializationData::outputFileName);
 	defScene.scope[defSerializationData];
 
-	defScene.add_static_constant("RENDER_MODE_COMBINED", umath::to_integral(pragma::scenekit::Scene::RenderMode::RenderImage));
-	defScene.add_static_constant("RENDER_MODE_BAKE_AMBIENT_OCCLUSION", umath::to_integral(pragma::scenekit::Scene::RenderMode::BakeAmbientOcclusion));
-	defScene.add_static_constant("RENDER_MODE_BAKE_NORMALS", umath::to_integral(pragma::scenekit::Scene::RenderMode::BakeNormals));
-	defScene.add_static_constant("RENDER_MODE_BAKE_DIFFUSE_LIGHTING", umath::to_integral(pragma::scenekit::Scene::RenderMode::BakeDiffuseLighting));
-	defScene.add_static_constant("RENDER_MODE_BAKE_DIFFUSE_LIGHTING_SEPARATE", umath::to_integral(pragma::scenekit::Scene::RenderMode::BakeDiffuseLightingSeparate));
-	defScene.add_static_constant("RENDER_MODE_ALBEDO", umath::to_integral(pragma::scenekit::Scene::RenderMode::SceneAlbedo));
-	defScene.add_static_constant("RENDER_MODE_NORMALS", umath::to_integral(pragma::scenekit::Scene::RenderMode::SceneNormals));
-	defScene.add_static_constant("RENDER_MODE_DEPTH", umath::to_integral(pragma::scenekit::Scene::RenderMode::SceneDepth));
-	defScene.add_static_constant("RENDER_MODE_ALPHA", umath::to_integral(pragma::scenekit::Scene::RenderMode::Alpha));
-	defScene.add_static_constant("RENDER_MODE_GEOMETRY_NORMAL", umath::to_integral(pragma::scenekit::Scene::RenderMode::GeometryNormal));
-	defScene.add_static_constant("RENDER_MODE_SHADING_NORMAL", umath::to_integral(pragma::scenekit::Scene::RenderMode::ShadingNormal));
-	defScene.add_static_constant("RENDER_MODE_DIRECT_DIFFUSE", umath::to_integral(pragma::scenekit::Scene::RenderMode::DirectDiffuse));
-	defScene.add_static_constant("RENDER_MODE_DIRECT_DIFFUSE_REFLECT", umath::to_integral(pragma::scenekit::Scene::RenderMode::DirectDiffuseReflect));
-	defScene.add_static_constant("RENDER_MODE_DIRECT_DIFFUSE_TRANSMIT", umath::to_integral(pragma::scenekit::Scene::RenderMode::DirectDiffuseTransmit));
-	defScene.add_static_constant("RENDER_MODE_DIRECT_GLOSSY", umath::to_integral(pragma::scenekit::Scene::RenderMode::DirectGlossy));
-	defScene.add_static_constant("RENDER_MODE_DIRECT_GLOSSY_REFLECT", umath::to_integral(pragma::scenekit::Scene::RenderMode::DirectGlossyReflect));
-	defScene.add_static_constant("RENDER_MODE_DIRECT_GLOSSY_TRANSMIT", umath::to_integral(pragma::scenekit::Scene::RenderMode::DirectGlossyTransmit));
-	defScene.add_static_constant("RENDER_MODE_EMISSION", umath::to_integral(pragma::scenekit::Scene::RenderMode::Emission));
-	defScene.add_static_constant("RENDER_MODE_INDIRECT_DIFFUSE", umath::to_integral(pragma::scenekit::Scene::RenderMode::IndirectDiffuse));
-	defScene.add_static_constant("RENDER_MODE_INDIRECT_DIFFUSE_REFLECT", umath::to_integral(pragma::scenekit::Scene::RenderMode::IndirectDiffuseReflect));
-	defScene.add_static_constant("RENDER_MODE_INDIRECT_DIFFUSE_TRANSMIT", umath::to_integral(pragma::scenekit::Scene::RenderMode::IndirectDiffuseTransmit));
-	defScene.add_static_constant("RENDER_MODE_INDIRECT_GLOSSY", umath::to_integral(pragma::scenekit::Scene::RenderMode::IndirectGlossy));
-	defScene.add_static_constant("RENDER_MODE_INDIRECT_GLOSSY_REFLECT", umath::to_integral(pragma::scenekit::Scene::RenderMode::IndirectGlossyReflect));
-	defScene.add_static_constant("RENDER_MODE_INDIRECT_GLOSSY_TRANSMIT", umath::to_integral(pragma::scenekit::Scene::RenderMode::IndirectGlossyTransmit));
-	defScene.add_static_constant("RENDER_MODE_INDIRECT_SPECULAR", umath::to_integral(pragma::scenekit::Scene::RenderMode::IndirectSpecular));
-	defScene.add_static_constant("RENDER_MODE_INDIRECT_SPECULAR_REFLECT", umath::to_integral(pragma::scenekit::Scene::RenderMode::IndirectSpecularReflect));
-	defScene.add_static_constant("RENDER_MODE_INDIRECT_SPECULAR_TRANSMIT", umath::to_integral(pragma::scenekit::Scene::RenderMode::IndirectSpecularTransmit));
-	defScene.add_static_constant("RENDER_MODE_UV", umath::to_integral(pragma::scenekit::Scene::RenderMode::Uv));
-	defScene.add_static_constant("RENDER_MODE_IRRADIANCE", umath::to_integral(pragma::scenekit::Scene::RenderMode::Irradiance));
-	defScene.add_static_constant("RENDER_MODE_NOISE", umath::to_integral(pragma::scenekit::Scene::RenderMode::Noise));
-	defScene.add_static_constant("RENDER_MODE_CAUSTIC", umath::to_integral(pragma::scenekit::Scene::RenderMode::Caustic));
-	defScene.add_static_constant("RENDER_MODE_COUNT", umath::to_integral(pragma::scenekit::Scene::RenderMode::Count));
+	defScene.add_static_constant("RENDER_MODE_COMBINED", pragma::math::to_integral(pragma::scenekit::Scene::RenderMode::RenderImage));
+	defScene.add_static_constant("RENDER_MODE_BAKE_AMBIENT_OCCLUSION", pragma::math::to_integral(pragma::scenekit::Scene::RenderMode::BakeAmbientOcclusion));
+	defScene.add_static_constant("RENDER_MODE_BAKE_NORMALS", pragma::math::to_integral(pragma::scenekit::Scene::RenderMode::BakeNormals));
+	defScene.add_static_constant("RENDER_MODE_BAKE_DIFFUSE_LIGHTING", pragma::math::to_integral(pragma::scenekit::Scene::RenderMode::BakeDiffuseLighting));
+	defScene.add_static_constant("RENDER_MODE_BAKE_DIFFUSE_LIGHTING_SEPARATE", pragma::math::to_integral(pragma::scenekit::Scene::RenderMode::BakeDiffuseLightingSeparate));
+	defScene.add_static_constant("RENDER_MODE_ALBEDO", pragma::math::to_integral(pragma::scenekit::Scene::RenderMode::SceneAlbedo));
+	defScene.add_static_constant("RENDER_MODE_NORMALS", pragma::math::to_integral(pragma::scenekit::Scene::RenderMode::SceneNormals));
+	defScene.add_static_constant("RENDER_MODE_DEPTH", pragma::math::to_integral(pragma::scenekit::Scene::RenderMode::SceneDepth));
+	defScene.add_static_constant("RENDER_MODE_ALPHA", pragma::math::to_integral(pragma::scenekit::Scene::RenderMode::Alpha));
+	defScene.add_static_constant("RENDER_MODE_GEOMETRY_NORMAL", pragma::math::to_integral(pragma::scenekit::Scene::RenderMode::GeometryNormal));
+	defScene.add_static_constant("RENDER_MODE_SHADING_NORMAL", pragma::math::to_integral(pragma::scenekit::Scene::RenderMode::ShadingNormal));
+	defScene.add_static_constant("RENDER_MODE_DIRECT_DIFFUSE", pragma::math::to_integral(pragma::scenekit::Scene::RenderMode::DirectDiffuse));
+	defScene.add_static_constant("RENDER_MODE_DIRECT_DIFFUSE_REFLECT", pragma::math::to_integral(pragma::scenekit::Scene::RenderMode::DirectDiffuseReflect));
+	defScene.add_static_constant("RENDER_MODE_DIRECT_DIFFUSE_TRANSMIT", pragma::math::to_integral(pragma::scenekit::Scene::RenderMode::DirectDiffuseTransmit));
+	defScene.add_static_constant("RENDER_MODE_DIRECT_GLOSSY", pragma::math::to_integral(pragma::scenekit::Scene::RenderMode::DirectGlossy));
+	defScene.add_static_constant("RENDER_MODE_DIRECT_GLOSSY_REFLECT", pragma::math::to_integral(pragma::scenekit::Scene::RenderMode::DirectGlossyReflect));
+	defScene.add_static_constant("RENDER_MODE_DIRECT_GLOSSY_TRANSMIT", pragma::math::to_integral(pragma::scenekit::Scene::RenderMode::DirectGlossyTransmit));
+	defScene.add_static_constant("RENDER_MODE_EMISSION", pragma::math::to_integral(pragma::scenekit::Scene::RenderMode::Emission));
+	defScene.add_static_constant("RENDER_MODE_INDIRECT_DIFFUSE", pragma::math::to_integral(pragma::scenekit::Scene::RenderMode::IndirectDiffuse));
+	defScene.add_static_constant("RENDER_MODE_INDIRECT_DIFFUSE_REFLECT", pragma::math::to_integral(pragma::scenekit::Scene::RenderMode::IndirectDiffuseReflect));
+	defScene.add_static_constant("RENDER_MODE_INDIRECT_DIFFUSE_TRANSMIT", pragma::math::to_integral(pragma::scenekit::Scene::RenderMode::IndirectDiffuseTransmit));
+	defScene.add_static_constant("RENDER_MODE_INDIRECT_GLOSSY", pragma::math::to_integral(pragma::scenekit::Scene::RenderMode::IndirectGlossy));
+	defScene.add_static_constant("RENDER_MODE_INDIRECT_GLOSSY_REFLECT", pragma::math::to_integral(pragma::scenekit::Scene::RenderMode::IndirectGlossyReflect));
+	defScene.add_static_constant("RENDER_MODE_INDIRECT_GLOSSY_TRANSMIT", pragma::math::to_integral(pragma::scenekit::Scene::RenderMode::IndirectGlossyTransmit));
+	defScene.add_static_constant("RENDER_MODE_INDIRECT_SPECULAR", pragma::math::to_integral(pragma::scenekit::Scene::RenderMode::IndirectSpecular));
+	defScene.add_static_constant("RENDER_MODE_INDIRECT_SPECULAR_REFLECT", pragma::math::to_integral(pragma::scenekit::Scene::RenderMode::IndirectSpecularReflect));
+	defScene.add_static_constant("RENDER_MODE_INDIRECT_SPECULAR_TRANSMIT", pragma::math::to_integral(pragma::scenekit::Scene::RenderMode::IndirectSpecularTransmit));
+	defScene.add_static_constant("RENDER_MODE_UV", pragma::math::to_integral(pragma::scenekit::Scene::RenderMode::Uv));
+	defScene.add_static_constant("RENDER_MODE_IRRADIANCE", pragma::math::to_integral(pragma::scenekit::Scene::RenderMode::Irradiance));
+	defScene.add_static_constant("RENDER_MODE_NOISE", pragma::math::to_integral(pragma::scenekit::Scene::RenderMode::Noise));
+	defScene.add_static_constant("RENDER_MODE_CAUSTIC", pragma::math::to_integral(pragma::scenekit::Scene::RenderMode::Caustic));
+	defScene.add_static_constant("RENDER_MODE_COUNT", pragma::math::to_integral(pragma::scenekit::Scene::RenderMode::Count));
 	// Update "lua/pfm/raytracing_render_job.lua" when making changes to the render modes!
-	static_assert(umath::to_integral(pragma::scenekit::Scene::RenderMode::Count) == 31);
+	static_assert(pragma::math::to_integral(pragma::scenekit::Scene::RenderMode::Count) == 31);
 
-	defScene.add_static_constant("DEVICE_TYPE_CPU", umath::to_integral(pragma::scenekit::Scene::DeviceType::CPU));
-	defScene.add_static_constant("DEVICE_TYPE_GPU", umath::to_integral(pragma::scenekit::Scene::DeviceType::GPU));
+	defScene.add_static_constant("DEVICE_TYPE_CPU", pragma::math::to_integral(pragma::scenekit::Scene::DeviceType::CPU));
+	defScene.add_static_constant("DEVICE_TYPE_GPU", pragma::math::to_integral(pragma::scenekit::Scene::DeviceType::GPU));
 
-	defScene.add_static_constant("SCENE_FLAG_NONE", umath::to_integral(SceneFlags::None));
-	defScene.add_static_constant("SCENE_FLAG_BIT_CULL_OBJECTS_OUTSIDE_CAMERA_FRUSTUM", umath::to_integral(SceneFlags::CullObjectsOutsideCameraFrustum));
-	defScene.add_static_constant("SCENE_FLAG_BIT_CULL_OBJECTS_OUTSIDE_PVS", umath::to_integral(SceneFlags::CullObjectsOutsidePvs));
+	defScene.add_static_constant("SCENE_FLAG_NONE", pragma::math::to_integral(SceneFlags::None));
+	defScene.add_static_constant("SCENE_FLAG_BIT_CULL_OBJECTS_OUTSIDE_CAMERA_FRUSTUM", pragma::math::to_integral(SceneFlags::CullObjectsOutsideCameraFrustum));
+	defScene.add_static_constant("SCENE_FLAG_BIT_CULL_OBJECTS_OUTSIDE_PVS", pragma::math::to_integral(SceneFlags::CullObjectsOutsidePvs));
 
-	defScene.add_static_constant("DENOISE_MODE_NONE", umath::to_integral(pragma::scenekit::Scene::DenoiseMode::None));
-	defScene.add_static_constant("DENOISE_MODE_AUTO_FAST", umath::to_integral(pragma::scenekit::Scene::DenoiseMode::AutoFast));
-	defScene.add_static_constant("DENOISE_MODE_AUTO_DETAILED", umath::to_integral(pragma::scenekit::Scene::DenoiseMode::AutoDetailed));
-	defScene.add_static_constant("DENOISE_MODE_OPTIX", umath::to_integral(pragma::scenekit::Scene::DenoiseMode::Optix));
-	defScene.add_static_constant("DENOISE_MODE_OPEN_IMAGE", umath::to_integral(pragma::scenekit::Scene::DenoiseMode::OpenImage));
+	defScene.add_static_constant("DENOISE_MODE_NONE", pragma::math::to_integral(pragma::scenekit::Scene::DenoiseMode::None));
+	defScene.add_static_constant("DENOISE_MODE_AUTO_FAST", pragma::math::to_integral(pragma::scenekit::Scene::DenoiseMode::AutoFast));
+	defScene.add_static_constant("DENOISE_MODE_AUTO_DETAILED", pragma::math::to_integral(pragma::scenekit::Scene::DenoiseMode::AutoDetailed));
+	defScene.add_static_constant("DENOISE_MODE_OPTIX", pragma::math::to_integral(pragma::scenekit::Scene::DenoiseMode::Optix));
+	defScene.add_static_constant("DENOISE_MODE_OPEN_IMAGE", pragma::math::to_integral(pragma::scenekit::Scene::DenoiseMode::OpenImage));
 
 	defScene.def("SetAoBakeTarget", static_cast<void (scenekit::Scene::*)(pragma::asset::Model &, uint32_t)>(&scenekit::Scene::SetAOBakeTarget));
 	defScene.def("SetAoBakeTarget", static_cast<void (scenekit::Scene::*)(pragma::ecs::BaseEntity &, uint32_t)>(&scenekit::Scene::SetAOBakeTarget));
@@ -2669,12 +2669,12 @@ void PR_EXPORT pragma_initialize_lua(Lua::Interface &l)
 	defScene.scope[defSceneCreateInfo];
 
 	auto defLight = luabind::class_<pragma::scenekit::Light, luabind::bases<pragma::scenekit::WorldObject>>("LightSource");
-	defLight.add_static_constant("TYPE_POINT", umath::to_integral(pragma::scenekit::Light::Type::Point));
-	defLight.add_static_constant("TYPE_SPOT", umath::to_integral(pragma::scenekit::Light::Type::Spot));
-	defLight.add_static_constant("TYPE_DIRECTIONAL", umath::to_integral(pragma::scenekit::Light::Type::Directional));
-	defLight.add_static_constant("TYPE_AREA", umath::to_integral(pragma::scenekit::Light::Type::Area));
-	defLight.add_static_constant("TYPE_BACKGROUND", umath::to_integral(pragma::scenekit::Light::Type::Background));
-	defLight.add_static_constant("TYPE_TRIANGLE", umath::to_integral(pragma::scenekit::Light::Type::Triangle));
+	defLight.add_static_constant("TYPE_POINT", pragma::math::to_integral(pragma::scenekit::Light::Type::Point));
+	defLight.add_static_constant("TYPE_SPOT", pragma::math::to_integral(pragma::scenekit::Light::Type::Spot));
+	defLight.add_static_constant("TYPE_DIRECTIONAL", pragma::math::to_integral(pragma::scenekit::Light::Type::Directional));
+	defLight.add_static_constant("TYPE_AREA", pragma::math::to_integral(pragma::scenekit::Light::Type::Area));
+	defLight.add_static_constant("TYPE_BACKGROUND", pragma::math::to_integral(pragma::scenekit::Light::Type::Background));
+	defLight.add_static_constant("TYPE_TRIANGLE", pragma::math::to_integral(pragma::scenekit::Light::Type::Triangle));
 	defLight.def("SetType", static_cast<void (*)(lua::State *, pragma::scenekit::Light &, uint32_t)>([](lua::State *l, pragma::scenekit::Light &light, uint32_t type) { light.SetType(static_cast<pragma::scenekit::Light::Type>(type)); }));
 	defLight.def("SetConeAngle", static_cast<void (*)(lua::State *, pragma::scenekit::Light &, float, float)>([](lua::State *l, pragma::scenekit::Light &light, float outerAngle, float blendFraction) { light.SetConeAngle(outerAngle, blendFraction); }));
 	defLight.def("SetColor", static_cast<void (*)(lua::State *, pragma::scenekit::Light &, const Color &)>([](lua::State *l, pragma::scenekit::Light &light, const Color &color) { light.SetColor(color); }));
@@ -2750,7 +2750,7 @@ void PR_EXPORT pragma_initialize_lua(Lua::Interface &l)
 		}));
 		defCamera.def("SetFOV",static_cast<void(*)(lua::State*,util::WeakHandle<scenekit::Camera>&,float)>([](lua::State *l,util::WeakHandle<scenekit::Camera> &cam,float fov) {
 			
-			cam.SetFOV(umath::deg_to_rad(fov));
+			cam.SetFOV(pragma::math::deg_to_rad(fov));
 		}));
 		modConvert[defCamera];
 

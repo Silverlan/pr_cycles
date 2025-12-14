@@ -9,7 +9,7 @@ import :scene;
 
 using namespace pragma::modules;
 
-static float get_particle_extent(float radius) { return sqrt(umath::pow2(radius) * 2.0); }
+static float get_particle_extent(float radius) { return sqrt(pragma::math::pow2(radius) * 2.0); }
 static Mat4 get_rotation_matrix(Vector3 axis, float angle)
 {
 	uvec::normalize(&axis);
@@ -22,8 +22,8 @@ static Mat4 get_rotation_matrix(Vector3 axis, float angle)
 
 static Mat3 get_rotation_matrix(Vector4 q)
 {
-	return Mat3(1.0 - 2.0 * umath::pow2(q.y) - 2.0 * umath::pow2(q.z), 2.0 * q.x * q.y + 2.0 * q.z * q.w, 2.0 * q.x * q.z - 2.0 * q.y * q.w, 2.0 * q.x * q.y - 2.0 * q.z * q.w, 1.0 - 2.0 * umath::pow2(q.x) - 2.0 * umath::pow2(q.z), 2.0 * q.y * q.z + 2.0 * q.x * q.w,
-	  2.0 * q.x * q.z + 2.0 * q.y * q.w, 2.0 * q.y * q.z - 2.0 * q.x * q.w, 1.0 - 2.0 * umath::pow2(q.x) - 2.0 * umath::pow2(q.y));
+	return Mat3(1.0 - 2.0 * pragma::math::pow2(q.y) - 2.0 * pragma::math::pow2(q.z), 2.0 * q.x * q.y + 2.0 * q.z * q.w, 2.0 * q.x * q.z - 2.0 * q.y * q.w, 2.0 * q.x * q.y - 2.0 * q.z * q.w, 1.0 - 2.0 * pragma::math::pow2(q.x) - 2.0 * pragma::math::pow2(q.z), 2.0 * q.y * q.z + 2.0 * q.x * q.w,
+	  2.0 * q.x * q.z + 2.0 * q.y * q.w, 2.0 * q.y * q.z - 2.0 * q.x * q.w, 1.0 - 2.0 * pragma::math::pow2(q.x) - 2.0 * pragma::math::pow2(q.y));
 }
 
 static Vector3 get_corner_particle_vertex_position(const pragma::ecs::CParticleSystemComponent::ParticleData &pt, const Vector3 &camPos, pragma::pts::ParticleOrientationType orientation, const Vector2 &vertPos, const Vector3 &camUpWs, const Vector3 &camRightWs, float nearZ,
@@ -57,7 +57,7 @@ static Vector3 get_corner_particle_vertex_position(const pragma::ecs::CParticleS
 		up = camUpWs;
 	}
 	// TODO: What is in_rotation?
-	auto sv = get_rotation_matrix(Vector3 {0.f, 0.f, 1.f}, umath::deg_to_rad(pt.rotation)) * Vector4 {squareVert.x, squareVert.y, squareVert.z, 1};
+	auto sv = get_rotation_matrix(Vector3 {0.f, 0.f, 1.f}, pragma::math::deg_to_rad(pt.rotation)) * Vector4 {squareVert.x, squareVert.y, squareVert.z, 1};
 	squareVert = {sv.x, sv.y, sv.z};
 	return right * squareVert.x * vsize.x + up * squareVert.y * vsize.y;
 }
@@ -154,9 +154,9 @@ void scenekit::Cache::AddParticleSystem(pragma::ecs::CParticleSystemComponent &p
 					{
 						shaderModEmission->SetEmissionMap(*albedoMap);
 						/*auto valEmissionFactor = mat->GetDataBlock()->GetValue("emission_factor");
-						if(valEmissionFactor && typeid(*valEmissionFactor) == typeid(ds::Vector))
+						if(valEmissionFactor && typeid(*valEmissionFactor) == typeid(datasystem::Vector))
 						{
-							auto &emissionFactor = static_cast<ds::Vector&>(*valEmissionFactor).GetValue();
+							auto &emissionFactor = static_cast<datasystem::Vector&>(*valEmissionFactor).GetValue();
 							shaderModEmission->SetEmissionFactor(emissionFactor *m_emissionStrength);
 						}*/
 

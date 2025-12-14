@@ -18,7 +18,7 @@ scenekit::Scene::Scene(pragma::scenekit::Scene &rtScene) : m_rtScene {rtScene.sh
 	m_cache->GetModelCache().SetUnique(true);
 }
 
-void scenekit::Scene::AddRoughnessMapImageTextureNode(pragma::scenekit::ShaderModuleRoughness &shader, msys::Material &mat, float defaultRoughness) const
+void scenekit::Scene::AddRoughnessMapImageTextureNode(pragma::scenekit::ShaderModuleRoughness &shader, material::Material &mat, float defaultRoughness) const
 {
 #if 0
 	// If no roughness map is available, just use roughness or specular factor directly
@@ -146,7 +146,7 @@ void scenekit::Scene::BuildLightMapObject()
 	if(m_lightMapTargets.empty())
 		return;
 	std::vector<pragma::geometry::ModelSubMesh *> targetMeshes {};
-	std::vector<util::Uuid> targetMeshEntityUuids;
+	std::vector<pragma::util::Uuid> targetMeshEntityUuids;
 	std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> meshDatas;
 	for(auto &hEntWrapper : m_lightMapTargets) {
 		auto &hEnt = static_cast<EntityHandle&>(hEntWrapper);
@@ -194,8 +194,8 @@ void scenekit::Scene::BuildLightMapObject()
 			uvSet = subMesh->GetUVSet("lightmap");
 		if(uvSet) {
 			if(uvSet->size() != verts.size()) {
-				Con::cwar << "WARNING: Number of UV coordinates (" << uvSet->size() << ") in lightmap UV set does not match number of mesh vertices (" << verts.size() << ") of mesh with uuid " << util::uuid_to_string(subMesh->GetUuid()) << " of entity with uuid "
-				          << util::uuid_to_string(targetMeshEntityUuids.at(idx)) << "! Mesh will be ignored!" << std::endl;
+				Con::cwar << "WARNING: Number of UV coordinates (" << uvSet->size() << ") in lightmap UV set does not match number of mesh vertices (" << verts.size() << ") of mesh with uuid " << pragma::util::uuid_to_string(subMesh->GetUuid()) << " of entity with uuid "
+				          << pragma::util::uuid_to_string(targetMeshEntityUuids.at(idx)) << "! Mesh will be ignored!" << std::endl;
 				++idx;
 				continue;
 			}
@@ -215,13 +215,13 @@ void scenekit::Scene::AddLightmapBakeTarget(pragma::ecs::BaseEntity &ent) {
 }
 void scenekit::Scene::SetLightmapDataCache(pragma::rendering::LightmapDataCache *cache) { m_lightMapDataCache = cache ? cache->shared_from_this() : nullptr; }
 
-pragma::scenekit::PShader scenekit::Cache::CreateShader(msys::Material &mat, const std::string &meshName, const ShaderInfo &shaderInfo) const
+pragma::scenekit::PShader scenekit::Cache::CreateShader(material::Material &mat, const std::string &meshName, const ShaderInfo &shaderInfo) const
 {
 	auto it = m_materialToShader.find(&mat);
 	if(it != m_materialToShader.end())
 		return m_shaderCache->GetShader(it->second);
 	auto &matShader = mat.GetShaderIdentifier();
-	if(ustring::compare<std::string>(matShader, "nodraw", false))
+	if(pragma::string::compare<std::string>(matShader, "nodraw", false))
 		return nullptr;
 	std::string cyclesShader = "pbr";
 	auto &shaderManager = get_shader_manager();
@@ -229,11 +229,11 @@ pragma::scenekit::PShader scenekit::Cache::CreateShader(msys::Material &mat, con
 		cyclesShader = mat.GetProperty<std::string>("cycles/shader", "pbr");
 	else {
 		auto matShader = mat.GetShaderIdentifier();
-		ustring::to_lower(matShader);
+		pragma::string::to_lower(matShader);
 		if(shaderManager.IsShaderRegistered(matShader))
 			cyclesShader = matShader;
 	}
-	if(ustring::compare<std::string>(cyclesShader, "nodraw", false))
+	if(pragma::string::compare<std::string>(cyclesShader, "nodraw", false))
 		return nullptr;
 
 	auto shader = shaderManager.CreateShader(get_node_manager(), cyclesShader, shaderInfo.entity.has_value() ? *shaderInfo.entity : nullptr, shaderInfo.subMesh.has_value() ? *shaderInfo.subMesh : nullptr, mat);
@@ -263,7 +263,7 @@ pragma::scenekit::PShader scenekit::Cache::CreateShader(msys::Material &mat, con
 	static_cast<CMaterialManager&>(get_client_state()->GetMaterialManager()).GetTextureManager().WaitForTextures();
 
 	TextureInfo *diffuseMap = nullptr;
-	if(ustring::compare(mat.GetShaderIdentifier(),"skybox",false))
+	if(pragma::string::compare(mat.GetShaderIdentifier(),"skybox",false))
 		diffuseMap = mat.GetTextureInfo("skybox");
 	else
 		diffuseMap = mat.GetDiffuseMap();
@@ -273,7 +273,7 @@ pragma::scenekit::PShader scenekit::Cache::CreateShader(msys::Material &mat, con
 		return nullptr;
 
 	std::optional<std::string> albedo2TexPath = {};
-	if(ustring::compare(mat.GetShaderIdentifier(),"pbr_blend",false))
+	if(pragma::string::compare(mat.GetShaderIdentifier(),"pbr_blend",false))
 	{
 		auto *albedo2Map = mat.GetTextureInfo(Material::ALBEDO_MAP2_IDENTIFIER);
 		if(albedo2Map)
@@ -283,7 +283,7 @@ pragma::scenekit::PShader scenekit::Cache::CreateShader(msys::Material &mat, con
 	// TODO: Only allow toon shader when baking diffuse lighting
 	const std::string bsdfName = "bsdf_scene";
 
-	if(umath::is_flag_set(flags,PreparedTextureOutputFlags::Envmap))
+	if(pragma::math::is_flag_set(flags,PreparedTextureOutputFlags::Envmap))
 		return nullptr;
 
 	/*if(true)
@@ -300,7 +300,7 @@ pragma::scenekit::PShader scenekit::Cache::CreateShader(msys::Material &mat, con
 	pNodeBsdf->offset = 2.f;
 	pNodeBsdf->random_roughness = 0.f;
 
-	auto hasAlbedoNode = umath::is_flag_set(flags,PreparedTextureOutputFlags::Envmap) ?
+	auto hasAlbedoNode = pragma::math::is_flag_set(flags,PreparedTextureOutputFlags::Envmap) ?
 	(AssignEnvironmentTexture(*shader,"albedo",*diffuseTexPath) != nullptr) :
 	(AssignTexture(*shader,"albedo",*diffuseTexPath) != nullptr);
 	if(hasAlbedoNode)
@@ -317,9 +317,9 @@ pragma::scenekit::PShader scenekit::Cache::CreateShader(msys::Material &mat, con
 
 	auto fApplyColorFactor = [&mat](pragma::scenekit::ShaderAlbedoSet &albedoSet) {
 		auto &colorFactor = mat.GetDataBlock()->GetValue("color_factor");
-		if(colorFactor == nullptr || typeid(*colorFactor) != typeid(ds::Vector4))
+		if(colorFactor == nullptr || typeid(*colorFactor) != typeid(datasystem::Vector4))
 			return;
-		auto &color = static_cast<ds::Vector4*>(colorFactor.get())->GetValue();
+		auto &color = static_cast<datasystem::Vector4*>(colorFactor.get())->GetValue();
 		albedoSet.SetColorFactor(color);
 	};
 
@@ -373,7 +373,7 @@ pragma::scenekit::PShader scenekit::Cache::CreateShader(msys::Material &mat, con
 		std::string cyclesShader = "pbr";
 		auto &dataBlock = mat.GetDataBlock();
 		auto cyclesBlock = dataBlock->GetBlock("cycles");
-		std::shared_ptr<ds::Block> cyclesShaderPropBlock = nullptr;
+		std::shared_ptr<datasystem::Block> cyclesShaderPropBlock = nullptr;
 		if(cyclesBlock)
 		{
 			cyclesShader = cyclesBlock->GetString("shader","pbr");
@@ -384,7 +384,7 @@ pragma::scenekit::PShader scenekit::Cache::CreateShader(msys::Material &mat, con
 		if(dataBlock->GetFloat("ior",&f))
 			ior = f;
 
-		if(ustring::compare(cyclesShader,"toon",false))
+		if(pragma::string::compare(cyclesShader,"toon",false))
 		{
 			auto shader = pragma::scenekit::Shader::Create<pragma::scenekit::ShaderToon>(*m_rtScene,meshName +"_shader");
 			fApplyColorFactor(shader->GetAlbedoSet());
@@ -414,23 +414,23 @@ pragma::scenekit::PShader scenekit::Cache::CreateShader(msys::Material &mat, con
 					shaderToon->SetSpecularSmooth(value);
 
 				auto &dvSpecFactor = cyclesShaderPropBlock->GetValue("specular_color");
-				if(dvSpecFactor != nullptr && typeid(*dvSpecFactor) == typeid(ds::Color))
+				if(dvSpecFactor != nullptr && typeid(*dvSpecFactor) == typeid(datasystem::Color))
 				{
-					auto &color = static_cast<ds::Color&>(*dvSpecFactor).GetValue();
+					auto &color = static_cast<datasystem::Color&>(*dvSpecFactor).GetValue();
 					shader->SetSpecularColor(color.ToVector3());
 				}
 
 				auto &dvShadeColor = cyclesShaderPropBlock->GetValue("shade_color");
-				if(dvShadeColor != nullptr && typeid(*dvShadeColor) == typeid(ds::Color))
+				if(dvShadeColor != nullptr && typeid(*dvShadeColor) == typeid(datasystem::Color))
 				{
-					auto &color = static_cast<ds::Color&>(*dvShadeColor).GetValue();
+					auto &color = static_cast<datasystem::Color&>(*dvShadeColor).GetValue();
 					shader->SetShadeColor(color.ToVector3());
 				}
 			}
 
 			resShader = shader;
 		}
-		else if(ustring::compare(cyclesShader,"glass",false))
+		else if(pragma::string::compare(cyclesShader,"glass",false))
 		{
 			auto shader = pragma::scenekit::Shader::Create<pragma::scenekit::ShaderGlass>(*m_rtScene,meshName +"_shader");
 			fApplyColorFactor(shader->GetAlbedoSet());
@@ -488,9 +488,9 @@ pragma::scenekit::PShader scenekit::Cache::CreateShader(msys::Material &mat, con
 					shader->SetSubsurface(subsurface);
 
 				auto &dvSubsurfaceColor = dataSSS->GetValue("color_factor");
-				if(dvSubsurfaceColor != nullptr && typeid(*dvSubsurfaceColor) == typeid(ds::Vector))
+				if(dvSubsurfaceColor != nullptr && typeid(*dvSubsurfaceColor) == typeid(datasystem::Vector))
 				{
-					auto &color = static_cast<ds::Vector&>(*dvSubsurfaceColor).GetValue();
+					auto &color = static_cast<datasystem::Vector&>(*dvSubsurfaceColor).GetValue();
 					shader->SetSubsurfaceColorFactor(color);
 				}
 
@@ -512,8 +512,8 @@ pragma::scenekit::PShader scenekit::Cache::CreateShader(msys::Material &mat, con
 				}
 
 				auto &dvSubsurfaceRadius = dataSSS->GetValue("scatter_color");
-				if(dvSubsurfaceRadius != nullptr && typeid(*dvSubsurfaceRadius) == typeid(ds::Color))
-					shader->SetSubsurfaceRadius(static_cast<ds::Color&>(*dvSubsurfaceRadius).GetValue().ToVector3());
+				if(dvSubsurfaceRadius != nullptr && typeid(*dvSubsurfaceRadius) == typeid(datasystem::Color))
+					shader->SetSubsurfaceRadius(static_cast<datasystem::Color&>(*dvSubsurfaceRadius).GetValue().ToVector3());
 			}
 			//
 
@@ -587,9 +587,9 @@ pragma::scenekit::PShader scenekit::Cache::CreateShader(msys::Material &mat, con
 				}
 
 				auto valEmissionFactor = mat.GetDataBlock()->GetValue("emission_factor");
-				if(valEmissionFactor && typeid(*valEmissionFactor) == typeid(ds::Vector))
+				if(valEmissionFactor && typeid(*valEmissionFactor) == typeid(datasystem::Vector))
 				{
-					auto &emissionFactor = static_cast<ds::Vector&>(*valEmissionFactor).GetValue();
+					auto &emissionFactor = static_cast<datasystem::Vector&>(*valEmissionFactor).GetValue();
 					shader->SetEmissionFactor(emissionFactor);
 				}
 			}
@@ -616,7 +616,7 @@ pragma::scenekit::PShader scenekit::Cache::CreateShader(msys::Material &mat, con
 	if(resShader && shaderInfo.entity.has_value() && shaderInfo.subMesh.has_value())
 	{
 		auto normalMapSpace = pragma::scenekit::NormalMapNode::Space::Tangent;
-		if(ustring::compare(mat.GetShaderIdentifier(),"eye",false))
+		if(pragma::string::compare(mat.GetShaderIdentifier(),"eye",false))
 		{
 			//normalMapSpace = NormalMapNode::Space::Object;
 

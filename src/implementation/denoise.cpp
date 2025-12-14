@@ -6,18 +6,18 @@ module pragma.modules.scenekit;
 import pragma.scenekit;
 import :scene;
 
-class DenoiseWorker : public util::ParallelWorker<std::shared_ptr<uimg::ImageBuffer>> {
+class DenoiseWorker : public pragma::util::ParallelWorker<std::shared_ptr<pragma::image::ImageBuffer>> {
   public:
-	DenoiseWorker(uimg::ImageBuffer &imgBuffer);
-	using util::ParallelWorker<std::shared_ptr<uimg::ImageBuffer>>::Cancel;
-	virtual std::shared_ptr<uimg::ImageBuffer> GetResult() override;
+	DenoiseWorker(pragma::image::ImageBuffer &imgBuffer);
+	using pragma::util::ParallelWorker<std::shared_ptr<pragma::image::ImageBuffer>>::Cancel;
+	virtual std::shared_ptr<pragma::image::ImageBuffer> GetResult() override;
   private:
-	std::shared_ptr<uimg::ImageBuffer> m_imgBuffer = nullptr;
+	std::shared_ptr<pragma::image::ImageBuffer> m_imgBuffer = nullptr;
 	template<typename TJob, typename... TARGS>
-	friend util::ParallelJob<typename TJob::RESULT_TYPE> util::create_parallel_job(TARGS &&...args);
+	friend pragma::util::ParallelJob<typename TJob::RESULT_TYPE> pragma::util::create_parallel_job(TARGS &&...args);
 };
 
-DenoiseWorker::DenoiseWorker(uimg::ImageBuffer &imgBuffer) : m_imgBuffer {imgBuffer.shared_from_this()}
+DenoiseWorker::DenoiseWorker(pragma::image::ImageBuffer &imgBuffer) : m_imgBuffer {imgBuffer.shared_from_this()}
 {
 	AddThread([this]() {
 		pragma::scenekit::denoise::Info denoiseInfo {};
@@ -27,9 +27,9 @@ DenoiseWorker::DenoiseWorker(uimg::ImageBuffer &imgBuffer) : m_imgBuffer {imgBuf
 		});
 		if(IsCancelled())
 			return;
-		SetStatus(success ? util::JobStatus::Successful : util::JobStatus::Failed);
+		SetStatus(success ? pragma::util::JobStatus::Successful : pragma::util::JobStatus::Failed);
 	});
 }
-std::shared_ptr<uimg::ImageBuffer> DenoiseWorker::GetResult() { return m_imgBuffer; }
+std::shared_ptr<pragma::image::ImageBuffer> DenoiseWorker::GetResult() { return m_imgBuffer; }
 
-util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> pragma::modules::scenekit::denoise(uimg::ImageBuffer &imgBuffer) { return util::create_parallel_job<DenoiseWorker>(imgBuffer); }
+pragma::util::ParallelJob<std::shared_ptr<pragma::image::ImageBuffer>> pragma::modules::scenekit::denoise(image::ImageBuffer &imgBuffer) { return pragma::util::create_parallel_job<DenoiseWorker>(imgBuffer); }

@@ -16,11 +16,11 @@ import :subdivision;
 
 enum class PreparedTextureInputFlags : uint8_t { None = 0u, CanBeEnvMap = 1u };
 enum class PreparedTextureOutputFlags : uint8_t { None = 0u, Envmap = 1u };
-namespace umath::scoped_enum::bitwise {
+namespace pragma::math::scoped_enum::bitwise {
 	template<>
 	struct enable_bitwise_operators<PreparedTextureInputFlags> : std::true_type {};
 }
-namespace umath::scoped_enum::bitwise {
+namespace pragma::math::scoped_enum::bitwise {
 	template<>
 	struct enable_bitwise_operators<PreparedTextureOutputFlags> : std::true_type {};
 }
@@ -29,7 +29,7 @@ static std::optional<std::string> get_abs_error_texture_path()
 {
 	std::string errTexPath = "materials\\error.dds";
 	std::string absPath;
-	if(FileManager::FindAbsolutePath(errTexPath, absPath) == false)
+	if(pragma::fs::find_absolute_path(errTexPath, absPath) == false)
 		return absPath;
 	return {};
 }
@@ -43,13 +43,13 @@ static std::optional<std::string> prepare_texture(TextureInfo *texInfo, bool &ou
 	outConverted = false;
 	if(texInfo == nullptr)
 		return {};
-	auto tex = texInfo ? std::static_pointer_cast<msys::Texture>(texInfo->texture) : nullptr;
+	auto tex = texInfo ? std::static_pointer_cast<pragma::material::Texture>(texInfo->texture) : nullptr;
 	std::string texName {};
 	// Make sure texture has been fully loaded!
 	if(tex == nullptr || tex->IsLoaded() == false) {
 		tex = nullptr;
 		if(defaultTexture.has_value()) {
-			auto &texManager = static_cast<msys::CMaterialManager &>(pragma::get_client_state()->GetMaterialManager()).GetTextureManager();
+			auto &texManager = static_cast<pragma::material::CMaterialManager &>(pragma::get_client_state()->GetMaterialManager()).GetTextureManager();
 			auto ptrTex = texManager.LoadAsset(*defaultTexture);
 			if(ptrTex != nullptr) {
 				texName = *defaultTexture;
@@ -79,7 +79,7 @@ static std::optional<std::string> prepare_texture(TextureInfo *texInfo, bool &ou
 	auto *img = &vkTex->GetImage();
 	auto isCubemap = img->IsCubemap();
 	if(isCubemap) {
-		if(umath::is_flag_set(inFlags, PreparedTextureInputFlags::CanBeEnvMap) == false)
+		if(pragma::math::is_flag_set(inFlags, PreparedTextureInputFlags::CanBeEnvMap) == false)
 			return {};
 		// Image is a cubemap, which Cycles doesn't support! We'll have to convert it to a equirectangular image and use that instead.
 		auto &shader = static_cast<pragma::ShaderCubemapToEquirectangular &>(*pragma::get_cengine()->GetShader("cubemap_to_equirectangular"));
@@ -96,7 +96,7 @@ static std::optional<std::string> prepare_texture(TextureInfo *texInfo, bool &ou
 	texPath += ".dds";
 	// Check if DDS version of the texture already exists, in which case we can just use it directly!
 	std::string absPath;
-	if(FileManager::FindAbsolutePath(texPath, absPath)) {
+	if(pragma::fs::find_absolute_path(texPath, absPath)) {
 		outSuccess = true;
 		return absPath;
 	}
@@ -108,75 +108,75 @@ static std::optional<std::string> prepare_texture(TextureInfo *texInfo, bool &ou
 
 	// Output path for the DDS-file we're about to create
 	auto ddsPath = "addons/converted/materials/" + texName;
-	uimg::TextureInfo imgWriteInfo {};
-	imgWriteInfo.containerFormat = uimg::TextureInfo::ContainerFormat::DDS; // Cycles doesn't support KTX
-	if(tex->HasFlag(msys::Texture::Flags::SRGB))
-		imgWriteInfo.flags |= uimg::TextureInfo::Flags::SRGB;
+	pragma::image::TextureInfo imgWriteInfo {};
+	imgWriteInfo.containerFormat = pragma::image::TextureInfo::ContainerFormat::DDS; // Cycles doesn't support KTX
+	if(tex->HasFlag(pragma::material::Texture::Flags::SRGB))
+		imgWriteInfo.flags |= pragma::image::TextureInfo::Flags::SRGB;
 
 	// Try to determine appropriate formats
-	if(tex->HasFlag(msys::Texture::Flags::NormalMap)) {
-		imgWriteInfo.inputFormat = uimg::TextureInfo::InputFormat::R32G32B32A32_Float;
+	if(tex->HasFlag(pragma::material::Texture::Flags::NormalMap)) {
+		imgWriteInfo.inputFormat = pragma::image::TextureInfo::InputFormat::R32G32B32A32_Float;
 		imgWriteInfo.SetNormalMap();
 	}
 	else {
 		auto format = img->GetFormat();
 		if(prosper::util::is_16bit_format(format)) {
-			imgWriteInfo.inputFormat = uimg::TextureInfo::InputFormat::R16G16B16A16_Float;
-			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::HDRColorMap;
+			imgWriteInfo.inputFormat = pragma::image::TextureInfo::InputFormat::R16G16B16A16_Float;
+			imgWriteInfo.outputFormat = pragma::image::TextureInfo::OutputFormat::HDRColorMap;
 		}
 		else if(prosper::util::is_32bit_format(format) || prosper::util::is_64bit_format(format)) {
-			imgWriteInfo.inputFormat = uimg::TextureInfo::InputFormat::R32G32B32A32_Float;
-			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::HDRColorMap;
+			imgWriteInfo.inputFormat = pragma::image::TextureInfo::InputFormat::R32G32B32A32_Float;
+			imgWriteInfo.outputFormat = pragma::image::TextureInfo::OutputFormat::HDRColorMap;
 		}
 		else {
-			imgWriteInfo.inputFormat = uimg::TextureInfo::InputFormat::R8G8B8A8_UInt;
+			imgWriteInfo.inputFormat = pragma::image::TextureInfo::InputFormat::R8G8B8A8_UInt;
 			// TODO: Check the alpha channel values to determine whether we actually need a full alpha channel?
-			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::ColorMapSmoothAlpha;
+			imgWriteInfo.outputFormat = pragma::image::TextureInfo::OutputFormat::ColorMapSmoothAlpha;
 		}
 		switch(format) {
 		case prosper::Format::BC1_RGBA_SRGB_Block:
 		case prosper::Format::BC1_RGBA_UNorm_Block:
 		case prosper::Format::BC1_RGB_SRGB_Block:
 		case prosper::Format::BC1_RGB_UNorm_Block:
-			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::BC1;
+			imgWriteInfo.outputFormat = pragma::image::TextureInfo::OutputFormat::BC1;
 			break;
 		case prosper::Format::BC2_SRGB_Block:
 		case prosper::Format::BC2_UNorm_Block:
-			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::BC2;
+			imgWriteInfo.outputFormat = pragma::image::TextureInfo::OutputFormat::BC2;
 			break;
 		case prosper::Format::BC3_SRGB_Block:
 		case prosper::Format::BC3_UNorm_Block:
-			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::BC3;
+			imgWriteInfo.outputFormat = pragma::image::TextureInfo::OutputFormat::BC3;
 			break;
 		case prosper::Format::BC4_SNorm_Block:
 		case prosper::Format::BC4_UNorm_Block:
-			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::BC4;
+			imgWriteInfo.outputFormat = pragma::image::TextureInfo::OutputFormat::BC4;
 			break;
 		case prosper::Format::BC5_SNorm_Block:
 		case prosper::Format::BC5_UNorm_Block:
-			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::BC5;
+			imgWriteInfo.outputFormat = pragma::image::TextureInfo::OutputFormat::BC5;
 			break;
 		case prosper::Format::BC6H_SFloat_Block:
 		case prosper::Format::BC6H_UFloat_Block:
 			// TODO: As of 20-03-26, Cycles (/oiio) does not have support for BC6, so we'll
 			// fall back to a different format
-			imgWriteInfo.inputFormat = uimg::TextureInfo::InputFormat::R16G16B16A16_Float;
-			// imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::BC6;
-			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::DXT5;
+			imgWriteInfo.inputFormat = pragma::image::TextureInfo::InputFormat::R16G16B16A16_Float;
+			// imgWriteInfo.outputFormat = image::TextureInfo::OutputFormat::BC6;
+			imgWriteInfo.outputFormat = pragma::image::TextureInfo::OutputFormat::DXT5;
 			break;
 		case prosper::Format::BC7_SRGB_Block:
 		case prosper::Format::BC7_UNorm_Block:
 			// TODO: As of 20-03-26, Cycles (/oiio) does not have support for BC7, so we'll
 			// fall back to a different format
-			imgWriteInfo.inputFormat = uimg::TextureInfo::InputFormat::R16G16B16A16_Float;
-			// imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::BC7;
-			imgWriteInfo.outputFormat = uimg::TextureInfo::OutputFormat::DXT1;
+			imgWriteInfo.inputFormat = pragma::image::TextureInfo::InputFormat::R16G16B16A16_Float;
+			// imgWriteInfo.outputFormat = image::TextureInfo::OutputFormat::BC7;
+			imgWriteInfo.outputFormat = pragma::image::TextureInfo::OutputFormat::DXT1;
 			break;
 		}
 	}
 	absPath = "";
 	// Save the DDS image and make sure the file exists
-	if(static_cast<pragma::CGame*>(pragma::get_client_game())->SaveImage(*img, ddsPath, imgWriteInfo) && FileManager::FindAbsolutePath(ddsPath + ".dds", absPath)) {
+	if(static_cast<pragma::CGame*>(pragma::get_client_game())->SaveImage(*img, ddsPath, imgWriteInfo) && pragma::fs::find_absolute_path(ddsPath + ".dds", absPath)) {
 		outSuccess = true;
 		outConverted = true;
 		return absPath;
@@ -230,11 +230,11 @@ pragma::modules::scenekit::Cache::Cache(pragma::scenekit::Scene::RenderMode rend
 	m_mdlCache->AddChunk(*m_shaderCache);
 }
 
-std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma::modules::scenekit::Cache::AddMeshList(asset::Model &mdl, const std::vector<std::shared_ptr<pragma::geometry::ModelMesh>> &meshList, const std::string &meshName, pragma::ecs::BaseEntity *optEnt, const std::optional<umath::ScaledTransform> &opose,
-  uint32_t skinId, pragma::CModelComponent *optMdlC, pragma::CAnimatedComponent *optAnimC, const std::function<bool(pragma::geometry::ModelMesh &, const umath::ScaledTransform &)> &optMeshFilter, const std::function<bool(geometry::ModelSubMesh &, const umath::ScaledTransform &)> &optSubMeshFilter,
+std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma::modules::scenekit::Cache::AddMeshList(asset::Model &mdl, const std::vector<std::shared_ptr<pragma::geometry::ModelMesh>> &meshList, const std::string &meshName, pragma::ecs::BaseEntity *optEnt, const std::optional<pragma::math::ScaledTransform> &opose,
+  uint32_t skinId, pragma::CModelComponent *optMdlC, pragma::CAnimatedComponent *optAnimC, const std::function<bool(pragma::geometry::ModelMesh &, const pragma::math::ScaledTransform &)> &optMeshFilter, const std::function<bool(geometry::ModelSubMesh &, const pragma::math::ScaledTransform &)> &optSubMeshFilter,
   const std::function<void(geometry::ModelSubMesh &)> &optOnMeshAdded)
 {
-	auto pose = opose.has_value() ? *opose : umath::ScaledTransform {};
+	auto pose = opose.has_value() ? *opose : pragma::math::ScaledTransform {};
 	auto hasAlphas = false;
 	auto hasWrinkles = (mdl.GetVertexAnimations().empty() == false); // TODO: Not the best way to determine if the entity uses wrinkles
 	std::vector<std::shared_ptr<MeshData>> meshDatas {};
@@ -265,8 +265,8 @@ std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma:
 	return meshDatas;
 }
 
-std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma::modules::scenekit::Cache::AddModel(asset::Model &mdl, const std::string &meshName, pragma::ecs::BaseEntity *optEnt, const std::optional<umath::ScaledTransform> &pose, uint32_t skinId, pragma::CModelComponent *optMdlC,
-  pragma::CAnimatedComponent *optAnimC, const std::function<bool(pragma::geometry::ModelMesh &, const umath::ScaledTransform &)> &optMeshFilter, const std::function<bool(geometry::ModelSubMesh &, const umath::ScaledTransform &)> &optSubMeshFilter, const std::function<void(geometry::ModelSubMesh &)> &optOnMeshAdded)
+std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma::modules::scenekit::Cache::AddModel(asset::Model &mdl, const std::string &meshName, pragma::ecs::BaseEntity *optEnt, const std::optional<pragma::math::ScaledTransform> &pose, uint32_t skinId, pragma::CModelComponent *optMdlC,
+  pragma::CAnimatedComponent *optAnimC, const std::function<bool(pragma::geometry::ModelMesh &, const pragma::math::ScaledTransform &)> &optMeshFilter, const std::function<bool(geometry::ModelSubMesh &, const pragma::math::ScaledTransform &)> &optSubMeshFilter, const std::function<void(geometry::ModelSubMesh &)> &optOnMeshAdded)
 {
 	std::vector<std::shared_ptr<pragma::geometry::ModelMesh>> lodMeshes {};
 	std::vector<uint32_t> bodyGroups {};
@@ -275,8 +275,8 @@ std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma:
 	return AddMeshList(mdl, lodMeshes, meshName, optEnt, pose, skinId, optMdlC, optAnimC, optMeshFilter, optSubMeshFilter, optOnMeshAdded);
 }
 
-std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma::modules::scenekit::Cache::AddEntityMesh(pragma::ecs::BaseEntity &ent, std::vector<geometry::ModelSubMesh *> *optOutTargetMeshes, const std::function<bool(pragma::geometry::ModelMesh &, const umath::ScaledTransform &)> &meshFilter,
-  const std::function<bool(geometry::ModelSubMesh &, const umath::ScaledTransform &)> &subMeshFilter, const std::string &nameSuffix, const std::optional<umath::ScaledTransform> &pose)
+std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma::modules::scenekit::Cache::AddEntityMesh(pragma::ecs::BaseEntity &ent, std::vector<geometry::ModelSubMesh *> *optOutTargetMeshes, const std::function<bool(pragma::geometry::ModelMesh &, const pragma::math::ScaledTransform &)> &meshFilter,
+  const std::function<bool(geometry::ModelSubMesh &, const pragma::math::ScaledTransform &)> &subMeshFilter, const std::string &nameSuffix, const std::optional<pragma::math::ScaledTransform> &pose)
 {
 #if 0
 	if(m_renderMode == RenderMode::BakeDiffuseLighting && ent.IsWorld() == false)
@@ -323,7 +323,7 @@ std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma:
 		if(skyC.valid()) {
 			// Special case
 			auto &pose = ent.GetPose();
-			AddModel(*mdl, name, &ent, pose, ent.GetSkin(), mdlC, animC.get(), meshFilter, [&targetMeshes, &subMeshFilter](geometry::ModelSubMesh &mesh, const umath::ScaledTransform &pose) -> bool {
+			AddModel(*mdl, name, &ent, pose, ent.GetSkin(), mdlC, animC.get(), meshFilter, [&targetMeshes, &subMeshFilter](geometry::ModelSubMesh &mesh, const pragma::math::ScaledTransform &pose) -> bool {
 				if(subMeshFilter && subMeshFilter(mesh, pose) == false)
 					return false;
 				targetMeshes->push_back(&mesh);
@@ -333,16 +333,16 @@ std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma:
 			std::optional<std::string> skyboxTexture {};
 			for(auto &mesh : *targetMeshes) {
 				auto *mat = mdlC->GetRenderMaterial(mesh->GetSkinTextureIndex(), ent.GetSkin());
-				if(mat == nullptr || (ustring::compare<std::string>(mat->GetShaderIdentifier(), "skybox", false) == false && ustring::compare<std::string>(mat->GetShaderIdentifier(), "skybox_equirect", false) == false))
+				if(mat == nullptr || (pragma::string::compare<std::string>(mat->GetShaderIdentifier(), "skybox", false) == false && pragma::string::compare<std::string>(mat->GetShaderIdentifier(), "skybox_equirect", false) == false))
 					continue;
 				auto *diffuseMap = mat->GetTextureInfo("skybox");
 				auto tex = diffuseMap ? diffuseMap->texture : nullptr;
-				auto vkTex = tex ? std::static_pointer_cast<msys::Texture>(tex)->GetVkTexture() : nullptr;
+				auto vkTex = tex ? std::static_pointer_cast<material::Texture>(tex)->GetVkTexture() : nullptr;
 				if(vkTex == nullptr || vkTex->GetImage().IsCubemap() == false)
 					continue;
 				PreparedTextureOutputFlags flags;
 				auto diffuseTexPath = prepare_texture(diffuseMap, PreparedTextureInputFlags::CanBeEnvMap, &flags);
-				if(diffuseTexPath.has_value() == false || umath::is_flag_set(flags, PreparedTextureOutputFlags::Envmap) == false)
+				if(diffuseTexPath.has_value() == false || pragma::math::is_flag_set(flags, PreparedTextureOutputFlags::Envmap) == false)
 					continue;
 				skyboxTexture = diffuseTexPath;
 			}
@@ -351,7 +351,7 @@ std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma:
 			return {};
 		}
 
-		auto fFilterMesh = [&subMeshFilter](geometry::ModelSubMesh &mesh, const umath::ScaledTransform &pose) -> bool { return !subMeshFilter || subMeshFilter(mesh, pose); };
+		auto fFilterMesh = [&subMeshFilter](geometry::ModelSubMesh &mesh, const pragma::math::ScaledTransform &pose) -> bool { return !subMeshFilter || subMeshFilter(mesh, pose); };
 		auto fOnMeshAdded = [&targetMeshes](geometry::ModelSubMesh &mesh) { targetMeshes->push_back(&mesh); };
 
 		auto renderC = ent.GetComponent<pragma::CRenderComponent>();
@@ -380,8 +380,8 @@ std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma:
 	}
 	return meshDatas;
 }
-pragma::scenekit::PObject pragma::modules::scenekit::Cache::AddEntity(pragma::ecs::BaseEntity &ent, std::vector<geometry::ModelSubMesh *> *optOutTargetMeshes, const std::function<bool(pragma::geometry::ModelMesh &, const umath::ScaledTransform &)> &meshFilter,
-  const std::function<bool(geometry::ModelSubMesh &, const umath::ScaledTransform &)> &subMeshFilter, const std::string &nameSuffix)
+pragma::scenekit::PObject pragma::modules::scenekit::Cache::AddEntity(pragma::ecs::BaseEntity &ent, std::vector<geometry::ModelSubMesh *> *optOutTargetMeshes, const std::function<bool(pragma::geometry::ModelMesh &, const pragma::math::ScaledTransform &)> &meshFilter,
+  const std::function<bool(geometry::ModelSubMesh &, const pragma::math::ScaledTransform &)> &subMeshFilter, const std::string &nameSuffix)
 {
 	auto meshDatas = AddEntityMesh(ent, optOutTargetMeshes, meshFilter, subMeshFilter, nameSuffix);
 	if(meshDatas.empty())
@@ -400,12 +400,12 @@ pragma::scenekit::PObject pragma::modules::scenekit::Cache::AddEntity(pragma::ec
 		o->SetScale(t.GetScale());
 	}
 	o->SetUuid(ent.GetUuid());
-	o->SetName(util::uuid_to_string(ent.GetUuid()));
+	o->SetName(pragma::util::uuid_to_string(ent.GetUuid()));
 	m_mdlCache->GetChunks().front().AddObject(*o);
 	return o;
 }
 
-static bool load_hair_strand_data(util::HairStrandData &strandData, const udm::LinkedPropertyWrapper &data, std::string &outErr)
+static bool load_hair_strand_data(pragma::util::HairStrandData &strandData, const udm::LinkedPropertyWrapper &data, std::string &outErr)
 {
 	//if(data.GetAssetType() != "PHD" || data.GetAssetVersion() < 1)
 	//	return false;
@@ -429,13 +429,13 @@ std::shared_ptr<pragma::modules::scenekit::Cache::MeshData> pragma::modules::sce
 	auto extData = mdlMesh.GetExtensionData();
 	auto udmHair = extData["hair"]["strandData"]["assetData"];
 	if(udmHair) {
-		meshData->hairStrandData = std::make_unique<util::HairStrandData>();
+		meshData->hairStrandData = std::make_unique<pragma::util::HairStrandData>();
 		std::string err;
 		if(!load_hair_strand_data(*meshData->hairStrandData, udmHair, err))
 			meshData->hairStrandData = nullptr;
 	}
 
-	std::vector<umath::Vertex> transformedVerts {};
+	std::vector<pragma::math::Vertex> transformedVerts {};
 	transformedVerts.reserve(meshVerts.size());
 
 	std::optional<std::vector<float>> alphas {};
@@ -516,7 +516,7 @@ std::shared_ptr<pragma::modules::scenekit::Cache::MeshData> pragma::modules::sce
 
 		std::vector<float> perFaceAlphaData {};
 		if(alphas.has_value()) {
-			auto alphaData = std::make_shared<ChannelData<OsdFloatAttr>>([&perFaceAlphaData](BaseChannelData &cd, FaceVertexIndex faceVertexIndex, umath::Vertex &v, int idx) { perFaceAlphaData.at(faceVertexIndex) = static_cast<OsdFloatAttr *>(cd.GetElementPtr(idx))->value; },
+			auto alphaData = std::make_shared<ChannelData<OsdFloatAttr>>([&perFaceAlphaData](BaseChannelData &cd, FaceVertexIndex faceVertexIndex, pragma::math::Vertex &v, int idx) { perFaceAlphaData.at(faceVertexIndex) = static_cast<OsdFloatAttr *>(cd.GetElementPtr(idx))->value; },
 			  [&perFaceAlphaData](uint32_t numFaces) { perFaceAlphaData.resize(numFaces * 3); });
 			alphaData->ReserveBuffer(meshData->vertices.size());
 
@@ -527,7 +527,7 @@ std::shared_ptr<pragma::modules::scenekit::Cache::MeshData> pragma::modules::sce
 
 		std::vector<float> perFaceWrinkleData {};
 		if(wrinkles.has_value()) {
-			auto wrinkleData = std::make_shared<ChannelData<OsdFloatAttr>>([&perFaceWrinkleData](BaseChannelData &cd, FaceVertexIndex faceVertexIndex, umath::Vertex &v, int idx) { perFaceWrinkleData.at(faceVertexIndex) = static_cast<OsdFloatAttr *>(cd.GetElementPtr(idx))->value; },
+			auto wrinkleData = std::make_shared<ChannelData<OsdFloatAttr>>([&perFaceWrinkleData](BaseChannelData &cd, FaceVertexIndex faceVertexIndex, pragma::math::Vertex &v, int idx) { perFaceWrinkleData.at(faceVertexIndex) = static_cast<OsdFloatAttr *>(cd.GetElementPtr(idx))->value; },
 			  [&perFaceWrinkleData](uint32_t numFaces) { perFaceWrinkleData.resize(numFaces * 3); });
 			wrinkleData->ReserveBuffer(meshData->vertices.size());
 
@@ -565,19 +565,19 @@ std::shared_ptr<pragma::modules::scenekit::Cache::MeshData> pragma::modules::sce
 	return meshData;
 }
 
-msys::Material *pragma::modules::scenekit::Cache::GetMaterial(pragma::ecs::BaseEntity &ent, geometry::ModelSubMesh &subMesh, uint32_t skinId) const
+pragma::material::Material *pragma::modules::scenekit::Cache::GetMaterial(pragma::ecs::BaseEntity &ent, geometry::ModelSubMesh &subMesh, uint32_t skinId) const
 {
 	auto mdlC = ent.GetModelComponent();
 	return mdlC ? GetMaterial(static_cast<pragma::CModelComponent &>(*mdlC), subMesh, skinId) : nullptr;
 }
 
-msys::Material *pragma::modules::scenekit::Cache::GetMaterial(asset::Model &mdl, geometry::ModelSubMesh &subMesh, uint32_t skinId) const
+pragma::material::Material *pragma::modules::scenekit::Cache::GetMaterial(asset::Model &mdl, geometry::ModelSubMesh &subMesh, uint32_t skinId) const
 {
 	auto texIdx = mdl.GetMaterialIndex(subMesh, skinId);
 	return texIdx.has_value() ? mdl.GetMaterial(*texIdx) : nullptr;
 }
 
-msys::Material *pragma::modules::scenekit::Cache::GetMaterial(pragma::CModelComponent &mdlC, geometry::ModelSubMesh &subMesh, uint32_t skinId) const
+pragma::material::Material *pragma::modules::scenekit::Cache::GetMaterial(pragma::CModelComponent &mdlC, geometry::ModelSubMesh &subMesh, uint32_t skinId) const
 {
 	auto mdl = mdlC.GetModel();
 	if(mdl == nullptr)
@@ -589,7 +589,7 @@ msys::Material *pragma::modules::scenekit::Cache::GetMaterial(pragma::CModelComp
 pragma::scenekit::PShader pragma::modules::scenekit::Cache::CreateShader(const std::string &meshName, asset::Model &mdl, geometry::ModelSubMesh &subMesh, pragma::ecs::BaseEntity *optEnt, uint32_t skinId) const
 {
 	// Make sure all textures have finished loading
-	static_cast<msys::CMaterialManager &>(pragma::get_client_state()->GetMaterialManager()).GetTextureManager().WaitForAllPendingCompleted();
+	static_cast<material::CMaterialManager &>(pragma::get_client_state()->GetMaterialManager()).GetTextureManager().WaitForAllPendingCompleted();
 
 	auto *mat = optEnt ? GetMaterial(*optEnt, subMesh, skinId) : GetMaterial(mdl, subMesh, skinId);
 	if(mat == nullptr)
@@ -609,7 +609,7 @@ void pragma::modules::scenekit::Cache::AddMesh(asset::Model &mdl, pragma::scenek
 	AddMeshDataToMesh(mesh, *meshData);
 }
 
-pragma::scenekit::PMesh pragma::modules::scenekit::Cache::BuildMesh(const std::string &meshName, const std::vector<std::shared_ptr<MeshData>> &meshDatas, const std::optional<umath::ScaledTransform> &pose) const
+pragma::scenekit::PMesh pragma::modules::scenekit::Cache::BuildMesh(const std::string &meshName, const std::vector<std::shared_ptr<MeshData>> &meshDatas, const std::optional<pragma::math::ScaledTransform> &pose) const
 {
 	uint64_t numVerts = 0;
 	uint64_t numTris = 0;
@@ -634,7 +634,7 @@ pragma::scenekit::PMesh pragma::modules::scenekit::Cache::BuildMesh(const std::s
 	return mesh;
 }
 
-void pragma::modules::scenekit::Cache::AddMeshDataToMesh(pragma::scenekit::Mesh &mesh, const MeshData &meshData, const std::optional<umath::ScaledTransform> &pose) const
+void pragma::modules::scenekit::Cache::AddMeshDataToMesh(pragma::scenekit::Mesh &mesh, const MeshData &meshData, const std::optional<pragma::math::ScaledTransform> &pose) const
 {
 	auto triIndexVertexOffset = mesh.GetVertexOffset();
 	auto shaderIdx = mesh.AddSubMeshShader(*meshData.shader);
@@ -664,7 +664,7 @@ void pragma::modules::scenekit::Cache::AddAOBakeTarget(pragma::ecs::BaseEntity *
 {
 	std::vector<std::shared_ptr<MeshData>> materialMeshes;
 	std::vector<std::shared_ptr<MeshData>> envMeshes;
-	auto fFilterMeshes = [this, matIndex, &materialMeshes, &envMeshes, &mdl](geometry::ModelSubMesh &mesh, const umath::ScaledTransform &pose) -> bool {
+	auto fFilterMeshes = [this, matIndex, &materialMeshes, &envMeshes, &mdl](geometry::ModelSubMesh &mesh, const pragma::math::ScaledTransform &pose) -> bool {
 		auto meshData = CalcMeshData(mdl, mesh, false, false);
 		meshData->shader = CreateShader(GetUniqueName(), mdl, mesh);
 		auto texIdx = mdl.GetMaterialIndex(mesh);

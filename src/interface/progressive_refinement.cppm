@@ -17,7 +17,7 @@ export namespace pragma::modules::scenekit {
 		bool IsDenoising() const;
 		bool IsDenoisingComplete() const;
 		void AppendTile(pragma::scenekit::TileManager::TileData &&tileData);
-		std::shared_ptr<uimg::ImageBuffer> GetDenoisedImageData() const;
+		std::shared_ptr<image::ImageBuffer> GetDenoisedImageData() const;
 	  private:
 		void UpdatePendingTiles();
 		void RunDenoise();
@@ -27,9 +27,9 @@ export namespace pragma::modules::scenekit {
 		std::atomic<bool> m_running = false;
 		std::atomic<bool> m_shouldDenoise = false;
 		std::atomic<DenoisingState> m_denoisingState = DenoisingState::Initial;
-		std::shared_ptr<uimg::ImageBuffer> m_inputImage = nullptr;
-		std::shared_ptr<uimg::ImageBuffer> m_denoisedImage = nullptr;
-		std::shared_ptr<uimg::ImageBuffer> m_outputImage = nullptr;
+		std::shared_ptr<image::ImageBuffer> m_inputImage = nullptr;
+		std::shared_ptr<image::ImageBuffer> m_denoisedImage = nullptr;
+		std::shared_ptr<image::ImageBuffer> m_outputImage = nullptr;
 		std::queue<pragma::scenekit::TileManager::TileData> m_pendingTiles;
 		std::thread m_thread;
 	};

@@ -22,21 +22,21 @@ struct OsdVertexWeight {
 	{
 		// ??
 	}
-	umath::VertexWeight vw {};
+	pragma::math::VertexWeight vw {};
 };
 
-void pragma::modules::scenekit::subdivide_mesh(const std::vector<umath::Vertex> &verts, const std::vector<int32_t> &tris, std::vector<umath::Vertex> &outVerts, std::vector<int32_t> &outTris, uint32_t subDivLevel, const std::vector<std::shared_ptr<BaseChannelData>> &miscAttributes)
+void pragma::modules::scenekit::subdivide_mesh(const std::vector<pragma::math::Vertex> &verts, const std::vector<int32_t> &tris, std::vector<pragma::math::Vertex> &outVerts, std::vector<int32_t> &outTris, uint32_t subDivLevel, const std::vector<std::shared_ptr<BaseChannelData>> &miscAttributes)
 {
 	std::vector<std::shared_ptr<BaseChannelData>> vertexAttributes {};
 	vertexAttributes.reserve(miscAttributes.size() + 3);
-	auto vertexData = std::make_shared<ChannelData<OsdVertex>>([](BaseChannelData &cd, FaceVertexIndex faceVertexIndex, umath::Vertex &v, int idx) { v.position = static_cast<OsdVertex *>(cd.GetElementPtr(idx))->value; });
+	auto vertexData = std::make_shared<ChannelData<OsdVertex>>([](BaseChannelData &cd, FaceVertexIndex faceVertexIndex, pragma::math::Vertex &v, int idx) { v.position = static_cast<OsdVertex *>(cd.GetElementPtr(idx))->value; });
 	vertexAttributes.push_back(vertexData);
 
-	auto uvData = std::make_shared<ChannelData<OsdUV>>([](BaseChannelData &cd, FaceVertexIndex faceVertexIndex, umath::Vertex &v, int idx) { v.uv = static_cast<OsdUV *>(cd.GetElementPtr(idx))->value; });
+	auto uvData = std::make_shared<ChannelData<OsdUV>>([](BaseChannelData &cd, FaceVertexIndex faceVertexIndex, pragma::math::Vertex &v, int idx) { v.uv = static_cast<OsdUV *>(cd.GetElementPtr(idx))->value; });
 	vertexAttributes.push_back(uvData);
 	uvData->ReserveBuffer(verts.size());
 
-	auto normData = std::make_shared<ChannelData<OsdVertex>>([](BaseChannelData &cd, FaceVertexIndex faceVertexIndex, umath::Vertex &v, int idx) { v.normal = static_cast<OsdVertex *>(cd.GetElementPtr(idx))->value; });
+	auto normData = std::make_shared<ChannelData<OsdVertex>>([](BaseChannelData &cd, FaceVertexIndex faceVertexIndex, pragma::math::Vertex &v, int idx) { v.normal = static_cast<OsdVertex *>(cd.GetElementPtr(idx))->value; });
 	vertexAttributes.push_back(normData);
 	normData->ReserveBuffer(verts.size());
 
@@ -154,13 +154,13 @@ void pragma::modules::scenekit::subdivide_mesh(const std::vector<umath::Vertex> 
 			attrIndices.push_back((i == 0) ? refLastLevel.GetFaceVertices(face) : refLastLevel.GetFaceFVarValues(face, i - 1));
 
 		for(uint8_t i = 0; i < 3; ++i) {
-			umath::Vertex v {};
+			pragma::math::Vertex v {};
 			for(auto j = decltype(numResultAttrs.size()) {0u}; j < numResultAttrs.size(); ++j) {
 				auto &attr = vertexAttributes.at(j);
 				auto idx = firstOfLastAttrs.at(j) + attrIndices.at(j)[i];
 				attr->Apply(face * 3 + i, v, idx);
 			}
-			auto it = outVerts.end(); /*std::find_if(outVerts.begin(),outVerts.end(),[&v,VERTEX_EPSILON](const umath::Vertex &vOther) {
+			auto it = outVerts.end(); /*std::find_if(outVerts.begin(),outVerts.end(),[&v,VERTEX_EPSILON](const pragma::math::Vertex &vOther) {
 				return vOther.Equal(v,VERTEX_EPSILON);
 			});*/
 			if(it == outVerts.end()) {
@@ -200,8 +200,8 @@ void pragma::modules::scenekit::subdivide_mesh(const std::vector<umath::Vertex> 
 		for(auto face=decltype(numResultFaces){0u};face<numResultFaces;++face)
 		{
 			auto indices = refLastLevel.GetFaceVertices(face);
-			auto fuvs = refLastLevel.GetFaceFVarValues(face,umath::to_integral(Channel::UV));
-			auto fuvs = refLastLevel.GetFaceFVarValues(face,umath::to_integral(Channel::Normal));
+			auto fuvs = refLastLevel.GetFaceFVarValues(face,pragma::math::to_integral(Channel::UV));
+			auto fuvs = refLastLevel.GetFaceFVarValues(face,pragma::math::to_integral(Channel::Normal));
 			assert(indices.size() == 3);
 
 			outTris.push_back(indices[0]);

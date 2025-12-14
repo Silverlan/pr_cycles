@@ -12,31 +12,31 @@ export namespace pragma::modules::scenekit {
 	class Shader {
 	  public:
 		virtual ~Shader() = default;
-		virtual void Initialize(pragma::scenekit::NodeManager &nodeManager, pragma::ecs::BaseEntity *ent, geometry::ModelSubMesh *mesh, msys::Material &mat);
+		virtual void Initialize(pragma::scenekit::NodeManager &nodeManager, pragma::ecs::BaseEntity *ent, geometry::ModelSubMesh *mesh, material::Material &mat);
 		virtual std::shared_ptr<pragma::scenekit::GroupNodeDesc> InitializeCombinedPass();
 		virtual std::shared_ptr<pragma::scenekit::GroupNodeDesc> InitializeAlbedoPass();
 		virtual std::shared_ptr<pragma::scenekit::GroupNodeDesc> InitializeNormalPass();
 		virtual std::shared_ptr<pragma::scenekit::GroupNodeDesc> InitializeDepthPass();
 
-		void SetHairConfig(const util::HairConfig &hairConfig) { m_hairConfig = hairConfig; }
+		void SetHairConfig(const pragma::util::HairConfig &hairConfig) { m_hairConfig = hairConfig; }
 		void ClearHairConfig() { m_hairConfig = {}; }
-		const std::optional<util::HairConfig> &GetHairConfig() const { return m_hairConfig; }
+		const std::optional<pragma::util::HairConfig> &GetHairConfig() const { return m_hairConfig; }
 
 		void SetSubdivisionSettings(const pragma::scenekit::SubdivisionSettings &subdivSettings) { m_subdivSettings = subdivSettings; }
 		void ClearSubdivisionSettings() { m_subdivSettings = {}; }
 		const std::optional<pragma::scenekit::SubdivisionSettings> &GetSubdivisionSettings() const { return m_subdivSettings; }
 
 		pragma::ecs::BaseEntity *GetEntity() const;
-		msys::Material *GetMaterial() const;
+		material::Material *GetMaterial() const;
 		geometry::ModelSubMesh *GetMesh() const;
 	  protected:
 		Shader() = default;
 		pragma::scenekit::NodeManager *m_nodeManager = nullptr;
-		std::optional<util::HairConfig> m_hairConfig {};
+		std::optional<pragma::util::HairConfig> m_hairConfig {};
 		std::optional<pragma::scenekit::SubdivisionSettings> m_subdivSettings {};
 	  private:
 		mutable EntityHandle m_hEntity {};
-		mutable msys::MaterialHandle m_hMaterial {};
+		mutable material::MaterialHandle m_hMaterial {};
 		mutable std::shared_ptr<geometry::ModelSubMesh> m_mesh {};
 	};
 
@@ -50,7 +50,7 @@ export namespace pragma::modules::scenekit {
 
 		void RegisterShader(const std::string &name, luabind::object oClass);
 		bool IsShaderRegistered(const std::string &name) const { return m_shaders.find(name) != m_shaders.end(); }
-		std::shared_ptr<Shader> CreateShader(pragma::scenekit::NodeManager &nodeManager, const std::string &name, pragma::ecs::BaseEntity *ent, geometry::ModelSubMesh *mesh, msys::Material &mat);
+		std::shared_ptr<Shader> CreateShader(pragma::scenekit::NodeManager &nodeManager, const std::string &name, pragma::ecs::BaseEntity *ent, geometry::ModelSubMesh *mesh, material::Material &mat);
 	  private:
 		ShaderManager() = default;
 		std::unordered_map<std::string, luabind::object> m_shaders;
@@ -60,7 +60,7 @@ export namespace pragma::modules::scenekit {
 	class LuaShader : public LuaObjectBase, public Shader {
 	  public:
 		void Initialize(const luabind::object &o);
-		virtual void Initialize(pragma::scenekit::NodeManager &nodeManager, pragma::ecs::BaseEntity *ent, geometry::ModelSubMesh *mesh, msys::Material &mat) override;
+		virtual void Initialize(pragma::scenekit::NodeManager &nodeManager, pragma::ecs::BaseEntity *ent, geometry::ModelSubMesh *mesh, material::Material &mat) override;
 
 		void Lua_Initialize() {}
 		static void Lua_default_Initialize(lua::State *l, LuaShader &shader) {}
