@@ -4,6 +4,7 @@
 module;
 
 #ifdef RT_ENABLE_SUBDIVISION
+#include <cmath>
 #include <opensubdiv/far/topologyDescriptor.h>
 #include <opensubdiv/far/primvarRefiner.h>
 
