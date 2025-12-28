@@ -4,7 +4,10 @@
 module;
 
 #ifdef RT_ENABLE_SUBDIVISION
-#include <cmath>
+#ifdef WINDOWS_CLANG_COMPILER_FIX
+// Workaround for opensubdiv compiler error when using clang on Windows
+#define M_PI 3.14159265358979323846
+#endif
 #include <opensubdiv/far/topologyDescriptor.h>
 #include <opensubdiv/far/primvarRefiner.h>
 
