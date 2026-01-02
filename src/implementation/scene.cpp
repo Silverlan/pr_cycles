@@ -194,7 +194,7 @@ void scenekit::Scene::BuildLightMapObject()
 			uvSet = subMesh->GetUVSet("lightmap");
 		if(uvSet) {
 			if(uvSet->size() != verts.size()) {
-				Con::cwar << "WARNING: Number of UV coordinates (" << uvSet->size() << ") in lightmap UV set does not match number of mesh vertices (" << verts.size() << ") of mesh with uuid " << pragma::util::uuid_to_string(subMesh->GetUuid()) << " of entity with uuid "
+				Con::CWAR << "WARNING: Number of UV coordinates (" << uvSet->size() << ") in lightmap UV set does not match number of mesh vertices (" << verts.size() << ") of mesh with uuid " << pragma::util::uuid_to_string(subMesh->GetUuid()) << " of entity with uuid "
 				          << pragma::util::uuid_to_string(targetMeshEntityUuids.at(idx)) << "! Mesh will be ignored!" << std::endl;
 				++idx;
 				continue;

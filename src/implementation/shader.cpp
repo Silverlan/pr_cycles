@@ -48,14 +48,14 @@ std::shared_ptr<Shader> ShaderManager::CreateShader(pragma::scenekit::NodeManage
 	}
 #endif
 	if(!r) {
-		Con::ccl << "WARNING: Unable to create lua cycles shader '" << name << "'!" << Con::endl;
+		Con::CCL << "WARNING: Unable to create lua cycles shader '" << name << "'!" << Con::endl;
 		return nullptr;
 	}
 
 	auto *shader = luabind::object_cast_nothrow<LuaShader *>(r, static_cast<LuaShader *>(nullptr));
 	if(shader == nullptr) {
 		// TODO: Can we check this when the particle modifier is being registered?
-		Con::ccl << "WARNING: Unable to create lua cycles shader '" << name << "': Lua class is not derived from valid cycles shader base!" << Con::endl;
+		Con::CCL << "WARNING: Unable to create lua cycles shader '" << name << "': Lua class is not derived from valid cycles shader base!" << Con::endl;
 		return nullptr;
 	}
 	shader->Initialize(r);

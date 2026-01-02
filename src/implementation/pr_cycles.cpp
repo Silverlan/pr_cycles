@@ -774,7 +774,7 @@ PR_EXPORT void pr_cycles_bake_lightmaps(const pragma::rendering::cycles::SceneIn
 		(*scene)->Save(udmData->GetAssetData(), rootPath, serializationData);
 		pragma::fs::create_path(path);
 		if (!udmData->Save(fileName))
-			Con::cwar<<"Failed to save '"<<fileName<<"'!"<<Con::endl;
+			Con::CWAR<<"Failed to save '"<<fileName<<"'!"<<Con::endl;
 	}
 	else {
 		std::string err;
@@ -1053,7 +1053,7 @@ void PR_EXPORT pragma_initialize_lua(Lua::Interface &l)
 	    {"set_log_enabled", static_cast<int32_t (*)(lua::State *)>([](lua::State *l) -> int32_t {
 		     auto enabled = Lua::CheckBool(l, 1);
 		     if(enabled)
-			     pragma::scenekit::set_log_handler([](const std::string &msg) { Con::cout << "Unirender: " << msg << Con::endl; });
+			     pragma::scenekit::set_log_handler([](const std::string &msg) { Con::COUT << "Unirender: " << msg << Con::endl; });
 		     else
 			     pragma::scenekit::set_log_handler();
 		     return 0;

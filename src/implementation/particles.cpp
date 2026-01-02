@@ -44,7 +44,7 @@ static Vector3 get_corner_particle_vertex_position(const pragma::ecs::CParticleS
 			break;
 		}
 	case pragma::pts::ParticleOrientationType::Static:
-		right = uvec::UP;
+		right = uvec::PRM_UP;
 		up = camUpWs;
 		break;
 	case pragma::pts::ParticleOrientationType::World:
@@ -102,7 +102,7 @@ void scenekit::Cache::AddParticleSystem(pragma::ecs::CParticleSystemComponent &p
 		for(auto vertIdx = decltype(numVerts) {0u}; vertIdx < numVerts; ++vertIdx) {
 			auto vertPos = pShader->CalcVertexPosition(ptc, ptc.TranslateBufferIndex(i), vertIdx, camPos, camUpWs, camRightWs, nearZ, farZ);
 			auto uv = pragma::ShaderParticle2DBase::GetVertexUV(vertIdx);
-			mesh->AddVertex(vertPos, -uvec::RIGHT, Vector4 {uvec::FORWARD, 1.f}, uv);
+			mesh->AddVertex(vertPos, -uvec::PRM_RIGHT, Vector4 {uvec::PRM_FORWARD, 1.f}, uv);
 		}
 		static_assert(pragma::ShaderParticle2DBase::TRIANGLE_COUNT == 2 && pragma::ShaderParticle2DBase::VERTEX_COUNT == 6);
 		mesh->AddTriangle(0, 1, 2, 0);

@@ -209,27 +209,27 @@ static std::optional<std::string> prepare_texture(std::shared_ptr<pragma::materi
 	auto converted = false;
 	auto result = prepare_texture(texInfo, success, converted, inFlags, optOutFlags, defaultTexture, translucent);
 	if(success == false && texInfo->GetName() != "error") {
-		Con::cwar << "WARNING: Unable to prepare texture '";
+		Con::CWAR << "WARNING: Unable to prepare texture '";
 		if(texInfo)
-			Con::cwar << texInfo->GetName();
+			Con::CWAR << texInfo->GetName();
 		else
-			Con::cwar << "Unknown";
-		Con::cwar << "'! Using error texture instead..." << Con::endl;
+			Con::CWAR << "Unknown";
+		Con::CWAR << "'! Using error texture instead..." << Con::endl;
 	}
 	else {
 		if(converted)
-			Con::cout << "Converted texture '" << texInfo->GetName() << "' to DDS!" << Con::endl;
+			Con::COUT << "Converted texture '" << texInfo->GetName() << "' to DDS!" << Con::endl;
 
 #if 0
 		// TODO: Re-implement this
 		ccl::ImageMetaData metaData;
 		if(scene.image_manager->get_image_metadata(*result,nullptr,ccl::u_colorspace_raw,metaData) == false)
 		{
-			Con::cwar<<"WARNING: Texture '"<<texInfo->name<<"' has format which is incompatible with cycles! Falling back to error texture..."<<Con::endl;
+			Con::CWAR<<"WARNING: Texture '"<<texInfo->name<<"' has format which is incompatible with cycles! Falling back to error texture..."<<Con::endl;
 			result = get_abs_error_texture_path();
 			if(scene.image_manager->get_image_metadata(*result,nullptr,ccl::u_colorspace_raw,metaData) == false)
 			{
-				Con::cwar<<"WARNING: Error texture also not compatible! Falling back to untextured!"<<Con::endl;
+				Con::CWAR<<"WARNING: Error texture also not compatible! Falling back to untextured!"<<Con::endl;
 				result = {};
 			}
 		}

@@ -199,25 +199,25 @@ static std::optional<std::string> prepare_texture(TextureInfo *texInfo, Prepared
 	auto converted = false;
 	auto result = prepare_texture(texInfo, success, converted, inFlags, optOutFlags, defaultTexture);
 	if(success == false) {
-		Con::cwar << "WARNING: Unable to prepare texture '";
+		Con::CWAR << "WARNING: Unable to prepare texture '";
 		if(texInfo)
-			Con::cwar << texInfo->name;
+			Con::CWAR << texInfo->name;
 		else
-			Con::cwar << "Unknown";
-		Con::cwar << "'! Using error texture instead..." << Con::endl;
+			Con::CWAR << "Unknown";
+		Con::CWAR << "'! Using error texture instead..." << Con::endl;
 	}
 	else {
 		if(converted)
-			Con::cout << "Converted texture '" << texInfo->name << "' to DDS!" << Con::endl;
+			Con::COUT << "Converted texture '" << texInfo->name << "' to DDS!" << Con::endl;
 #if 0
 		ccl::ImageMetaData metaData;
 		if(scene.image_manager->get_image_metadata(*result,nullptr,ccl::u_colorspace_raw,metaData) == false)
 		{
-			Con::cwar<<"WARNING: Texture '"<<texInfo->name<<"' has format which is incompatible with cycles! Falling back to error texture..."<<Con::endl;
+			Con::CWAR<<"WARNING: Texture '"<<texInfo->name<<"' has format which is incompatible with cycles! Falling back to error texture..."<<Con::endl;
 			result = get_abs_error_texture_path();
 			if(scene.image_manager->get_image_metadata(*result,nullptr,ccl::u_colorspace_raw,metaData) == false)
 			{
-				Con::cwar<<"WARNING: Error texture also not compatible! Falling back to untextured!"<<Con::endl;
+				Con::CWAR<<"WARNING: Error texture also not compatible! Falling back to untextured!"<<Con::endl;
 				result = {};
 			}
 		}
@@ -285,7 +285,7 @@ std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma:
 #if 0
 	if(m_renderMode == RenderMode::BakeDiffuseLighting && ent.IsWorld() == false)
 	{
-		Con::cwar<<"WARNING: Baking diffuse lighting currently only supported for world entity, but attempted to add an entity of a different type! Entity will be ignored!"<<Con::endl;
+		Con::CWAR<<"WARNING: Baking diffuse lighting currently only supported for world entity, but attempted to add an entity of a different type! Entity will be ignored!"<<Con::endl;
 		return;
 	}
 #endif
