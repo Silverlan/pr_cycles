@@ -826,7 +826,11 @@ void PR_EXPORT pragma_terminate_lua(Lua::Interface &l)
 	g_shaderManager = nullptr;
 	pragma::scenekit::set_logger(nullptr);
 	pragma::scenekit::set_kernel_compile_callback(nullptr);
+#ifdef WINDOWS_CLANG_COMPILER_FIX
+	g_compileCallback = luabind::object{};
+#else
 	g_compileCallback = Lua::nil;
+#endif
 }
 static bool write_render_job_script(const std::string &jobListPath, const std::string &baseShellFilePath, std::string &outShellFilePath, std::string &outErr)
 {
@@ -968,7 +972,11 @@ void PR_EXPORT pragma_initialize_lua(Lua::Interface &l)
 	    {"set_kernel_compile_callback",
 	      +[](lua::State *l) -> int32_t {
 		      if(!Lua::IsSet(l, 1)) {
+#ifdef WINDOWS_CLANG_COMPILER_FIX
+			      g_compileCallback = luabind::object{};
+#else
 			      g_compileCallback = Lua::nil;
+#endif
 			      return 0;
 		      }
 		      Lua::CheckFunction(l, 1);
