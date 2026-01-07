@@ -178,7 +178,11 @@ else:
 	staging_dir = get_staging_dir()
 	mkpath(staging_dir)
 	os.chdir(staging_dir)
-	install_prebuilt_binaries("https://github.com/Silverlan/UniRender_Cycles/releases/download/" +unirender_cycles_release_tag +"/")
+	install_prebuilt_binaries(
+		"https://github.com/Silverlan/UniRender_Cycles/releases/download/" +unirender_cycles_release_tag +"/",
+		version = unirender_cycles_release_tag,
+		cacheDir = str(Path(staging_dir) / "cycles")
+	)
 
 os.chdir(deps_dir)
 
