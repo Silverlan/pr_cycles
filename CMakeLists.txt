@@ -2,7 +2,7 @@ include(${CMAKE_SOURCE_DIR}/cmake/pr_common.cmake)
 
 pr_fetch_external_lib("util_ocio"               "https://github.com/Silverlan/util_ocio"             "2ba870769ae06e2da95e1bda540f9304d93384cc")
 pr_fetch_external_lib("util_raytracing"         "https://github.com/Silverlan/UniRender"             "67c63c2c5ceca84d273a895d7bf11d43d0a23e27")
-pr_fetch_external_lib("render_raytracing"       "https://github.com/Silverlan/render_raytracing"     "f5ad5f8af6a814261656aacbd6518e59f77087e5")
+pr_checkout_submodule("render_raytracing"         "https://github.com/Silverlan/render_raytracing"     "f5ad5f8af6a814261656aacbd6518e59f77087e5" "tools/render_raytracing")
 
 set(PR_UNIRENDER_ENABLE_DEPENDENCIES 1 CACHE BOOL "Enable dependencies?")
 set(PR_UNIRENDER_WITH_CYCLES 1 CACHE BOOL "Enable Cycles renderer?")
