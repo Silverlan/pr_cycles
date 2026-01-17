@@ -12,7 +12,6 @@ os.chdir(deps_dir)
 # These need to match the cycles version that is being used (see build_cycles.py for more information)
 cycles_lib_windows_x64_commit_sha = "cdef408"
 cycles_lib_linux_x64_commit_sha = "eacf548"
-unirender_cycles_release_tag = "2026-01-11"
 use_prebuilt_binaries = True
 
 if use_prebuilt_binaries:
@@ -173,16 +172,7 @@ if build_cycles:
 	execbuildscript(os.path.dirname(os.path.realpath(__file__)) +"/build_cycles.py")
 else:
 	print_msg("Downloading prebuilt cycles binaries...")
-	os.chdir(install_dir)
-
-	staging_dir = get_staging_dir()
-	mkpath(staging_dir)
-	os.chdir(staging_dir)
-	install_prebuilt_binaries(
-		"https://github.com/Silverlan/UniRender_Cycles/releases/download/" +unirender_cycles_release_tag +"/",
-		version = unirender_cycles_release_tag,
-		cacheDir = str(Path(staging_dir) / "cycles")
-	)
+	subprocess.run(["cmake", "-DCMAKE_SOURCE_DIR=" +config.pragma_root, "-DPRAGMA_DEPS_DIR=" +config.prebuilt_bin_dir, "-P", "cmake/fetch_prebuilt_binaries.cmake"],check=True)
 
 os.chdir(deps_dir)
 
