@@ -10,7 +10,7 @@ set(PR_UNIRENDER_WITH_CYCLES 1 CACHE BOOL "Enable Cycles renderer?")
 set(PR_UNIRENDER_WITH_LUXCORERENDER 0 CACHE BOOL "Enable LuxCoreRender renderer?")
 
 set(PROJ_NAME pr_unirender)
-pr_add_module(${PROJ_NAME} SHARED "modules/unirender/")
+pr_add_module(${PROJ_NAME} "modules/unirender/")
 
 pr_add_dependency(${PROJ_NAME} client TARGET PUBLIC)
 
