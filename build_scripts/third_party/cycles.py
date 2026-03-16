@@ -61,8 +61,14 @@ def main(cycles_arch="all"):
 	os.chdir(cyclesRoot)
 	if platform == "linux":
 		subprocess.run(["make","update"],check=True)
+		lib_path = "lib/linux_x64"
 	else:
 		subprocess.run(["make.bat","update"],check=True)
+		lib_path = "lib/windows_x64"
+	# The cycles scripts are supposed to initialize the lfs data but this does not work properly, so we'll force it here
+	subprocess.run(["git", "lfs", "install", "--force"],check=True)
+	subprocess.run(["git", "-C", lib_path, "lfs", "install", "--local", "--force"],check=True)
+	subprocess.run(["git", "-C", lib_path, "lfs", "pull"],check=True)
 
 	if platform == "linux":
 		# Patch openvdb
