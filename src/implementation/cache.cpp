@@ -320,7 +320,7 @@ std::vector<std::shared_ptr<pragma::modules::scenekit::Cache::MeshData>> pragma:
 	}
 	std::vector<std::shared_ptr<MeshData>> meshDatas;
 	if(mesh == nullptr) {
-		std::string name = "ent" + nameSuffix + "_" + std::to_string(ent.GetLocalIndex());
+		std::string name = "ent" + nameSuffix + "_" + util::to_string(ent.GetLocalIndex());
 		std::vector<geometry::ModelSubMesh *> tmpTargetMeshes {};
 		auto *targetMeshes = (optOutTargetMeshes != nullptr) ? optOutTargetMeshes : &tmpTargetMeshes;
 		targetMeshes->reserve(targetMeshes->size() + mdl->GetSubMeshCount());
@@ -392,7 +392,7 @@ pragma::scenekit::PObject pragma::modules::scenekit::Cache::AddEntity(pragma::ec
 	auto meshDatas = AddEntityMesh(ent, optOutTargetMeshes, meshFilter, subMeshFilter, nameSuffix);
 	if(meshDatas.empty())
 		return nullptr;
-	std::string name = "ent" + nameSuffix + "_" + std::to_string(ent.GetLocalIndex());
+	std::string name = "ent" + nameSuffix + "_" + util::to_string(ent.GetLocalIndex());
 	auto mesh = BuildMesh(name, meshDatas);
 	if(mesh == nullptr)
 		return nullptr;

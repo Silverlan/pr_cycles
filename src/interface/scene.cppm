@@ -58,7 +58,7 @@ export namespace pragma::modules::scenekit {
 		material::Material *GetMaterial(pragma::ecs::BaseEntity &ent, geometry::ModelSubMesh &subMesh, uint32_t skinId) const;
 		void AddMeshDataToMesh(pragma::scenekit::Mesh &mesh, const MeshData &meshData, const std::optional<pragma::math::ScaledTransform> &pose = {}) const;
 		void AddMesh(asset::Model &mdl, pragma::scenekit::Mesh &mesh, geometry::ModelSubMesh &mdlMesh, pragma::CModelComponent *optMdlC = nullptr, pragma::CAnimatedComponent *optAnimC = nullptr);
-		std::string GetUniqueName() { return "internal" + std::to_string(m_uniqueNameIndex++); };
+		std::string GetUniqueName() { return "internal" + pragma::util::to_string(m_uniqueNameIndex++); };
 		std::shared_ptr<MeshData> CalcMeshData(asset::Model &mdl, geometry::ModelSubMesh &mdlMesh, bool includeAlphas, bool includeWrinkles, pragma::CModelComponent *optMdlC = nullptr, pragma::CAnimatedComponent *optAnimC = nullptr);
 		pragma::scenekit::PShader CreateShader(material::Material &mat, const std::string &meshName, const ShaderInfo &shaderInfo = {}) const;
 		pragma::scenekit::PShader CreateShader(const std::string &meshName, asset::Model &mdl, geometry::ModelSubMesh &subMesh, pragma::ecs::BaseEntity *optEnt = nullptr, uint32_t skinId = 0) const;

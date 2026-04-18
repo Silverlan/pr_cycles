@@ -85,7 +85,7 @@ void scenekit::Cache::AddParticleSystem(pragma::ecs::CParticleSystemComponent &p
 
 	ShaderInfo shaderInfo {};
 	shaderInfo.particleSystem = &ptc;
-	std::string meshName = "particleMesh" + std::to_string(ptc.GetEntity().GetLocalIndex());
+	std::string meshName = "particleMesh" + util::to_string(ptc.GetEntity().GetLocalIndex());
 	auto *spriteSheetAnim = ptc.GetSpriteSheetAnimation();
 	auto curTime = pragma::get_client_game()->CurTime();
 	auto &particles = ptc.GetRenderParticleData();
@@ -94,7 +94,7 @@ void scenekit::Cache::AddParticleSystem(pragma::ecs::CParticleSystemComponent &p
 	for(auto i = decltype(numParticles) {0u}; i < numParticles; ++i) {
 		auto &pt = particles.at(i);
 		auto ptIdx = ptc.TranslateBufferIndex(i);
-		auto ptMeshName = meshName + "_" + std::to_string(i);
+		auto ptMeshName = meshName + "_" + util::to_string(i);
 		constexpr uint32_t numVerts = pragma::ShaderParticle2DBase::VERTEX_COUNT;
 		uint32_t numTris = pragma::ShaderParticle2DBase::TRIANGLE_COUNT * 2;
 		auto mesh = pragma::scenekit::Mesh::Create(ptMeshName, numVerts, numTris);
