@@ -1,6 +1,6 @@
 include("${CMAKE_SOURCE_DIR}/cmake/install_helper.cmake")
 
-set(version "2026-04-18")
+set(version "2026-05-23")
 set(base_url "https://github.com/Silverlan/UniRender_Cycles/releases/download")
 
 if(NOT config.no_build_networking)
