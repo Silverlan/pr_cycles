@@ -167,6 +167,9 @@ def main(cycles_arch="all"):
 	copy_prebuilt_directory(cycles_lib_dir +"zstd", "zstd")
 	if platform == "win32":
 		copy_prebuilt_directory(cycles_lib_dir +"pugixml", "pugixml")
+	else:
+		# Needed for AppImage dependencies
+		copy_prebuilt_directory(cycles_lib_dir +"level-zero", "level-zero")
 
 	copy_prebuilt_directory(cyclesRoot +"/third_party/atomic", dest_dir=get_library_include_dir("cycles"))
 	copy_prebuilt_directory(cyclesRoot +"/third_party/cuew", dest_dir=get_library_include_dir("cycles"))
