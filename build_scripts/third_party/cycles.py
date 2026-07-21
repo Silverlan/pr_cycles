@@ -20,8 +20,8 @@ def main(cycles_arch="all"):
 	# - Update the versions of tbb, oidn, ocio, oiio, opensubdiv libraries in setup.py to match Cycles versions
 	# - Go to https://github.com/blender/cycles/tree/main/lib for the commit of the Cycles version
 	#   - Grab the commit ids for linux_x64 and windows_x64 and apply them to cycles_lib_*_x64_commit_sha in setup.py
-	cycles_commit_sha = "28bd4a8c97e4398417361dd8793a95ca92cda0c2"
-	cycles_branch = "v4.4.0"
+	cycles_commit_sha = "804b89e406943d71b60e494bb1fd28bf0dd4f7a4"
+	cycles_branch = "pragma" # "v4.4.0"
 
 	########## Cycles ##########
 	os.chdir(deps_dir)
