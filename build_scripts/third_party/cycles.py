@@ -97,7 +97,7 @@ def main(cycles_arch="all"):
 		if platform == "linux":
 			zlib = get_library_root_dir("zlib") +"build/libz.a"
 			args.append("-DWITH_CYCLES_CUDA_BINARIES=ON")
-			args.append("-DWITH_CYCLES_DEVICE_OPTIX=ON")
+			args.append("-DWITH_CYCLES_DEVICE_OPTIX=OFF")
 			args.append("-DWITH_CYCLES_DEVICE_CUDA=ON")
 		else:
 			zlib = get_library_lib_dir("zlib") +"z.lib"
