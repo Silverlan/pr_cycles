@@ -537,11 +537,11 @@ static pragma::scenekit::Socket get_vector_socket_component(lua::State *l, pragm
 	auto &rgb = parent.SeparateRGB(socket);
 	switch(channel) {
 	case VectorChannel::X:
-		return rgb.GetOutputSocket(pragma::scenekit::nodes::separate_rgb::OUT_R);
+		return rgb.GetOutputSocket(pragma::scenekit::nodes::separate_color::OUT_R);
 	case VectorChannel::Y:
-		return rgb.GetOutputSocket(pragma::scenekit::nodes::separate_rgb::OUT_G);
+		return rgb.GetOutputSocket(pragma::scenekit::nodes::separate_color::OUT_G);
 	case VectorChannel::Z:
-		return rgb.GetOutputSocket(pragma::scenekit::nodes::separate_rgb::OUT_B);
+		return rgb.GetOutputSocket(pragma::scenekit::nodes::separate_color::OUT_B);
 	}
 	return {};
 }
@@ -550,8 +550,8 @@ static void set_vector_socket_component(lua::State *l, pragma::scenekit::Socket 
 {
 	auto &parent = get_socket_node(l, socket);
 	auto &rgb = parent.SeparateRGB(socket);
-	socket = parent.CombineRGB((channel == VectorChannel::X) ? other : rgb.GetOutputSocket(pragma::scenekit::nodes::separate_rgb::OUT_R), (channel == VectorChannel::Y) ? other : rgb.GetOutputSocket(pragma::scenekit::nodes::separate_rgb::OUT_G),
-	  (channel == VectorChannel::Z) ? other : rgb.GetOutputSocket(pragma::scenekit::nodes::separate_rgb::OUT_B));
+	socket = parent.CombineRGB((channel == VectorChannel::X) ? other : rgb.GetOutputSocket(pragma::scenekit::nodes::separate_color::OUT_R), (channel == VectorChannel::Y) ? other : rgb.GetOutputSocket(pragma::scenekit::nodes::separate_color::OUT_G),
+	  (channel == VectorChannel::Z) ? other : rgb.GetOutputSocket(pragma::scenekit::nodes::separate_color::OUT_B));
 }
 
 template<pragma::scenekit::nodes::math::MathType type>
@@ -606,7 +606,7 @@ static std::array<pragma::scenekit::Socket, 3> socket_to_xyz(lua::State *l, prag
 	std::array<pragma::scenekit::Socket, 3> socketXyz;
 	if(pragma::scenekit::is_vector_type(socket.GetType())) {
 		auto &nodeXyz = node.SeparateRGB(socket);
-		socketXyz = {nodeXyz.GetOutputSocket(pragma::scenekit::nodes::separate_rgb::OUT_R), nodeXyz.GetOutputSocket(pragma::scenekit::nodes::separate_rgb::OUT_G), nodeXyz.GetOutputSocket(pragma::scenekit::nodes::separate_rgb::OUT_B)};
+		socketXyz = {nodeXyz.GetOutputSocket(pragma::scenekit::nodes::separate_color::OUT_R), nodeXyz.GetOutputSocket(pragma::scenekit::nodes::separate_color::OUT_G), nodeXyz.GetOutputSocket(pragma::scenekit::nodes::separate_color::OUT_B)};
 	}
 	else
 		socketXyz = {socket, socket, socket};
@@ -1462,8 +1462,8 @@ void PR_EXPORT pragma_initialize_lua(Lua::Interface &l)
 	  {"NODE_HSV", pragma::scenekit::NODE_HSV},
 	  {"NODE_SEPARATE_XYZ", pragma::scenekit::NODE_SEPARATE_XYZ},
 	  {"NODE_COMBINE_XYZ", pragma::scenekit::NODE_COMBINE_XYZ},
-	  {"NODE_SEPARATE_RGB", pragma::scenekit::NODE_SEPARATE_RGB},
-	  {"NODE_COMBINE_RGB", pragma::scenekit::NODE_COMBINE_RGB},
+	  {"NODE_SEPARATE_COLOR", pragma::scenekit::NODE_SEPARATE_COLOR},
+	  {"NODE_COMBINE_COLOR", pragma::scenekit::NODE_COMBINE_COLOR},
 	  {"NODE_GEOMETRY", pragma::scenekit::NODE_GEOMETRY},
 	  {"NODE_CAMERA_INFO", pragma::scenekit::NODE_CAMERA_INFO},
 	  {"NODE_IMAGE_TEXTURE", pragma::scenekit::NODE_IMAGE_TEXTURE},
@@ -1648,16 +1648,27 @@ void PR_EXPORT pragma_initialize_lua(Lua::Interface &l)
 	t["IN_Z"] = pragma::scenekit::nodes::combine_xyz::IN_Z;
 	t["OUT_VECTOR"] = pragma::scenekit::nodes::combine_xyz::OUT_VECTOR;
 
-	t = nodeTypeEnums[pragma::scenekit::NODE_SEPARATE_RGB] = luabind::newtable(l.GetState());
-	t["IN_COLOR"] = pragma::scenekit::nodes::separate_rgb::IN_COLOR;
-	t["OUT_R"] = pragma::scenekit::nodes::separate_rgb::OUT_R;
-	t["OUT_G"] = pragma::scenekit::nodes::separate_rgb::OUT_G;
-	t["OUT_B"] = pragma::scenekit::nodes::separate_rgb::OUT_B;
+	t = nodeTypeEnums[pragma::scenekit::NODE_SEPARATE_COLOR] = luabind::newtable(l.GetState());
+	t["COLOR_TYPE_RGB"] = pragma::math::to_integral(pragma::scenekit::nodes::separate_color::ColorType::RGB);
+	t["COLOR_TYPE_HSV"] = pragma::math::to_integral(pragma::scenekit::nodes::separate_color::ColorType::HSV);
+	t["COLOR_TYPE_HSL"] = pragma::math::to_integral(pragma::scenekit::nodes::separate_color::ColorType::HSL);
+	static_assert(pragma::math::to_integral(pragma::scenekit::nodes::separate_color::ColorType::Count) == 3, "Update this list when new color types have been added!");
+	t["IN_COLOR"] = pragma::scenekit::nodes::separate_color::IN_COLOR;
+	t["IN_COLOR_TYPE"] = pragma::scenekit::nodes::separate_color::IN_COLOR_TYPE;
+	t["OUT_R"] = pragma::scenekit::nodes::separate_color::OUT_R;
+	t["OUT_G"] = pragma::scenekit::nodes::separate_color::OUT_G;
+	t["OUT_B"] = pragma::scenekit::nodes::separate_color::OUT_B;
 
-	t = nodeTypeEnums[pragma::scenekit::NODE_COMBINE_RGB] = luabind::newtable(l.GetState());
-	t["IN_R"] = pragma::scenekit::nodes::combine_rgb::IN_R;
-	t["IN_G"] = pragma::scenekit::nodes::combine_rgb::IN_G;
-	t["IN_B"] = pragma::scenekit::nodes::combine_rgb::IN_B;
+	t = nodeTypeEnums[pragma::scenekit::NODE_COMBINE_COLOR] = luabind::newtable(l.GetState());
+	t["COLOR_TYPE_RGB"] = pragma::math::to_integral(pragma::scenekit::nodes::separate_color::ColorType::RGB);
+	t["COLOR_TYPE_HSV"] = pragma::math::to_integral(pragma::scenekit::nodes::separate_color::ColorType::HSV);
+	t["COLOR_TYPE_HSL"] = pragma::math::to_integral(pragma::scenekit::nodes::separate_color::ColorType::HSL);
+	static_assert(pragma::math::to_integral(pragma::scenekit::nodes::separate_color::ColorType::Count) == 3, "Update this list when new color types have been added!");
+	t["IN_R"] = pragma::scenekit::nodes::combine_color::IN_R;
+	t["IN_G"] = pragma::scenekit::nodes::combine_color::IN_G;
+	t["IN_B"] = pragma::scenekit::nodes::combine_color::IN_B;
+	t["IN_COLOR_TYPE"] = pragma::scenekit::nodes::combine_color::IN_COLOR_TYPE;
+	t["OUT_COLOR"] = pragma::scenekit::nodes::combine_color::OUT_COLOR;
 
 	t = nodeTypeEnums[pragma::scenekit::NODE_GEOMETRY] = luabind::newtable(l.GetState());
 	t["OUT_POSITION"] = pragma::scenekit::nodes::geometry::OUT_POSITION;
@@ -2682,7 +2693,6 @@ void PR_EXPORT pragma_initialize_lua(Lua::Interface &l)
 	defLight.add_static_constant("TYPE_DIRECTIONAL", pragma::math::to_integral(pragma::scenekit::Light::Type::Directional));
 	defLight.add_static_constant("TYPE_AREA", pragma::math::to_integral(pragma::scenekit::Light::Type::Area));
 	defLight.add_static_constant("TYPE_BACKGROUND", pragma::math::to_integral(pragma::scenekit::Light::Type::Background));
-	defLight.add_static_constant("TYPE_TRIANGLE", pragma::math::to_integral(pragma::scenekit::Light::Type::Triangle));
 	defLight.def("SetType", static_cast<void (*)(lua::State *, pragma::scenekit::Light &, uint32_t)>([](lua::State *l, pragma::scenekit::Light &light, uint32_t type) { light.SetType(static_cast<pragma::scenekit::Light::Type>(type)); }));
 	defLight.def("SetConeAngle", static_cast<void (*)(lua::State *, pragma::scenekit::Light &, float, float)>([](lua::State *l, pragma::scenekit::Light &light, float outerAngle, float blendFraction) { light.SetConeAngle(outerAngle, blendFraction); }));
 	defLight.def("SetColor", static_cast<void (*)(lua::State *, pragma::scenekit::Light &, const Color &)>([](lua::State *l, pragma::scenekit::Light &light, const Color &color) { light.SetColor(color); }));
