@@ -4,16 +4,24 @@
 module;
 
 #ifdef RT_ENABLE_SUBDIVISION
+
 #ifdef _WIN32
+
 #ifndef M_PI
 // Workaround for opensubdiv compiler error when building on Windows
 #define M_PI 3.1415926535897932384626433832795
 #endif
+
 #endif
+
 #include <opensubdiv/far/topologyDescriptor.h>
 #include <opensubdiv/far/primvarRefiner.h>
 
+#endif
+
 module pragma.modules.scenekit;
+
+#ifdef RT_ENABLE_SUBDIVISION
 
 import :subdivision;
 
