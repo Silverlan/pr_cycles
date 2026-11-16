@@ -1,7 +1,7 @@
 include(${CMAKE_SOURCE_DIR}/cmake/pr_common.cmake)
 
 pr_fetch_external_lib("util_ocio"               "https://github.com/Silverlan/util_ocio"             "2ba870769ae06e2da95e1bda540f9304d93384cc")
-pr_fetch_external_lib("util_raytracing"         "https://github.com/Silverlan/UniRender"             "3f92e8f7e9a5a0323da26b00fb2c5b4c330b3637")
+pr_fetch_external_lib("util_raytracing"         "https://github.com/Silverlan/UniRender"             "5f5bb172e7778a16c696ac65b36909df020d0315")
 pr_fetch_third_party_repository("render_raytracing"         "https://github.com/Silverlan/render_raytracing"     "dd7868052be6c3b68807df48f571d75b0c389d7e" "tools/render_raytracing")
 include("cmake/fetch_prebuilt_binaries.cmake")
 
